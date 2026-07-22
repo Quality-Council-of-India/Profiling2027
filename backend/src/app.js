@@ -14,6 +14,7 @@ import analyticsRoutes from "./routes/analytics.routes.js";
 import exportRoutes from "./routes/export.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
 import { notFoundHandler, errorHandler } from "./middleware/errorHandler.js";
+import { prisma } from "./utils/prisma.js";
 
 // Pure Express app definition — no app.listen() here. Used both by
 // src/server.js (traditional long-running process: Docker/local dev,
@@ -39,6 +40,22 @@ const apiLimiter = rateLimit({ windowMs: 60 * 1000, limit: 300 });
 app.use("/api", apiLimiter);
 
 app.get("/health", (req, res) => res.json({ status: "ok" }));
+
+// Same check, reachable via Vercel too — only /api/* is rewritten to this
+// app there, so the bare /health above only works under Docker/local dev.
+app.get("/api/health", (req, res) => res.json({ status: "ok" }));
+
+// Dependency-free above confirms the app itself booted (catches things like
+// a missing JWT_SECRET, which throws at import time). This one additionally
+// confirms the database is reachable *and* migrated, without requiring auth.
+app.get("/api/health/db", async (req, res) => {
+  try {
+    const userCount = await prisma.user.count();
+    res.json({ status: "ok", userCount });
+  } catch (err) {
+    res.status(500).json({ status: "error", code: err.code || err.name, message: err.message });
+  }
+});
 
 app.use("/api/auth", authRoutes);
 app.use("/api/users", usersRoutes);
