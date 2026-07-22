@@ -1,14 +1,17 @@
 import { prisma } from "../utils/prisma.js";
 import { buildWeekScoreWorkbook, buildCombinedScoreWorkbook } from "../services/export.js";
 
+// Buffered rather than streamed to res — safer across deployment targets
+// (works identically under plain Node, Docker, and Vercel's serverless
+// Node runtime, where writable-stream response support is less predictable).
 async function streamWorkbook(res, workbook, filename) {
+  const buffer = await workbook.xlsx.writeBuffer();
   res.setHeader(
     "Content-Type",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
   );
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-  await workbook.xlsx.write(res);
-  res.end();
+  res.end(buffer);
 }
 
 export async function exportWeekScores(req, res, next) {

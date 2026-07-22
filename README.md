@@ -45,7 +45,7 @@ flowchart LR
 | Charts | Recharts + hand-rolled SVG/CSS (heatmap, quadrant, SAPA gauge) | Trend lines, radar, heatmaps, quadrant plot |
 | Reverse Proxy | Nginx | SSL termination, static file serving, routing |
 | Export | ExcelJS | `.xlsx` weekly + combined score sheets |
-| Deployment | Docker + Docker Compose | Reproducible builds |
+| Deployment | Docker + Docker Compose, **or** Vercel (serverless) | Reproducible builds; see "Deploying to Vercel" below for the serverless path |
 
 ## Repository layout
 
@@ -70,6 +70,12 @@ frontend/
 
 deploy/nginx/nginx.conf     # root reverse proxy (SSL termination + routing)
 docker-compose.yml          # postgres + backend + frontend + nginx
+
+api/                        # Vercel serverless entrypoints (see "Deploying to Vercel")
+  index.mjs                  # imports backend/src/app.js, exported as the Vercel Function handler
+  cron/reminders.mjs         # Vercel Cron Job target — same reminder sweep as node-cron, triggered on schedule instead
+vercel.json                 # build command, SPA/API rewrites, cron schedule
+package.json                 # root npm workspaces (backend + frontend) — only used for the Vercel build
 ```
 
 ## Local development
@@ -185,6 +191,67 @@ by running them directly (Node + Vite dev server) against a real local
 Postgres instance, including a live browser walkthrough of every page for
 every role.
 
+## Deploying to Vercel
+
+This is a second, serverless deployment path — an alternative to Docker
+Compose above, not a replacement for it. The Express app (`backend/src/app.js`)
+is exported as-is; Vercel's Node runtime invokes it directly per request,
+so the API and the built SPA end up on the **same domain** (no CORS to
+configure). The one thing a serverless platform can't do is run a
+persistent process, so the node-cron reminder sweep is replaced by a
+**Vercel Cron Job** hitting `/api/cron/reminders` on schedule instead —
+same underlying logic (`backend/src/jobs/reminderCron.js`), different trigger.
+
+**1. Create a Postgres database.** Any provider works as long as it gives
+you both a *pooled* and a *direct/unpooled* connection string — required
+because a serverless function can open far more concurrent connections
+than a small Postgres instance allows, so runtime queries go through a
+pooler while schema migrations (which must run outside it) use the direct
+one. [Neon](https://neon.tech) is a good default (generous free tier,
+first-class Prisma support); Vercel's own "Postgres" storage integration
+(Storage tab → Create Database) and Supabase both work the same way.
+Whichever you pick, copy out **both** connection strings.
+
+**2. Import the repo into Vercel.** From the Vercel dashboard: **Add New
+→ Project**, select this GitHub repo. Leave the root directory as `.`
+(repo root) — `vercel.json` at the root already points the build at
+`frontend/` and wires up `api/`, so no per-field configuration is needed
+in the dashboard.
+
+**3. Set environment variables** (Project → Settings → Environment
+Variables). See `.env.vercel.example` for the full list — at minimum:
+
+| Variable | Value |
+|---|---|
+| `DATABASE_URL` | the **pooled** connection string from step 1 |
+| `DIRECT_URL` | the **unpooled/direct** connection string from step 1 |
+| `JWT_SECRET` | a long random string (e.g. `openssl rand -hex 32`) |
+| `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | your sending mailbox (optional — reminders log to the function's console output if omitted) |
+| `CRON_SECRET` | another long random string — Vercel sends it automatically as a Bearer token when firing the Cron Job, so anyone else calling that URL gets a 401 |
+
+**4. Deploy.** Click **Deploy**. Vercel's build runs `npm install` at the
+repo root (installs both workspaces + generates the Prisma client via the
+`postinstall` hook), then `vercel.json`'s `buildCommand`: `prisma migrate
+deploy` against `DIRECT_URL` (applying the schema to your fresh database),
+followed by the frontend's Vite build. First deploy will have an empty
+database — log into a shell with the same env vars and run
+`npm run seed --workspace=backend` once (or just start using **Admin
+Panel → Import Roster** after creating one admin user by hand via
+`prisma studio`).
+
+**5. Verify the cron.** Project → Settings → Cron Jobs should show
+`/api/cron/reminders` on the schedule from `vercel.json` (`0 10 * * *`,
+UTC). You can also trigger it manually from that same screen to confirm
+it runs before waiting for the schedule.
+
+This path was verified locally by wrapping the exported `api/index.mjs`
+and `api/cron/reminders.mjs` handlers in a plain Node `http.createServer`
+(the same call signature Vercel's runtime uses) and exercising login,
+score computation, and the cron endpoint's auth guard against a real
+Postgres instance — `vercel dev`/an actual deployment couldn't be run here
+since that requires an authenticated Vercel account this sandbox doesn't
+have.
+
 ## Known limitations / next steps
 
 - **Sentiment analysis** in the quadrant plot (`backend/src/services/analytics.js`)
@@ -196,3 +263,9 @@ every role.
   build). Add Vitest/Jest + Playwright if ongoing CI coverage is wanted.
 - CI/CD (GitHub Actions auto-deploy) is listed in the spec's stack table but
   not wired up — natural next step once a target VM/registry exists.
+- The auth rate limiter (`express-rate-limit`) uses an in-memory store,
+  which is per-container: fine on a single long-running Docker/PM2 process,
+  but on Vercel each cold-started function instance starts its own counter,
+  so the limit is "per warm instance" rather than truly global. Swap in a
+  Redis-backed store (e.g. Upstash, which pairs naturally with Vercel) if a
+  hard global cap matters more than defense-in-depth against casual abuse.

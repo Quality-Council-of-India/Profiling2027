@@ -1,0 +1,11 @@
+{
+  "name": "profiling2027",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "postinstall": "npm run prisma:generate --workspace=backend"
+  }
+}

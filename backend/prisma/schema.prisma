@@ -2,12 +2,14 @@
 // Mirrors Technical Specification v3, Section 3 (Database Schema)
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"] // rhel-openssl-3.0.x = Vercel's Node function runtime
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL") // pooled connection (via PgBouncer/Neon's pooler) — used at runtime
+  directUrl = env("DIRECT_URL")   // unpooled connection — used for `prisma migrate deploy`
 }
 
 enum Role {
