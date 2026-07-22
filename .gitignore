@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+.env.local
+!.env.example
+*.log
+.DS_Store
+
+# Local Postgres artifacts if ever created inside the repo
+*.pgdata/
