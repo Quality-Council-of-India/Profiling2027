@@ -229,17 +229,39 @@ Variables). See `.env.vercel.example` for the full list — at minimum:
 | `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | your sending mailbox (optional — reminders log to the function's console output if omitted) |
 | `CRON_SECRET` | another long random string — Vercel sends it automatically as a Bearer token when firing the Cron Job, so anyone else calling that URL gets a 401 |
 
-**4. Deploy.** Click **Deploy**. Vercel's build runs `npm install` at the
-repo root (installs both workspaces + generates the Prisma client via the
-`postinstall` hook), then `vercel.json`'s `buildCommand`: `prisma migrate
-deploy` against `DIRECT_URL` (applying the schema to your fresh database),
-followed by the frontend's Vite build. First deploy will have an empty
-database — log into a shell with the same env vars and run
-`npm run seed --workspace=backend` once (or just start using **Admin
-Panel → Import Roster** after creating one admin user by hand via
-`prisma studio`).
+**4. Apply the schema — from your own machine, not Vercel's build.**
+Vercel's build step deliberately does **not** run `prisma migrate deploy`
+(see the callout below for why). Instead, from `backend/`, point a local
+`.env` at your production `DATABASE_URL`/`DIRECT_URL` and run:
 
-**5. Verify the cron.** Project → Settings → Cron Jobs should show
+```bash
+cd backend
+npx prisma migrate deploy   # creates the six tables against your production DB
+npm run seed                 # optional: demo roster + synthetic weeks, or skip and use Admin Panel → Import Roster instead
+```
+
+**5. Deploy.** Click **Deploy** (or push a commit). Vercel's build runs
+`npm install` at the repo root (installs both workspaces + generates the
+Prisma client via the `postinstall` hook), then `vercel.json`'s
+`buildCommand` builds the frontend — no database connection needed at
+build time at all.
+
+> **Why migrations run locally instead of in `buildCommand`:** the first
+> version of this setup ran `prisma migrate deploy` as part of the Vercel
+> build. In testing, that failed with `P1001: Can't reach database
+> server` against a Supabase project in the `ap-south-1` (Mumbai) region
+> — while the exact same connection string worked fine from both
+> Supabase's own SQL Editor and a local machine. That points to a
+> region-specific gap between Vercel's *build* network and that Supabase
+> pooler, not a bad connection string or a paused project. Since a
+> transient build-time network hiccup shouldn't be able to block a
+> frontend deploy, migrations were moved out of the build entirely — run
+> them once per schema change from wherever you've confirmed connectivity
+> works (local machine, or a CI runner in a region closer to your DB).
+> If you hit the same `P1001` on a different provider/region, this same
+> local-migration approach sidesteps it regardless of the cause.
+
+**6. Verify the cron.** Project → Settings → Cron Jobs should show
 `/api/cron/reminders` on the schedule from `vercel.json` (`0 10 * * *`,
 UTC). You can also trigger it manually from that same screen to confirm
 it runs before waiting for the schedule.
