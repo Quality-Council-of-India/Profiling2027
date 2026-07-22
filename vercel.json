@@ -3,7 +3,7 @@
   "outputDirectory": "frontend/dist",
   "rewrites": [
     { "source": "/api/:path*", "destination": "/api/index" },
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
+    { "source": "/(.*)", "destination": "/index.html" }
   ],
   "crons": [
     { "path": "/api/cron/reminders", "schedule": "0 10 * * *" }
