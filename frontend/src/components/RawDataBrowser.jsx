@@ -42,13 +42,13 @@ export default function RawDataBrowser() {
   return (
     <Card className="p-5">
       <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
-        <h2 className="text-sm font-semibold text-gray-800">Raw Data Browser</h2>
+        <h2 className="text-sm font-semibold text-slate-800">Raw Data Browser</h2>
         <div className="flex items-center gap-2">
           {WEEK_FILTERABLE.includes(table) && (
             <select
               value={weekId}
               onChange={(e) => { setWeekId(e.target.value); setPage(1); }}
-              className="px-2.5 py-1.5 border border-gray-300 rounded-lg text-xs"
+              className="px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs"
             >
               <option value="">All weeks</option>
               {(weeksQuery.data || []).map((w) => (
@@ -64,8 +64,8 @@ export default function RawDataBrowser() {
           <button
             key={key}
             onClick={() => selectTable(key)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-              table === key ? "text-white bg-[#1F3864]" : "text-gray-600 bg-gray-100 hover:bg-gray-200"
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-standard ${
+              table === key ? "text-white bg-nav shadow-sm" : "text-slate-600 bg-slate-100 hover:bg-slate-200"
             }`}
           >
             {label}
@@ -80,7 +80,7 @@ export default function RawDataBrowser() {
       ) : (
         <>
           <TableBody table={table} rows={dataQuery.data.rows} />
-          <div className="flex items-center justify-between mt-3 text-xs text-gray-500">
+          <div className="flex items-center justify-between mt-3 text-xs text-slate-500">
             <span>
               {dataQuery.data.total} row{dataQuery.data.total === 1 ? "" : "s"} · page {dataQuery.data.page} of {dataQuery.data.totalPages}
             </span>
@@ -88,14 +88,14 @@ export default function RawDataBrowser() {
               <button
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page <= 1}
-                className="px-2.5 py-1 rounded border border-gray-300 disabled:opacity-40"
+                className="px-2.5 py-1 rounded border border-slate-300 disabled:opacity-40 hover:bg-slate-50 hover:border-slate-400 transition-standard"
               >
                 ← Prev
               </button>
               <button
                 onClick={() => setPage((p) => Math.min(dataQuery.data.totalPages, p + 1))}
                 disabled={page >= dataQuery.data.totalPages}
-                className="px-2.5 py-1 rounded border border-gray-300 disabled:opacity-40"
+                className="px-2.5 py-1 rounded border border-slate-300 disabled:opacity-40 hover:bg-slate-50 hover:border-slate-400 transition-standard"
               >
                 Next →
               </button>
@@ -113,7 +113,7 @@ function RoleBadge({ role }) {
 
 function TableBody({ table, rows }) {
   if (rows.length === 0) {
-    return <p className="text-sm text-gray-400 text-center py-8">No rows.</p>;
+    return <p className="text-sm text-slate-400 text-center py-8">No rows.</p>;
   }
 
   const columns = {
@@ -129,9 +129,9 @@ function TableBody({ table, rows }) {
     <div className="overflow-x-auto -mx-1">
       <table className="w-full text-xs px-1">
         <thead>
-          <tr className="border-b border-gray-200">
+          <tr className="border-b border-slate-200">
             {columns.map((c) => (
-              <th key={c} className="text-left px-2 py-1.5 font-medium text-gray-500 uppercase whitespace-nowrap">
+              <th key={c} className="text-left px-2 py-1.5 font-medium text-slate-500 uppercase whitespace-nowrap">
                 {c.replace(/_/g, " ")}
               </th>
             ))}
@@ -139,7 +139,7 @@ function TableBody({ table, rows }) {
         </thead>
         <tbody>
           {rows.map((r, i) => (
-            <tr key={r.id ?? i} className={i % 2 === 0 ? "bg-gray-50/60" : ""}>
+            <tr key={r.id ?? i} className={i % 2 === 0 ? "bg-slate-50/60" : ""}>
               {columns.map((c) => (
                 <td key={c} className="px-2 py-1.5 whitespace-nowrap align-top">
                   {renderCell(table, c, r)}
@@ -161,7 +161,7 @@ function renderCell(table, column, row) {
   }
   if (column === "week") return val?.label || "—";
   if (column === "role") return <RoleBadge role={val} />;
-  if (column === "is_active") return val ? <span className="text-green-700">active</span> : <span className="text-gray-400">inactive</span>;
+  if (column === "is_active") return val ? <span className="text-green-700">active</span> : <span className="text-slate-400">inactive</span>;
   if (column === "scores" && table === "evaluations") {
     return (
       <span className="font-mono">

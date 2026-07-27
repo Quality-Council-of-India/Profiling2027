@@ -11,8 +11,8 @@ export default function RankingCard({ title, myRank, total, list, meId, emptyLab
   if (!myRank) {
     return (
       <Card className="p-5">
-        <h2 className="text-sm font-semibold text-gray-800 mb-3">{title}</h2>
-        <p className="text-sm text-gray-400">{emptyLabel || "Not enough data yet for this range."}</p>
+        <h2 className="text-sm font-semibold text-slate-800 mb-3">{title}</h2>
+        <p className="text-sm text-slate-400">{emptyLabel || "Not enough data yet for this range."}</p>
       </Card>
     );
   }
@@ -21,12 +21,12 @@ export default function RankingCard({ title, myRank, total, list, meId, emptyLab
 
   return (
     <Card className="p-5">
-      <h2 className="text-sm font-semibold text-gray-800 mb-3">{title}</h2>
+      <h2 className="text-sm font-semibold text-slate-800 mb-3">{title}</h2>
       <div className="flex items-baseline gap-2 mb-1">
         <span className="text-3xl font-bold" style={{ color: NAV }}>#{myRank}</span>
-        <span className="text-sm text-gray-500">of {total}</span>
+        <span className="text-sm text-slate-500">of {total}</span>
       </div>
-      <div className="w-full bg-gray-100 rounded-full h-1.5 mb-4">
+      <div className="w-full bg-slate-100 rounded-full h-1.5 mb-4">
         <div className="h-1.5 rounded-full" style={{ width: `${pct}%`, background: ACCENT }} />
       </div>
 
@@ -37,10 +37,10 @@ export default function RankingCard({ title, myRank, total, list, meId, emptyLab
               {list.map((m) => (
                 <tr
                   key={m.id}
-                  className={`border-b border-gray-50 last:border-0 ${m.id === meId ? "bg-orange-50" : ""}`}
+                  className={`border-b border-slate-50 last:border-0 ${m.id === meId ? "bg-orange-50" : ""}`}
                 >
-                  <td className="py-1.5 pr-2 text-gray-400 w-8 tabular-nums">#{m.rank}</td>
-                  <td className="py-1.5 pr-2 font-medium text-gray-800">
+                  <td className="py-1.5 pr-2 text-slate-400 w-8 tabular-nums">#{m.rank}</td>
+                  <td className="py-1.5 pr-2 font-medium text-slate-800">
                     {m.name} {m.id === meId && <span className="text-orange-600">(you)</span>}
                   </td>
                   <td className="py-1.5 pr-2">
@@ -51,7 +51,7 @@ export default function RankingCard({ title, myRank, total, list, meId, emptyLab
                       {ROLE_LABELS[m.role]}
                     </span>
                   </td>
-                  <td className="py-1.5 text-right font-mono text-gray-700 tabular-nums">{m.totalPeer.toFixed(1)}</td>
+                  <td className="py-1.5 text-right font-mono text-slate-700 tabular-nums">{m.totalPeer.toFixed(1)}</td>
                 </tr>
               ))}
             </tbody>

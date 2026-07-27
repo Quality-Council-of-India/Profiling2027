@@ -27,8 +27,8 @@ export default function WeekSelector({ weeks, selectedIds, onChange }) {
             <button
               key={w.id}
               onClick={() => toggle(w.id)}
-              className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
-                active ? "text-white border-transparent" : "text-gray-600 border-gray-300 hover:border-gray-400"
+              className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-standard ${
+                active ? "text-white border-transparent" : "text-slate-600 border-slate-300 hover:border-slate-400"
               }`}
               style={active ? { background: NAV } : {}}
               title={w.status === "open" ? "Currently open — partial data" : "Closed"}
@@ -41,8 +41,8 @@ export default function WeekSelector({ weeks, selectedIds, onChange }) {
       {closedWeeks.length > 1 && (
         <button
           onClick={() => onChange(closedWeeks.map((w) => w.id))}
-          className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
-            isCumulative ? "text-white border-transparent" : "text-gray-600 border-dashed border-gray-300 hover:border-gray-400"
+          className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-standard ${
+            isCumulative ? "text-white border-transparent" : "text-slate-600 border-dashed border-slate-300 hover:border-slate-400"
           }`}
           style={isCumulative ? { background: ACCENT } : {}}
         >

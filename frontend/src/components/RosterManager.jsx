@@ -39,12 +39,12 @@ export default function RosterManager() {
   return (
     <Card className="p-5">
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-semibold text-gray-800">Team Roster</h2>
+        <h2 className="text-sm font-semibold text-slate-800">Team Roster</h2>
         <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={handleFileChange} />
         <button
           onClick={() => fileInputRef.current?.click()}
           disabled={rosterMutation.isPending}
-          className="px-3 py-1.5 rounded-lg border border-dashed border-gray-300 text-xs text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+          className="px-3 py-1.5 rounded-lg border border-dashed border-slate-300 text-xs text-slate-500 hover:bg-slate-50 hover:border-slate-400 disabled:opacity-50 transition-standard"
         >
           {rosterMutation.isPending ? "Importing…" : "↑ Import CSV"}
         </button>
@@ -52,7 +52,7 @@ export default function RosterManager() {
 
       {rosterError && <ErrorBanner message={rosterError} />}
       {rosterResult && (
-        <div className="mb-3 text-xs text-gray-600 space-y-1 bg-gray-50 rounded-lg p-3">
+        <div className="mb-3 text-xs text-slate-600 space-y-1 bg-slate-50 rounded-lg p-3">
           <p>{rosterResult.createdCount} created, {rosterResult.updatedCount} updated, {rosterResult.mappingsCreated} peer mappings regenerated.</p>
           {rosterResult.errors.length > 0 && (
             <p className="text-red-600">{rosterResult.errors.length} row(s) had errors — check line numbers in the CSV.</p>
@@ -78,28 +78,28 @@ export default function RosterManager() {
         <div className="max-h-96 overflow-y-auto -mx-1">
           <table className="w-full text-xs">
             <thead>
-              <tr className="border-b border-gray-200 sticky top-0 bg-white">
-                <th className="text-left px-2 py-1.5 font-medium text-gray-500 uppercase">Name</th>
-                <th className="text-left px-2 py-1.5 font-medium text-gray-500 uppercase">Role</th>
-                <th className="text-left px-2 py-1.5 font-medium text-gray-500 uppercase">Field</th>
-                <th className="text-center px-2 py-1.5 font-medium text-gray-500 uppercase">Status</th>
+              <tr className="border-b border-slate-200 sticky top-0 bg-white">
+                <th className="text-left px-2 py-1.5 font-medium text-slate-500 uppercase">Name</th>
+                <th className="text-left px-2 py-1.5 font-medium text-slate-500 uppercase">Role</th>
+                <th className="text-left px-2 py-1.5 font-medium text-slate-500 uppercase">Field</th>
+                <th className="text-center px-2 py-1.5 font-medium text-slate-500 uppercase">Status</th>
               </tr>
             </thead>
             <tbody>
               {usersQuery.data.map((u, i) => (
-                <tr key={u.id} className={`border-b border-gray-50 ${!u.is_active ? "opacity-50" : ""} ${i % 2 === 0 ? "bg-gray-50/60" : ""}`}>
-                  <td className="px-2 py-1.5 font-medium text-gray-800">{u.name}</td>
+                <tr key={u.id} className={`border-b border-slate-50 ${!u.is_active ? "opacity-50" : ""} ${i % 2 === 0 ? "bg-slate-50/60" : ""}`}>
+                  <td className="px-2 py-1.5 font-medium text-slate-800">{u.name}</td>
                   <td className="px-2 py-1.5"><Badge text={ROLE_LABELS[u.role]} color={ROLE_COLORS[u.role]} /></td>
-                  <td className="px-2 py-1.5 text-gray-600">{u.field || "—"}</td>
+                  <td className="px-2 py-1.5 text-slate-600">{u.field || "—"}</td>
                   <td className="px-2 py-1.5 text-center">
                     {u.role === "admin" ? (
-                      <span className="text-gray-400">—</span>
+                      <span className="text-slate-400">—</span>
                     ) : (
                       <button
                         onClick={() => toggleMutation.mutate({ id: u.id, is_active: !u.is_active })}
                         disabled={toggleMutation.isPending}
-                        className={`px-2 py-0.5 rounded-full text-[11px] font-medium transition-all disabled:opacity-50 ${
-                          u.is_active ? "bg-green-100 text-green-700 hover:bg-green-200" : "bg-gray-200 text-gray-600 hover:bg-gray-300"
+                        className={`px-2 py-0.5 rounded-full text-[11px] font-medium transition-standard disabled:opacity-50 ${
+                          u.is_active ? "bg-green-100 text-green-700 hover:bg-green-200" : "bg-slate-200 text-slate-600 hover:bg-slate-300"
                         }`}
                         title={u.is_active ? "Click to deactivate (e.g. they've left the project)" : "Click to reactivate"}
                       >

@@ -29,12 +29,20 @@ export default function ResetPasswordPage() {
 
   return (
     <div
-      className="min-h-screen flex items-center justify-center"
-      style={{ background: "linear-gradient(135deg,#1F3864 0%,#0D2B52 100%)" }}
+      className="min-h-screen flex items-center justify-center p-4"
+      style={{ background: "linear-gradient(155deg, #1F3864 0%, #12233F 100%)" }}
     >
-      <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md mx-4">
-        <h1 className="text-lg font-bold text-gray-900 mb-4">Set a new password</h1>
-        {!token && <p className="text-sm text-red-600">Missing reset token — use the link from your email.</p>}
+      <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
+        <div className="inline-flex items-center justify-center w-11 h-11 rounded-lg bg-nav mb-5">
+          <span className="text-white text-sm font-bold font-display">QCI</span>
+        </div>
+        <h1 className="text-lg font-bold text-slate-900 mb-1">Set a new password</h1>
+        <p className="text-sm text-slate-500 mb-5">Choose a password with at least 8 characters.</p>
+        {!token && (
+          <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2 mb-3">
+            Missing reset token — use the link from your email.
+          </p>
+        )}
         <form className="space-y-3" onSubmit={handleSubmit}>
           <input
             type="password"
@@ -43,17 +51,17 @@ export default function ResetPasswordPage() {
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
             placeholder="New password (min 8 characters)"
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+            className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-standard"
           />
-          {error && <p className="text-xs text-red-600">{error}</p>}
-          {message && <p className="text-xs text-green-700">{message}</p>}
+          {error && <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>}
+          {message && <p className="text-xs text-green-700 bg-green-50 border border-green-100 rounded-lg px-3 py-2">{message}</p>}
           <button
             type="submit"
             disabled={busy || !token}
-            className="w-full py-2.5 rounded-lg text-white font-medium text-sm disabled:opacity-50"
+            className="w-full py-2.5 rounded-lg text-white font-medium text-sm disabled:opacity-50 transition-standard hover:bg-nav-deep"
             style={{ background: NAV }}
           >
-            Reset Password
+            {busy ? "Resetting…" : "Reset Password"}
           </button>
         </form>
       </div>

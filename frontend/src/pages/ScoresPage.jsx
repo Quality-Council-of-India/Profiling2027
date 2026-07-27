@@ -28,7 +28,7 @@ export default function ScoresPage({ userId, userLabel }) {
 
   if (weeksQuery.isLoading) return <Spinner />;
   if (weeksQuery.isError) return <ErrorBanner message="Failed to load weeks" />;
-  if (!currentWeek) return <p className="text-sm text-gray-400">No scored weeks yet.</p>;
+  if (!currentWeek) return <p className="text-sm text-slate-400">No scored weeks yet.</p>;
   if (detailQuery.isLoading) return <Spinner />;
   if (detailQuery.isError) return <ErrorBanner message="Failed to load this week's score" />;
 
@@ -41,19 +41,20 @@ export default function ScoresPage({ userId, userLabel }) {
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">My Scores</h1>
-          <p className="text-sm text-gray-500">{userLabel || targetUser.name} · {targetUser.field || "All Fields"}</p>
+          <h1 className="text-xl font-bold text-slate-900">My Scores</h1>
+          <p className="text-sm text-slate-500">{userLabel || targetUser.name} · {targetUser.field || "All Fields"}</p>
         </div>
         <span
-          className="text-xs font-medium px-2.5 py-1 rounded-full"
+          className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full"
           style={{ background: currentWeek.status === "open" ? "#DCFCE7" : "#F3F4F6", color: currentWeek.status === "open" ? "#166534" : "#4B5563" }}
         >
+          {currentWeek.status === "open" && <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />}
           {currentWeek.label} · {currentWeek.status === "open" ? "Open now" : "Last closed week"}
         </span>
       </div>
 
       {!computed ? (
-        <Card className="p-6 text-center text-sm text-gray-400">
+        <Card className="p-6 text-center text-sm text-slate-400">
           No scores computed for {currentWeek.label} yet — check back once evaluations start coming in.
         </Card>
       ) : (
@@ -62,17 +63,17 @@ export default function ScoresPage({ userId, userLabel }) {
             {PARAM_LABELS.map((label, i) => {
               const key = ["sincerity", "team_spirit", "knowledge", "quantity", "quality"][i];
               return (
-                <Card key={label} className="p-3 text-center">
-                  <p className="text-xs text-gray-500 mb-1">{label}</p>
+                <Card key={label} interactive className="p-3 text-center">
+                  <p className="text-xs text-slate-500 mb-1">{label}</p>
                   <div className="flex justify-center gap-3">
                     <div>
                       <p className="text-lg font-bold" style={{ color: ACCENT }}>{Number(computed[`${key}_self`])}</p>
-                      <p className="text-xs text-gray-400">Self</p>
+                      <p className="text-xs text-slate-400">Self</p>
                     </div>
-                    <div className="w-px bg-gray-200" />
+                    <div className="w-px bg-slate-200" />
                     <div>
                       <p className="text-lg font-bold" style={{ color: NAV }}>{Number(computed[`${key}_peer`])}</p>
-                      <p className="text-xs text-gray-400">Peer</p>
+                      <p className="text-xs text-slate-400">Peer</p>
                     </div>
                   </div>
                 </Card>
@@ -82,11 +83,11 @@ export default function ScoresPage({ userId, userLabel }) {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <Card className="p-5">
-              <h2 className="text-sm font-semibold text-gray-800 mb-2">Self vs Peer — {currentWeek.label}</h2>
+              <h2 className="text-sm font-semibold text-slate-800 mb-2">Self vs Peer — {currentWeek.label}</h2>
               <RadarComparison computed={computed} height={260} />
             </Card>
             <Card className="p-4">
-              <p className="text-xs uppercase tracking-wide text-gray-500 mb-2">SAPA Factor</p>
+              <p className="text-xs uppercase tracking-wide text-slate-500 mb-2">SAPA Factor</p>
               <SAPAGauge sapa={sapa} />
             </Card>
           </div>
@@ -97,11 +98,11 @@ export default function ScoresPage({ userId, userLabel }) {
           </div>
 
           <Card className="p-5">
-            <h2 className="text-sm font-semibold text-gray-800 mb-3">Peer Feedback Received — {currentWeek.label}</h2>
+            <h2 className="text-sm font-semibold text-slate-800 mb-3">Peer Feedback Received — {currentWeek.label}</h2>
             {!subjective ? (
               <Spinner />
             ) : subjective.peer.responseCount === 0 ? (
-              <p className="text-sm text-gray-400">No peer responses received for this week.</p>
+              <p className="text-sm text-slate-400">No peer responses received for this week.</p>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
@@ -109,10 +110,10 @@ export default function ScoresPage({ userId, userLabel }) {
                   <div className="space-y-1.5">
                     {subjective.peer.strengthComments.length ? (
                       subjective.peer.strengthComments.map((r, i) => (
-                        <p key={i} className="text-xs text-gray-600 bg-green-50 rounded-md px-3 py-2 border border-green-100">"{r}"</p>
+                        <p key={i} className="text-xs text-slate-600 bg-green-50 rounded-md px-3 py-2 border border-green-100">"{r}"</p>
                       ))
                     ) : (
-                      <p className="text-xs text-gray-400">No open-ended strength remarks this week.</p>
+                      <p className="text-xs text-slate-400">No open-ended strength remarks this week.</p>
                     )}
                   </div>
                   {subjective.peer.strengthsFrequency.length > 0 && (
@@ -130,10 +131,10 @@ export default function ScoresPage({ userId, userLabel }) {
                   <div className="space-y-1.5">
                     {subjective.peer.weaknessComments.length ? (
                       subjective.peer.weaknessComments.map((r, i) => (
-                        <p key={i} className="text-xs text-gray-600 bg-red-50 rounded-md px-3 py-2 border border-red-100">"{r}"</p>
+                        <p key={i} className="text-xs text-slate-600 bg-red-50 rounded-md px-3 py-2 border border-red-100">"{r}"</p>
                       ))
                     ) : (
-                      <p className="text-xs text-gray-400">No open-ended improvement remarks this week.</p>
+                      <p className="text-xs text-slate-400">No open-ended improvement remarks this week.</p>
                     )}
                   </div>
                   {subjective.peer.weaknessFrequency.length > 0 && (

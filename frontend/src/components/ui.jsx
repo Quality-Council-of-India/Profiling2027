@@ -1,17 +1,21 @@
 export function Badge({ text, color }) {
   return (
     <span
-      className="inline-block px-2 py-0.5 rounded-full text-xs font-medium"
-      style={{ background: color + "20", color }}
+      className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap"
+      style={{ background: color + "1a", color }}
     >
       {text}
     </span>
   );
 }
 
-export function Card({ children, className = "" }) {
+export function Card({ children, className = "", interactive = false }) {
   return (
-    <div className={`bg-white rounded-lg border border-gray-200 shadow-sm ${className}`}>
+    <div
+      className={`bg-white rounded-xl border border-slate-200 shadow-sm transition-standard ${
+        interactive ? "hover:shadow-md hover:border-slate-300 cursor-pointer" : ""
+      } ${className}`}
+    >
       {children}
     </div>
   );
@@ -19,24 +23,53 @@ export function Card({ children, className = "" }) {
 
 export function StatCard({ label, value, sub, accent = false }) {
   return (
-    <Card className="p-4">
-      <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">{label}</p>
-      <p className={`text-2xl font-bold ${accent ? "text-orange-600" : "text-gray-900"}`}>{value}</p>
-      {sub && <p className="text-xs text-gray-400 mt-1">{sub}</p>}
+    <Card className="p-4 relative overflow-hidden">
+      <div
+        className="absolute left-0 top-0 bottom-0 w-1"
+        style={{ background: accent ? "#E07B00" : "#A5C9EB" }}
+      />
+      <p className="text-xs uppercase tracking-wide text-slate-500 mb-1 pl-1.5">{label}</p>
+      <p className={`font-display text-2xl font-bold tabular-nums pl-1.5 ${accent ? "text-orange-600" : "text-slate-900"}`}>
+        {value}
+      </p>
+      {sub && <p className="text-xs text-slate-400 mt-1 pl-1.5">{sub}</p>}
     </Card>
   );
 }
 
 export function Spinner({ label = "Loading…" }) {
   return (
-    <div className="flex items-center justify-center py-16 text-sm text-gray-400">{label}</div>
+    <div className="flex flex-col items-center justify-center gap-3 py-16 text-sm text-slate-400">
+      <svg className="animate-spin h-6 w-6 text-nav/40" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+        <path className="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+      </svg>
+      <span>{label}</span>
+    </div>
   );
 }
 
 export function ErrorBanner({ message }) {
   return (
-    <div className="px-4 py-3 rounded-lg border border-red-200 bg-red-50 text-sm text-red-700">
-      {message}
+    <div className="flex items-start gap-2.5 px-4 py-3 rounded-lg border border-red-200 bg-red-50 text-sm text-red-700">
+      <svg className="w-4 h-4 mt-0.5 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+        <path
+          fillRule="evenodd"
+          d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l6.28 11.18c.75 1.334-.213 2.987-1.742 2.987H3.72c-1.53 0-2.493-1.653-1.743-2.987l6.28-11.18zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+          clipRule="evenodd"
+        />
+      </svg>
+      <span>{message}</span>
+    </div>
+  );
+}
+
+export function EmptyState({ icon = "○", title, message }) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-2 py-12 text-center">
+      <span className="text-3xl opacity-40">{icon}</span>
+      {title && <p className="text-sm font-medium text-slate-600">{title}</p>}
+      {message && <p className="text-xs text-slate-400 max-w-xs">{message}</p>}
     </div>
   );
 }
