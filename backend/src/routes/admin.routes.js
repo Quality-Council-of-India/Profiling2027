@@ -2,7 +2,15 @@ import { Router } from "express";
 import multer from "multer";
 import { authenticate, requireRole } from "../middleware/auth.js";
 import { ROLES } from "../utils/roles.js";
-import { openWeek, closeWeek, importRosterHandler } from "../controllers/admin.controller.js";
+import {
+  openWeek,
+  closeWeek,
+  importRosterHandler,
+  listUsers,
+  setUserActive,
+  listRawTables,
+  getRawTable,
+} from "../controllers/admin.controller.js";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -24,5 +32,9 @@ router.post(
   upload.single("roster"),
   importRosterHandler
 );
+router.get("/users", authenticate, requireRole(ROLES.ADMIN), listUsers);
+router.patch("/users/:id/active", authenticate, requireRole(ROLES.ADMIN), setUserActive);
+router.get("/data", authenticate, requireRole(ROLES.ADMIN), listRawTables);
+router.get("/data/:table", authenticate, requireRole(ROLES.ADMIN), getRawTable);
 
 export default router;

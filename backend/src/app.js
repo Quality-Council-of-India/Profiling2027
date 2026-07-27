@@ -36,7 +36,14 @@ app.use(express.json({ limit: "1mb" }));
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 20 });
 app.use("/api/auth", authLimiter);
 
-const apiLimiter = rateLimit({ windowMs: 60 * 1000, limit: 300 });
+// Sized for ~1000 concurrent users: a dashboard load alone fires several
+// GET requests, so 300/min (fine for the ~60-person actual roster) would
+// throttle legitimate traffic at scale. Note this cap is per warm
+// instance, not global — Vercel scales horizontally under load, so
+// aggregate allowed throughput scales with it too. A precise global cap
+// would need a shared store (e.g. Upstash Redis) instead of the default
+// in-memory one; not needed unless abuse becomes a real problem.
+const apiLimiter = rateLimit({ windowMs: 60 * 1000, limit: 1000 });
 app.use("/api", apiLimiter);
 
 app.get("/health", (req, res) => res.json({ status: "ok" }));

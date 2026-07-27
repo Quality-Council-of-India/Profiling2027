@@ -11,26 +11,26 @@ function heatColor(v) {
 // rows: [{ field, Sincerity, "Team Spirit", Knowledge, Quantity, Quality, avg }]
 export default function HeatmapGrid({ rows }) {
   if (!rows.length) {
-    return <p className="text-sm text-gray-400 py-6 text-center">No scored data for this week yet.</p>;
+    return <p className="text-sm text-slate-400 py-6 text-center">No scored data for this week yet.</p>;
   }
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
           <tr>
-            <th className="text-left px-3 py-2 text-xs font-medium text-gray-600 uppercase">Field</th>
+            <th className="text-left px-3 py-2 text-xs font-medium text-slate-600 uppercase">Field</th>
             {PARAM_LABELS.map((p) => (
-              <th key={p} className="text-center px-3 py-2 text-xs font-medium text-gray-600 uppercase">
+              <th key={p} className="text-center px-3 py-2 text-xs font-medium text-slate-600 uppercase">
                 {p}
               </th>
             ))}
-            <th className="text-center px-3 py-2 text-xs font-medium text-gray-600 uppercase">Avg</th>
+            <th className="text-center px-3 py-2 text-xs font-medium text-slate-600 uppercase">Avg</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((row) => (
             <tr key={row.field}>
-              <td className="px-3 py-2 text-xs font-medium text-gray-800">{row.field}</td>
+              <td className="px-3 py-2 text-xs font-medium text-slate-800">{row.field}</td>
               {PARAM_LABELS.map((p) => (
                 <td key={p} className="px-3 py-2 text-center">
                   <span

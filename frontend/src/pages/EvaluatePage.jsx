@@ -17,6 +17,7 @@ export default function EvaluatePage() {
 
   const [evalType, setEvalType] = useState("self");
   const [selectedPeerId, setSelectedPeerId] = useState(searchParams.get("peer") || "");
+  const [showCompletedPeers, setShowCompletedPeers] = useState(false);
   const [ratings, setRatings] = useState(DEFAULT_RATINGS);
   const [problemSolving, setProblemSolving] = useState("satisfied");
   const [problemReason, setProblemReason] = useState("");
@@ -33,6 +34,12 @@ export default function EvaluatePage() {
   const pending = pendingQuery.data?.pending;
   const week = pendingQuery.data?.week;
   const peerOptions = useMemo(() => pending?.peers || [], [pending]);
+  const pendingPeerOptions = useMemo(() => peerOptions.filter((p) => !p.done), [peerOptions]);
+  // Auto-detects who still needs evaluating — the dropdown only offers
+  // not-yet-done peers by default, so there's no need to hunt through
+  // already-submitted names. "Show completed" is an escape hatch for
+  // deliberately revising a submission.
+  const visiblePeerOptions = showCompletedPeers ? peerOptions : pendingPeerOptions;
 
   const toggleTag = (tag, list, setter) => {
     setter(list.includes(tag) ? list.filter((t) => t !== tag) : [...list, tag]);
@@ -85,15 +92,21 @@ export default function EvaluatePage() {
   if (submitted) {
     return (
       <div className="flex items-center justify-center min-h-96">
-        <Card className="p-8 text-center max-w-md">
+        <Card className="p-8 text-center max-w-md animate-[fadeIn_0.2s_ease]">
           <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
-            <span className="text-3xl">✓</span>
+            <svg className="w-8 h-8 text-green-600" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 10.5l4 4L16 6" />
+            </svg>
           </div>
-          <h2 className="text-lg font-bold text-gray-900 mb-2">Evaluation Submitted</h2>
-          <p className="text-sm text-gray-500 mb-4">
+          <h2 className="text-lg font-bold text-slate-900 mb-2">Evaluation Submitted</h2>
+          <p className="text-sm text-slate-500 mb-5">
             Your {evalType === "self" ? "self-evaluation" : "peer evaluation"} for {week.label} has been recorded. Scores have been recomputed.
           </p>
-          <button onClick={resetForm} className="px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ background: NAV }}>
+          <button
+            onClick={resetForm}
+            className="px-4 py-2 rounded-lg text-white text-sm font-medium transition-standard hover:shadow-md"
+            style={{ background: NAV }}
+          >
             Submit Another
           </button>
         </Card>
@@ -104,23 +117,27 @@ export default function EvaluatePage() {
   return (
     <div className="space-y-6 max-w-3xl">
       <div>
-        <h1 className="text-xl font-bold text-gray-900">Weekly Evaluation</h1>
-        <p className="text-sm text-gray-500">
+        <h1 className="text-xl font-bold text-slate-900">Weekly Evaluation</h1>
+        <p className="text-sm text-slate-500">
           {week.label} · {evalType === "self" ? "Self-Evaluation" : "Peer Evaluation"}
         </p>
       </div>
 
-      <div className="flex gap-2">
+      <div className="inline-flex p-1 rounded-xl bg-slate-100 gap-1">
         <button
           onClick={() => setEvalType("self")}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${evalType === "self" ? "text-white" : "text-gray-600 bg-gray-100 hover:bg-gray-200"}`}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-standard ${
+            evalType === "self" ? "text-white shadow-sm" : "text-slate-600 hover:text-slate-900"
+          }`}
           style={evalType === "self" ? { background: NAV } : {}}
         >
           Self-Evaluation {pending.selfDone && "✓"}
         </button>
         <button
           onClick={() => setEvalType("peer")}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${evalType === "peer" ? "text-white" : "text-gray-600 bg-gray-100 hover:bg-gray-200"}`}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-standard ${
+            evalType === "peer" ? "text-white shadow-sm" : "text-slate-600 hover:text-slate-900"
+          }`}
           style={evalType === "peer" ? { background: NAV } : {}}
         >
           Peer Evaluation
@@ -129,39 +146,62 @@ export default function EvaluatePage() {
 
       {evalType === "peer" && (
         <Card className="p-4">
-          <label className="block text-xs font-medium text-gray-600 uppercase tracking-wide mb-2">Select Peer</label>
-          <select
-            value={selectedPeerId}
-            onChange={(e) => setSelectedPeerId(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
-          >
-            <option value="">— Select a peer from your mapping —</option>
-            {peerOptions.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name} {p.done ? "(already submitted — resubmitting overwrites)" : ""}
-              </option>
-            ))}
-          </select>
+          <div className="flex items-center justify-between mb-2">
+            <label className="block text-xs font-medium text-slate-600 uppercase tracking-wide">Select Peer</label>
+            {peerOptions.length > pendingPeerOptions.length && (
+              <label className="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={showCompletedPeers}
+                  onChange={(e) => setShowCompletedPeers(e.target.checked)}
+                  className="rounded"
+                />
+                Show already-evaluated peers
+              </label>
+            )}
+          </div>
+          {pendingPeerOptions.length === 0 && !showCompletedPeers ? (
+            <p className="text-sm text-green-700 bg-green-50 border border-green-100 rounded-lg px-3 py-2">
+              ✓ You've evaluated everyone mapped to you this week.
+            </p>
+          ) : (
+            <select
+              value={selectedPeerId}
+              onChange={(e) => setSelectedPeerId(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-standard"
+            >
+              <option value="">— Select a peer —</option>
+              {visiblePeerOptions.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} {p.done ? "(already submitted — resubmitting overwrites)" : ""}
+                </option>
+              ))}
+            </select>
+          )}
         </Card>
       )}
 
       <Card className="p-5">
-        <h2 className="text-sm font-semibold text-gray-800 mb-1">Part I — Quantitative Parameters</h2>
-        <p className="text-xs text-gray-400 mb-4">Rate each parameter on a scale of 1 to 5 (5 = highest)</p>
+        <h2 className="text-sm font-semibold text-slate-800 mb-1">Part I — Quantitative Parameters</h2>
+        <p className="text-xs text-slate-400 mb-4">Rate each parameter on a scale of 1 to 5 (5 = highest)</p>
         <div className="space-y-5">
           {PARAM_FIELDS.map((p) => (
             <div key={p.key}>
               <div className="flex justify-between items-baseline mb-1.5">
-                <span className="text-sm font-medium text-gray-800">{p.label}</span>
+                <span className="text-sm font-medium text-slate-800">{p.label}</span>
                 <span className="text-lg font-bold" style={{ color: NAV }}>{ratings[p.key]}</span>
               </div>
-              <p className="text-xs text-gray-400 mb-2">{p.desc}</p>
+              <p className="text-xs text-slate-400 mb-2">{p.desc}</p>
               <div className="flex gap-2">
                 {[1, 2, 3, 4, 5].map((v) => (
                   <button
                     key={v}
                     onClick={() => setRatings({ ...ratings, [p.key]: v })}
-                    className={`flex-1 py-2 rounded-lg text-sm font-medium border-2 transition-all ${ratings[p.key] === v ? "text-white border-transparent" : "text-gray-600 border-gray-200 hover:border-gray-400"}`}
+                    className={`flex-1 py-2 rounded-lg text-sm font-medium border-2 transition-standard ${
+                      ratings[p.key] === v
+                        ? "text-white border-transparent shadow-sm scale-105"
+                        : "text-slate-600 border-slate-200 hover:border-slate-400 hover:bg-slate-50"
+                    }`}
                     style={ratings[p.key] === v ? { background: NAV, borderColor: NAV } : {}}
                   >
                     {v}
@@ -174,11 +214,11 @@ export default function EvaluatePage() {
       </Card>
 
       <Card className="p-5">
-        <h2 className="text-sm font-semibold text-gray-800 mb-1">Part II — Subjective Parameters</h2>
+        <h2 className="text-sm font-semibold text-slate-800 mb-1">Part II — Subjective Parameters</h2>
 
         <div className="mt-4">
-          <p className="text-sm font-medium text-gray-700 mb-2">Problem Solving</p>
-          <p className="text-xs text-gray-400 mb-2">
+          <p className="text-sm font-medium text-slate-700 mb-2">Problem Solving</p>
+          <p className="text-xs text-slate-400 mb-2">
             How effectively do {evalType === "self" ? "you" : "they"} address and resolve doubts or challenges?
           </p>
           <div className="flex gap-2">
@@ -186,7 +226,7 @@ export default function EvaluatePage() {
               <button
                 key={v}
                 onClick={() => setProblemSolving(v)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium border-2 transition-all ${problemSolving === v ? "text-white border-transparent" : "text-gray-600 border-gray-200"}`}
+                className={`px-4 py-2 rounded-lg text-sm font-medium border-2 transition-standard ${problemSolving === v ? "text-white border-transparent shadow-sm" : "text-slate-600 border-slate-200 hover:border-slate-400"}`}
                 style={problemSolving === v ? { background: v === "satisfied" ? "#059669" : "#DC2626", borderColor: v === "satisfied" ? "#059669" : "#DC2626" } : {}}
               >
                 {v === "satisfied" ? "✓ Satisfied" : "✗ Not Satisfied"}
@@ -199,21 +239,21 @@ export default function EvaluatePage() {
               value={problemReason}
               onChange={(e) => setProblemReason(e.target.value)}
               placeholder="Provide the reason with a relevant example..."
-              className="w-full mt-2 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 resize-none"
+              className="w-full mt-2 px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-standard resize-none"
             />
           )}
         </div>
 
         <div className="mt-5">
-          <p className="text-sm font-medium text-gray-700 mb-2">
-            Strengths <span className="text-xs text-gray-400">(select all that apply)</span>
+          <p className="text-sm font-medium text-slate-700 mb-2">
+            Strengths <span className="text-xs text-slate-400">(select all that apply)</span>
           </p>
           <div className="flex flex-wrap gap-1.5">
             {STRENGTH_TAGS.map((tag) => (
               <button
                 key={tag}
                 onClick={() => toggleTag(tag, selectedStrengths, setSelectedStrengths)}
-                className={`px-2.5 py-1.5 rounded-md text-xs transition-all border ${selectedStrengths.includes(tag) ? "bg-green-50 border-green-400 text-green-700 font-medium" : "border-gray-200 text-gray-600 hover:border-gray-400"}`}
+                className={`px-2.5 py-1.5 rounded-md text-xs transition-standard border ${selectedStrengths.includes(tag) ? "bg-green-50 border-green-400 text-green-700 font-medium" : "border-slate-200 text-slate-600 hover:border-slate-400 hover:bg-slate-50"}`}
               >
                 {selectedStrengths.includes(tag) ? "✓ " : ""}{tag}
               </button>
@@ -222,15 +262,15 @@ export default function EvaluatePage() {
         </div>
 
         <div className="mt-5">
-          <p className="text-sm font-medium text-gray-700 mb-2">
-            Areas of Improvement <span className="text-xs text-gray-400">(select all that apply)</span>
+          <p className="text-sm font-medium text-slate-700 mb-2">
+            Areas of Improvement <span className="text-xs text-slate-400">(select all that apply)</span>
           </p>
           <div className="flex flex-wrap gap-1.5">
             {WEAKNESS_TAGS.map((tag) => (
               <button
                 key={tag}
                 onClick={() => toggleTag(tag, selectedWeaknesses, setSelectedWeaknesses)}
-                className={`px-2.5 py-1.5 rounded-md text-xs transition-all border ${selectedWeaknesses.includes(tag) ? "bg-red-50 border-red-300 text-red-700 font-medium" : "border-gray-200 text-gray-600 hover:border-gray-400"}`}
+                className={`px-2.5 py-1.5 rounded-md text-xs transition-standard border ${selectedWeaknesses.includes(tag) ? "bg-red-50 border-red-300 text-red-700 font-medium" : "border-slate-200 text-slate-600 hover:border-slate-400 hover:bg-slate-50"}`}
               >
                 {selectedWeaknesses.includes(tag) ? "✓ " : ""}{tag}
               </button>
@@ -239,23 +279,23 @@ export default function EvaluatePage() {
         </div>
 
         <div className="mt-5">
-          <p className="text-sm font-medium text-gray-700 mb-2">Additional Strength Remarks</p>
+          <p className="text-sm font-medium text-slate-700 mb-2">Additional Strength Remarks</p>
           <textarea
             rows={2}
             value={strengthComment}
             onChange={(e) => setStrengthComment(e.target.value)}
             placeholder="Share any additional observations highlighting key strengths..."
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 resize-none"
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-standard resize-none"
           />
         </div>
         <div className="mt-3">
-          <p className="text-sm font-medium text-gray-700 mb-2">Additional Improvement Remarks</p>
+          <p className="text-sm font-medium text-slate-700 mb-2">Additional Improvement Remarks</p>
           <textarea
             rows={2}
             value={weaknessComment}
             onChange={(e) => setWeaknessComment(e.target.value)}
             placeholder="Share any observations indicating areas of growth..."
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 resize-none"
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-standard resize-none"
           />
         </div>
       </Card>
@@ -267,9 +307,15 @@ export default function EvaluatePage() {
       <button
         onClick={handleSubmit}
         disabled={submitMutation.isPending || (evalType === "peer" && !selectedPeerId)}
-        className="px-6 py-2.5 rounded-lg text-white font-medium text-sm disabled:opacity-50"
+        className="px-6 py-2.5 rounded-lg text-white font-medium text-sm disabled:opacity-50 transition-standard hover:shadow-md flex items-center gap-2"
         style={{ background: ACCENT }}
       >
+        {submitMutation.isPending && (
+          <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24" fill="none">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+            <path className="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+        )}
         {submitMutation.isPending ? "Submitting…" : "Submit Evaluation"}
       </button>
     </div>

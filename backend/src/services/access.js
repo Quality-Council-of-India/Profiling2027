@@ -29,15 +29,35 @@ export function canViewUser(requester, target) {
   }
 }
 
-/** Can `requester` view the aggregate Team View for `field`? */
-export function canViewFieldTeam(requester, field) {
-  if ([ROLES.ADMIN, ROLES.CASU_LEAD, ROLES.PROJECT_LEAD].includes(requester.role)) {
-    return true;
+/**
+ * Team View membership — who shows up in `requester`'s team roster.
+ * Role-driven, not a field the client picks:
+ *   Group Anchor  -> Profilers in own field
+ *   CASU Anchor   -> Profilers + Group Anchor in own field
+ *   Project Lead  -> ALL Profilers + ALL Group Anchors + the OTHER Project Lead(s)
+ *   CASU Lead     -> everyone (all Profilers, Group Anchors, CASU Anchors, Project Leads)
+ *   Admin         -> everyone (same as CASU Lead)
+ * Returns a Prisma `where` fragment, or null if this role has no Team View at all.
+ */
+export function teamViewFilter(requester) {
+  switch (requester.role) {
+    case ROLES.GROUP_ANCHOR:
+      return { field: requester.field, role: ROLES.PROFILER };
+    case ROLES.CASU_ANCHOR:
+      return { field: requester.field, role: { in: [ROLES.PROFILER, ROLES.GROUP_ANCHOR] } };
+    case ROLES.PROJECT_LEAD:
+      return {
+        OR: [
+          { role: { in: [ROLES.PROFILER, ROLES.GROUP_ANCHOR] } },
+          { role: ROLES.PROJECT_LEAD, id: { not: requester.id } },
+        ],
+      };
+    case ROLES.CASU_LEAD:
+    case ROLES.ADMIN:
+      return { role: { not: ROLES.ADMIN } };
+    default:
+      return null;
   }
-  if ([ROLES.GROUP_ANCHOR, ROLES.CASU_ANCHOR].includes(requester.role)) {
-    return requester.field === field;
-  }
-  return false;
 }
 
 /** Can `requester` open the compliance tracker / send reminders? */

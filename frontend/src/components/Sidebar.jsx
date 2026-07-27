@@ -1,6 +1,15 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
-import { ROLE_LABELS, NAV, AZURE } from "../utils/constants.js";
+import { ROLE_LABELS, AZURE } from "../utils/constants.js";
+import {
+  DashboardIcon,
+  EvaluateIcon,
+  ScoresIcon,
+  TeamIcon,
+  ComplianceIcon,
+  AnalyticsIcon,
+  AdminIcon,
+} from "./icons.jsx";
 
 export default function Sidebar() {
   const { user, logout } = useAuth();
@@ -20,29 +29,32 @@ export default function Sidebar() {
   const isAnchor = ["group_anchor", "casu_anchor"].includes(user.role);
 
   const navItems = [
-    { to: "/dashboard", label: "Dashboard", icon: "📊", show: true },
-    { to: "/evaluate", label: "Evaluate", icon: "📝", show: true },
-    { to: "/scores", label: "My Scores", icon: "📈", show: true },
-    { to: "/team", label: "Team View", icon: "👥", show: isAnchor || isLead || isAdmin },
-    { to: "/compliance", label: "Compliance", icon: "✅", show: isLead || isAdmin },
-    { to: "/analytics", label: "Analytics", icon: "🔬", show: true },
-    { to: "/admin", label: "Admin Panel", icon: "⚙️", show: isAdmin },
+    { to: "/dashboard", label: "Dashboard", Icon: DashboardIcon, show: true },
+    { to: "/evaluate", label: "Evaluate", Icon: EvaluateIcon, show: true },
+    { to: "/scores", label: "My Scores", Icon: ScoresIcon, show: true },
+    { to: "/team", label: "Team View", Icon: TeamIcon, show: isAnchor || isLead || isAdmin },
+    { to: "/compliance", label: "Compliance", Icon: ComplianceIcon, show: isLead || isAdmin },
+    { to: "/analytics", label: "Analytics", Icon: AnalyticsIcon, show: true },
+    { to: "/admin", label: "Admin Panel", Icon: AdminIcon, show: isAdmin },
   ];
 
   return (
-    <div className="w-56 flex-shrink-0 flex flex-col h-screen" style={{ background: NAV }}>
+    <div
+      className="w-56 flex-shrink-0 flex flex-col h-screen"
+      style={{ background: "linear-gradient(180deg, #1F3864 0%, #142647 100%)" }}
+    >
       <div className="p-4 border-b border-white/10">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white text-xs font-bold">
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-lg bg-white/10 ring-1 ring-white/15 flex items-center justify-center text-white text-xs font-bold font-display">
             QCI
           </div>
           <div>
-            <p className="text-white text-sm font-semibold leading-tight">Profiling 2027</p>
+            <p className="text-white text-sm font-semibold leading-tight font-display">Profiling 2027</p>
             <p style={{ color: AZURE }} className="text-xs">Feedback Portal</p>
           </div>
         </div>
       </div>
-      <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
+      <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto thin-scrollbar">
         {navItems
           .filter((n) => n.show)
           .map((n) => (
@@ -50,13 +62,21 @@ export default function Sidebar() {
               key={n.to}
               to={n.to}
               className={({ isActive }) =>
-                `w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all ${
-                  isActive ? "bg-white/15 text-white font-medium" : "text-white/60 hover:text-white/90 hover:bg-white/5"
+                `group relative w-full flex items-center gap-2.5 pl-3 pr-3 py-2 rounded-lg text-sm transition-standard ${
+                  isActive ? "bg-white/10 text-white font-medium" : "text-white/55 hover:text-white/90 hover:bg-white/5"
                 }`
               }
             >
-              <span className="text-base">{n.icon}</span>
-              {n.label}
+              {({ isActive }) => (
+                <>
+                  <span
+                    className="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-full bg-accent transition-standard"
+                    style={{ opacity: isActive ? 1 : 0 }}
+                  />
+                  <n.Icon className={isActive ? "text-accent" : "text-white/50 group-hover:text-white/80"} />
+                  {n.label}
+                </>
+              )}
             </NavLink>
           ))}
       </nav>
@@ -70,7 +90,7 @@ export default function Sidebar() {
         </div>
         <button
           onClick={handleLogout}
-          className="w-full px-3 py-1.5 rounded-lg text-white/50 hover:text-white hover:bg-white/10 text-xs transition-all"
+          className="w-full px-3 py-1.5 rounded-lg text-white/50 hover:text-white hover:bg-white/10 text-xs transition-standard"
         >
           Sign Out
         </button>
