@@ -17,6 +17,7 @@ export default function EvaluatePage() {
 
   const [evalType, setEvalType] = useState("self");
   const [selectedPeerId, setSelectedPeerId] = useState(searchParams.get("peer") || "");
+  const [showCompletedPeers, setShowCompletedPeers] = useState(false);
   const [ratings, setRatings] = useState(DEFAULT_RATINGS);
   const [problemSolving, setProblemSolving] = useState("satisfied");
   const [problemReason, setProblemReason] = useState("");
@@ -33,6 +34,12 @@ export default function EvaluatePage() {
   const pending = pendingQuery.data?.pending;
   const week = pendingQuery.data?.week;
   const peerOptions = useMemo(() => pending?.peers || [], [pending]);
+  const pendingPeerOptions = useMemo(() => peerOptions.filter((p) => !p.done), [peerOptions]);
+  // Auto-detects who still needs evaluating — the dropdown only offers
+  // not-yet-done peers by default, so there's no need to hunt through
+  // already-submitted names. "Show completed" is an escape hatch for
+  // deliberately revising a submission.
+  const visiblePeerOptions = showCompletedPeers ? peerOptions : pendingPeerOptions;
 
   const toggleTag = (tag, list, setter) => {
     setter(list.includes(tag) ? list.filter((t) => t !== tag) : [...list, tag]);
@@ -129,19 +136,38 @@ export default function EvaluatePage() {
 
       {evalType === "peer" && (
         <Card className="p-4">
-          <label className="block text-xs font-medium text-gray-600 uppercase tracking-wide mb-2">Select Peer</label>
-          <select
-            value={selectedPeerId}
-            onChange={(e) => setSelectedPeerId(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
-          >
-            <option value="">— Select a peer from your mapping —</option>
-            {peerOptions.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name} {p.done ? "(already submitted — resubmitting overwrites)" : ""}
-              </option>
-            ))}
-          </select>
+          <div className="flex items-center justify-between mb-2">
+            <label className="block text-xs font-medium text-gray-600 uppercase tracking-wide">Select Peer</label>
+            {peerOptions.length > pendingPeerOptions.length && (
+              <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={showCompletedPeers}
+                  onChange={(e) => setShowCompletedPeers(e.target.checked)}
+                  className="rounded"
+                />
+                Show already-evaluated peers
+              </label>
+            )}
+          </div>
+          {pendingPeerOptions.length === 0 && !showCompletedPeers ? (
+            <p className="text-sm text-green-700 bg-green-50 border border-green-100 rounded-lg px-3 py-2">
+              ✓ You've evaluated everyone mapped to you this week.
+            </p>
+          ) : (
+            <select
+              value={selectedPeerId}
+              onChange={(e) => setSelectedPeerId(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+            >
+              <option value="">— Select a peer —</option>
+              {visiblePeerOptions.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} {p.done ? "(already submitted — resubmitting overwrites)" : ""}
+                </option>
+              ))}
+            </select>
+          )}
         </Card>
       )}
 

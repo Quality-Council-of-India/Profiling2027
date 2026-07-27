@@ -134,7 +134,10 @@ Week XX" tabs).
 - **SAPA factor** = Total(Self) / Total(Peer), computed only when both are
   non-zero.
 - Recomputed synchronously on every `POST /api/evaluations`, and in bulk
-  when a week is closed (so non-responders still get a zeroed row).
+  when a week is closed (so non-responders still get a zeroed row) — the
+  bulk path is a fixed number of queries regardless of roster size (batch
+  read + one multi-row upsert), not one query per person; load-tested at
+  ~1,000 users / ~93,000 evaluations closing a week in under 5 seconds.
 
 ## Access control
 
@@ -144,6 +147,27 @@ Project Lead sees all Profilers + Group Anchors but not CASU roles; CASU
 Lead and Admin see everything; only Admin manages the roster and
 opens/closes weeks. The same scoping drives which nav items and analytics
 views the frontend renders.
+
+**Team View** (`teamViewFilter`) is role-driven rather than a field the
+client picks: a Group Anchor automatically sees their field's Profilers, a
+CASU Anchor additionally sees the Group Anchor, a Project Lead sees every
+Profiler + Group Anchor + the other Project Lead(s) across all fields, and
+CASU Lead/Admin see everyone.
+
+**Rankings** (`GET /api/analytics/rankings`, by Total Peer Score, single
+week or averaged across several) always compute a requester's numeric
+rank against the true full pool — a rank number alone doesn't expose
+anyone's individual score — but only return the full named+scored list
+when the requester's role already has per-user visibility into that
+scope (Group/CASU Anchor get their field's list; CASU Lead/Admin get
+everyone's; Project Lead gets Profilers+Group Anchors; a plain Profiler
+gets their rank/count only, for both field and overall).
+
+**Mid-project roster changes** (someone leaves partway through the
+cycle): `PATCH /api/admin/users/:id/active` deactivates/reactivates a
+user and regenerates `peer_mappings` so future weeks stop expecting
+evaluations to/from them — already-computed `computed_scores` rows for
+past weeks are never rewritten, preserving the historical record.
 
 ## API summary
 
@@ -156,11 +180,15 @@ All `/api/*` routes except `/api/auth/*` require `Authorization: Bearer <JWT>`.
 | GET | `/api/weeks`, `/api/weeks/:id/status` | |
 | POST | `/api/evaluations` | upserts; recomputes the evaluatee's score |
 | GET | `/api/evaluations/pending` | for the current open week |
-| GET | `/api/scores/:userId/:weekId`, `/api/scores/:userId/trend`, `/api/scores/field/:field/:weekId` | scoped per access matrix |
+| GET | `/api/scores/:userId/:weekId`, `/api/scores/:userId/trend` | scoped per access matrix |
+| GET | `/api/scores/team/:weekId` | Team View — role-driven, not a field the client picks (see §Access control) |
 | GET/POST | `/api/compliance/:weekId`, `/api/compliance/:weekId/remind` | |
-| GET | `/api/analytics/heatmap/:weekId`, `/api/analytics/sapa/:weekId`, `/api/analytics/quadrant/:weekId` | |
+| GET | `/api/analytics/heatmap/:weekId`, `/api/analytics/sapa/:weekId`, `/api/analytics/quadrant/:weekId` | leads/admin only |
+| GET | `/api/analytics/rankings?weeks=1,2,3` | every role — field + overall standing by Total Peer Score, one week or averaged across several |
 | GET | `/api/export/scores/:weekId`, `/api/export/scores/combined` | `.xlsx` download, admin only |
 | POST | `/api/admin/weeks/:id/open`, `/api/admin/weeks/:id/close`, `/api/admin/roster/import` | admin only |
+| GET/PATCH | `/api/admin/users`, `/api/admin/users/:id/active` | admin only — roster list + deactivate/reactivate for mid-project changes |
+| GET | `/api/admin/data`, `/api/admin/data/:table` | admin only — view-only browser into every table (`projects`, `users`, `peer_mappings`, `weeks`, `evaluations`, `computed_scores`) |
 
 ## Deployment
 

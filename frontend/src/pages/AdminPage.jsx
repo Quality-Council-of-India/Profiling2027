@@ -1,14 +1,13 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { weeksApi, adminApi, downloadExport } from "../api/endpoints.js";
 import { Card, Spinner, ErrorBanner } from "../components/ui.jsx";
+import RosterManager from "../components/RosterManager.jsx";
+import RawDataBrowser from "../components/RawDataBrowser.jsx";
 
 export default function AdminPage() {
   const queryClient = useQueryClient();
   const weeksQuery = useQuery({ queryKey: ["weeks"], queryFn: weeksApi.list });
-  const fileInputRef = useRef(null);
-  const [rosterResult, setRosterResult] = useState(null);
-  const [rosterError, setRosterError] = useState("");
   const [exportError, setExportError] = useState("");
 
   const openMutation = useMutation({
@@ -19,20 +18,6 @@ export default function AdminPage() {
     mutationFn: adminApi.closeWeek,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["weeks"] }),
   });
-  const rosterMutation = useMutation({
-    mutationFn: (file) => adminApi.importRoster(file),
-    onSuccess: (data) => {
-      setRosterResult(data);
-      setRosterError("");
-      queryClient.invalidateQueries();
-    },
-    onError: (err) => setRosterError(err.response?.data?.error || "Import failed"),
-  });
-
-  function handleFileChange(e) {
-    const file = e.target.files?.[0];
-    if (file) rosterMutation.mutate(file);
-  }
 
   async function handleExport(path, filename) {
     setExportError("");
@@ -80,37 +65,7 @@ export default function AdminPage() {
           )}
         </Card>
 
-        <Card className="p-5">
-          <h2 className="text-sm font-semibold text-gray-800 mb-3">Team Roster</h2>
-          <p className="text-sm text-gray-500 mb-3">Upload a CSV with columns: name, email, role, field</p>
-          <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={handleFileChange} />
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={rosterMutation.isPending}
-            className="w-full py-2 rounded-lg border border-dashed border-gray-300 text-sm text-gray-500 hover:bg-gray-50 disabled:opacity-50"
-          >
-            {rosterMutation.isPending ? "Importing…" : "↑ Import Roster (CSV)"}
-          </button>
-          {rosterError && <ErrorBanner message={rosterError} />}
-          {rosterResult && (
-            <div className="mt-3 text-xs text-gray-600 space-y-1">
-              <p>{rosterResult.createdCount} created, {rosterResult.updatedCount} updated, {rosterResult.mappingsCreated} peer mappings regenerated.</p>
-              {rosterResult.errors.length > 0 && (
-                <p className="text-red-600">{rosterResult.errors.length} row(s) had errors — check line numbers in the CSV.</p>
-              )}
-              {rosterResult.created.length > 0 && (
-                <details className="mt-1">
-                  <summary className="cursor-pointer text-blue-600">Temp passwords for new accounts (also emailed)</summary>
-                  <ul className="mt-1 space-y-0.5">
-                    {rosterResult.created.map((c) => (
-                      <li key={c.email}>{c.email}: <code>{c.tempPassword}</code></li>
-                    ))}
-                  </ul>
-                </details>
-              )}
-            </div>
-          )}
-        </Card>
+        <RosterManager />
       </div>
 
       <Card className="p-5">
@@ -134,6 +89,8 @@ export default function AdminPage() {
           </button>
         </div>
       </Card>
+
+      <RawDataBrowser />
     </div>
   );
 }

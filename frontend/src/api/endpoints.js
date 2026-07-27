@@ -24,8 +24,7 @@ export const evaluationsApi = {
 export const scoresApi = {
   userWeek: (userId, weekId) => api.get(`/scores/${userId}/${weekId}`).then((r) => r.data),
   trend: (userId) => api.get(`/scores/${userId}/trend`).then((r) => r.data),
-  field: (field, weekId) =>
-    api.get(`/scores/field/${encodeURIComponent(field)}/${weekId}`).then((r) => r.data),
+  team: (weekId) => api.get(`/scores/team/${weekId}`).then((r) => r.data),
 };
 
 export const complianceApi = {
@@ -37,6 +36,7 @@ export const analyticsApi = {
   heatmap: (weekId) => api.get(`/analytics/heatmap/${weekId}`).then((r) => r.data),
   sapa: (weekId) => api.get(`/analytics/sapa/${weekId}`).then((r) => r.data),
   quadrant: (weekId) => api.get(`/analytics/quadrant/${weekId}`).then((r) => r.data),
+  rankings: (weekIds) => api.get(`/analytics/rankings?weeks=${weekIds.join(",")}`).then((r) => r.data),
 };
 
 export const adminApi = {
@@ -49,6 +49,14 @@ export const adminApi = {
       .post("/admin/roster/import", form, { headers: { "Content-Type": "multipart/form-data" } })
       .then((r) => r.data);
   },
+  listUsers: () => api.get("/admin/users").then((r) => r.data.users),
+  setUserActive: (userId, is_active) =>
+    api.patch(`/admin/users/${userId}/active`, { is_active }).then((r) => r.data),
+  rawTables: () => api.get("/admin/data").then((r) => r.data.tables),
+  rawTable: (table, { page = 1, pageSize = 50, weekId } = {}) =>
+    api
+      .get(`/admin/data/${table}`, { params: { page, pageSize, ...(weekId ? { weekId } : {}) } })
+      .then((r) => r.data),
 };
 
 // Export endpoints require the JWT, so a plain <a href> can't be used —

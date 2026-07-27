@@ -1,6 +1,7 @@
 // Admin Analytics Dashboard — Technical Spec §4.6.
 import { prisma } from "../utils/prisma.js";
-import { roleFilterForScope } from "./access.js";
+import { roleFilterForScope, analyticsScope } from "./access.js";
+import { ROLES } from "../utils/roles.js";
 
 const PEER_PARAM_COLUMNS = {
   Sincerity: "sincerity_peer",
@@ -143,4 +144,80 @@ export async function getQuadrantData(projectId, weekId, scope) {
       };
     })
     .filter(Boolean);
+}
+
+/**
+ * Standings by Total Peer Score — for one week, or averaged across several
+ * (the frontend's multi-select / "cumulative across all weeks" options both
+ * collapse into "one or more week IDs", averaged when there's more than one).
+ *
+ * The ranking POOL (who counts, and the requester's numeric rank/of-count)
+ * is always the true field / whole-project set — a rank number alone
+ * doesn't expose anyone's individual score. What varies by role is whether
+ * the full named+scored LIST is also returned, matching the same
+ * visibility rules as canViewUser: Profilers get their rank only; Group/CASU
+ * Anchors get their field's named list; leads/Admin get the named list at
+ * their existing analytics scope (excl_casu / full).
+ */
+export async function getRankings(projectId, requester, weekIds) {
+  const users = await prisma.user.findMany({
+    where: { project_id: projectId, is_active: true, role: { not: ROLES.ADMIN } },
+    include: { computedScores: { where: { week_id: { in: weekIds } } } },
+  });
+
+  const withAvg = users.map((u) => {
+    const scores = u.computedScores;
+    const totalPeer = scores.length
+      ? scores.reduce((a, s) => a + Number(s.total_peer), 0) / scores.length
+      : null;
+    const totalSelf = scores.length
+      ? scores.reduce((a, s) => a + Number(s.total_self), 0) / scores.length
+      : null;
+    return {
+      id: u.id,
+      name: u.name,
+      role: u.role,
+      field: u.field,
+      totalPeer: totalPeer === null ? null : Math.round(totalPeer * 100) / 100,
+      totalSelf: totalSelf === null ? null : Math.round(totalSelf * 100) / 100,
+      weeksCounted: scores.length,
+    };
+  });
+
+  function rank(pool) {
+    const ranked = pool.filter((u) => u.totalPeer !== null).sort((a, b) => b.totalPeer - a.totalPeer);
+    return ranked.map((u, i) => ({ ...u, rank: i + 1, of: ranked.length }));
+  }
+
+  let field = null;
+  if (requester.field) {
+    const fieldPool = rank(withAvg.filter((u) => u.field === requester.field));
+    const mine = fieldPool.find((u) => u.id === requester.id);
+    const canSeeFieldList = [ROLES.GROUP_ANCHOR, ROLES.CASU_ANCHOR, ROLES.CASU_LEAD, ROLES.ADMIN].includes(
+      requester.role
+    );
+    field = {
+      myRank: mine?.rank ?? null,
+      totalInField: fieldPool.length,
+      list: canSeeFieldList ? fieldPool : null,
+    };
+  }
+
+  const scope = analyticsScope(requester);
+  const overallPool = rank(withAvg);
+  const mineOverall = overallPool.find((u) => u.id === requester.id);
+  const overallList =
+    scope === "personal"
+      ? null
+      : scope === "excl_casu"
+      ? overallPool.filter((u) => [ROLES.PROFILER, ROLES.GROUP_ANCHOR].includes(u.role))
+      : overallPool;
+
+  const overall = {
+    myRank: mineOverall?.rank ?? null,
+    totalOverall: overallPool.length,
+    list: overallList,
+  };
+
+  return { field, overall };
 }
