@@ -40,13 +40,13 @@ export default function RosterManager() {
     <Card className="p-5">
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-sm font-semibold text-slate-800">Team Roster</h2>
-        <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={handleFileChange} />
+        <input ref={fileInputRef} type="file" accept=".csv,.xlsx" className="hidden" onChange={handleFileChange} />
         <button
           onClick={() => fileInputRef.current?.click()}
           disabled={rosterMutation.isPending}
           className="px-3 py-1.5 rounded-lg border border-dashed border-slate-300 text-xs text-slate-500 hover:bg-slate-50 hover:border-slate-400 disabled:opacity-50 transition-standard"
         >
-          {rosterMutation.isPending ? "Importing…" : "↑ Import CSV"}
+          {rosterMutation.isPending ? "Importing…" : "↑ Import Roster (.csv / .xlsx)"}
         </button>
       </div>
 

@@ -4,6 +4,36 @@ import { computeScoresForWeek } from "../services/scoreEngine.js";
 import { regeneratePeerMappings } from "../services/peerMapping.js";
 import { queryTable, TABLES } from "../services/rawData.js";
 
+/**
+ * Creates the next sequential week for the project (auto-numbered,
+ * defaulting to a 7-day span starting the day after the previous week
+ * ends). Needed because a freshly-provisioned project has zero weeks —
+ * without this, Team View/Compliance/Analytics have nothing to filter by.
+ */
+export async function createWeek(req, res) {
+  const projectId = req.user.project_id;
+  const last = await prisma.week.findFirst({
+    where: { project_id: projectId },
+    orderBy: { week_number: "desc" },
+  });
+
+  const week_number = (last?.week_number ?? 0) + 1;
+  const label = req.body.label?.trim() || `Week ${String(week_number).padStart(2, "0")}`;
+  const start_date = req.body.start_date
+    ? new Date(req.body.start_date)
+    : last
+    ? new Date(new Date(last.end_date).getTime() + 24 * 60 * 60 * 1000)
+    : new Date();
+  const end_date = req.body.end_date
+    ? new Date(req.body.end_date)
+    : new Date(start_date.getTime() + 6 * 24 * 60 * 60 * 1000);
+
+  const week = await prisma.week.create({
+    data: { project_id: projectId, week_number, label, start_date, end_date, status: "upcoming" },
+  });
+  res.status(201).json({ week });
+}
+
 export async function openWeek(req, res) {
   const weekId = Number(req.params.id);
   const week = await prisma.week.findFirst({
@@ -31,10 +61,9 @@ export async function closeWeek(req, res) {
 export async function importRosterHandler(req, res, next) {
   try {
     if (!req.file) {
-      return res.status(400).json({ error: "Upload a CSV file under the 'roster' field" });
+      return res.status(400).json({ error: "Upload a .csv or .xlsx file under the 'roster' field" });
     }
-    const csvText = req.file.buffer.toString("utf-8");
-    const result = await importRoster(req.user.project_id, csvText);
+    const result = await importRoster(req.user.project_id, req.file.buffer, req.file.originalname);
     res.json(result);
   } catch (err) {
     next(err);

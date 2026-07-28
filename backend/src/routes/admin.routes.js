@@ -3,6 +3,7 @@ import multer from "multer";
 import { authenticate, requireRole } from "../middleware/auth.js";
 import { ROLES } from "../utils/roles.js";
 import {
+  createWeek,
   openWeek,
   closeWeek,
   importRosterHandler,
@@ -12,17 +13,20 @@ import {
   getRawTable,
 } from "../controllers/admin.controller.js";
 
+const ROSTER_EXTENSIONS = [".csv", ".xlsx"];
+
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 2 * 1024 * 1024 }, // 2MB is plenty for a ~70-row CSV
+  limits: { fileSize: 2 * 1024 * 1024 }, // 2MB is plenty for a ~70-row roster
   fileFilter: (req, file, cb) => {
-    const ok = file.mimetype === "text/csv" || file.originalname.endsWith(".csv");
-    cb(ok ? null : new Error("Only .csv files are accepted"), ok);
+    const ok = ROSTER_EXTENSIONS.some((ext) => file.originalname.toLowerCase().endsWith(ext));
+    cb(ok ? null : new Error("Only .csv or .xlsx files are accepted"), ok);
   },
 });
 
 const router = Router();
 
+router.post("/weeks", authenticate, requireRole(ROLES.ADMIN), createWeek);
 router.post("/weeks/:id/open", authenticate, requireRole(ROLES.ADMIN), openWeek);
 router.post("/weeks/:id/close", authenticate, requireRole(ROLES.ADMIN), closeWeek);
 router.post(

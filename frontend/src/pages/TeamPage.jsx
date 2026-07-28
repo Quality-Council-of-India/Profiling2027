@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { weeksApi, scoresApi } from "../api/endpoints.js";
-import { Card, Spinner, ErrorBanner, Badge } from "../components/ui.jsx";
+import { Card, Spinner, ErrorBanner, EmptyState, Badge } from "../components/ui.jsx";
 import { ROLE_LABELS, ROLE_COLORS } from "../utils/constants.js";
 
 /**
@@ -29,7 +29,12 @@ export default function TeamPage() {
     enabled: !!weekId,
   });
 
-  if (weeksQuery.isLoading || !weekId) return <Spinner />;
+  if (weeksQuery.isLoading) return <Spinner />;
+  if (weeksQuery.isError) return <ErrorBanner message="Failed to load weeks" />;
+  if (weeks.length === 0) {
+    return <EmptyState title="No weeks yet" message="Ask an Admin to add the first week from the Admin Panel." />;
+  }
+  if (!weekId) return <Spinner />;
 
   // Group by field for readability when the list spans multiple fields
   // (leads/admin) — a single flat table for a single-field audience (anchors).

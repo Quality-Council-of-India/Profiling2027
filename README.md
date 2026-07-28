@@ -104,8 +104,8 @@ Demo login (any seeded user, e.g. the admin): **harshit.qci@gmail.com** /
 **Profiling2027!** — see `backend/prisma/seed.js` for the full roster. The
 seed reuses the same 10 people (with real names/roles/fields) from the
 provided interactive prototype; the actual 61-person 2027 roster gets
-loaded for real via **Admin Panel → Import Roster (CSV)**, which also
-auto-regenerates `peer_mappings`.
+loaded for real via **Admin Panel → Import Roster (.csv / .xlsx)**, which
+also auto-regenerates `peer_mappings`.
 
 ## Environment variables
 

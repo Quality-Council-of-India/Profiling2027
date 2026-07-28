@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import { parse } from "csv-parse/sync";
+import ExcelJS from "exceljs";
 import { prisma } from "../utils/prisma.js";
 import { ALL_ROLES } from "../utils/roles.js";
 import { regeneratePeerMappings } from "./peerMapping.js";
@@ -10,17 +11,45 @@ function generateTempPassword() {
   return crypto.randomBytes(9).toString("base64url"); // 12 chars, URL-safe
 }
 
+/** Parses an .xlsx roster (first sheet, header row = name/email/role/field) into plain row objects. */
+async function parseXlsxRows(buffer) {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer);
+  const sheet = workbook.worksheets[0];
+  if (!sheet) return [];
+
+  const headers = [];
+  sheet.getRow(1).eachCell((cell, col) => {
+    headers[col] = String(cell.value ?? "").trim().toLowerCase();
+  });
+
+  const rows = [];
+  for (let r = 2; r <= sheet.rowCount; r++) {
+    const row = sheet.getRow(r);
+    const obj = {};
+    headers.forEach((h, col) => {
+      if (!h) return;
+      const val = row.getCell(col).value;
+      obj[h] = val === null || val === undefined ? "" : String(val).trim();
+    });
+    if (Object.values(obj).some((v) => v)) rows.push(obj);
+  }
+  return rows;
+}
+
 /**
- * Bulk imports a team roster from CSV (columns: name,email,role,field) for a
- * project, then rebuilds peer_mappings from the new roster (§4.2.2 / §5
- * POST /api/admin/roster/import).
+ * Bulk imports a team roster from a .csv or .xlsx file (columns:
+ * name,email,role,field) for a project, then rebuilds peer_mappings from the
+ * new roster (§4.2.2 / §5 POST /api/admin/roster/import).
  *
  * New users get a random temp password (emailed to them, best-effort);
  * existing users (matched by email) have name/role/field updated but keep
  * their current password.
  */
-export async function importRoster(projectId, csvText) {
-  const rows = parse(csvText, { columns: true, skip_empty_lines: true, trim: true });
+export async function importRoster(projectId, buffer, filename = "roster.csv") {
+  const rows = filename.toLowerCase().endsWith(".xlsx")
+    ? await parseXlsxRows(buffer)
+    : parse(buffer.toString("utf-8"), { columns: true, skip_empty_lines: true, trim: true });
 
   const created = [];
   const updated = [];
