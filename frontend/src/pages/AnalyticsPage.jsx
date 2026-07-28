@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "../context/AuthContext.jsx";
 import { weeksApi, scoresApi, analyticsApi } from "../api/endpoints.js";
-import { Card, StatCard, Spinner, ErrorBanner } from "../components/ui.jsx";
+import { Card, StatCard, Spinner, ErrorBanner, EmptyState } from "../components/ui.jsx";
 import WeekSelector from "../components/WeekSelector.jsx";
 import RankingCard from "../components/RankingCard.jsx";
 import RadarComparison from "../components/charts/RadarComparison.jsx";
@@ -78,8 +78,12 @@ export default function AnalyticsPage() {
     enabled: isAggregate && !!aggregateWeekId,
   });
 
-  if (weeksQuery.isLoading || selectedWeekIds.length === 0) return <Spinner />;
+  if (weeksQuery.isLoading) return <Spinner />;
   if (weeksQuery.isError) return <ErrorBanner message="Failed to load weeks" />;
+  if (weeks.length === 0) {
+    return <EmptyState title="No weeks yet" message="Ask an Admin to add the first week from the Admin Panel." />;
+  }
+  if (selectedWeekIds.length === 0) return <Spinner />;
 
   const isMulti = selectedWeekIds.length > 1;
   const rangeLabel = isMulti

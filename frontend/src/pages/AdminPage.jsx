@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { weeksApi, adminApi, downloadExport } from "../api/endpoints.js";
-import { Card, Spinner, ErrorBanner } from "../components/ui.jsx";
+import { Card, Spinner, ErrorBanner, EmptyState } from "../components/ui.jsx";
 import RosterManager from "../components/RosterManager.jsx";
 import RawDataBrowser from "../components/RawDataBrowser.jsx";
 
@@ -10,6 +10,10 @@ export default function AdminPage() {
   const weeksQuery = useQuery({ queryKey: ["weeks"], queryFn: weeksApi.list });
   const [exportError, setExportError] = useState("");
 
+  const createWeekMutation = useMutation({
+    mutationFn: adminApi.createWeek,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["weeks"] }),
+  });
   const openMutation = useMutation({
     mutationFn: adminApi.openWeek,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["weeks"] }),
@@ -36,9 +40,29 @@ export default function AdminPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card className="p-5">
-          <h2 className="text-sm font-semibold text-slate-800 mb-3">Week Management</h2>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-slate-800">Week Management</h2>
+            <button
+              onClick={() => createWeekMutation.mutate()}
+              disabled={createWeekMutation.isPending}
+              className="px-3 py-1.5 rounded-lg border border-dashed border-slate-300 text-xs text-slate-500 hover:bg-slate-50 hover:border-slate-400 disabled:opacity-50 transition-standard"
+            >
+              {createWeekMutation.isPending ? "Adding…" : "+ Add Week"}
+            </button>
+          </div>
+          {createWeekMutation.isError && (
+            <div className="mb-3">
+              <ErrorBanner message={createWeekMutation.error?.response?.data?.error || "Failed to create week"} />
+            </div>
+          )}
           {weeksQuery.isLoading ? (
             <Spinner />
+          ) : weeks.length === 0 ? (
+            <EmptyState
+              icon="○"
+              title="No weeks yet"
+              message='Click "+ Add Week" to create Week 01 and unlock Evaluate, Team View, Compliance, and Analytics.'
+            />
           ) : (
             <div className="space-y-2">
               {weeks.map((w) => (

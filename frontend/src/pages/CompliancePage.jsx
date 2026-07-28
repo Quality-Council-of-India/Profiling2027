@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { weeksApi, complianceApi } from "../api/endpoints.js";
-import { Card, StatCard, Spinner, ErrorBanner, Badge } from "../components/ui.jsx";
+import { Card, StatCard, Spinner, ErrorBanner, EmptyState, Badge } from "../components/ui.jsx";
 import { ROLE_LABELS, ROLE_COLORS, ACCENT } from "../utils/constants.js";
 
 export default function CompliancePage() {
@@ -28,7 +28,12 @@ export default function CompliancePage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["compliance", weekId] }),
   });
 
-  if (weeksQuery.isLoading || !weekId) return <Spinner />;
+  if (weeksQuery.isLoading) return <Spinner />;
+  if (weeksQuery.isError) return <ErrorBanner message="Failed to load weeks" />;
+  if (weeks.length === 0) {
+    return <EmptyState title="No weeks yet" message="Ask an Admin to add the first week from the Admin Panel." />;
+  }
+  if (!weekId) return <Spinner />;
   if (complianceQuery.isError) return <ErrorBanner message="You cannot view the compliance tracker" />;
 
   const data = complianceQuery.data;
