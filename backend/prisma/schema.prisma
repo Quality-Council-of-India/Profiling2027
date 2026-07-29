@@ -136,12 +136,16 @@ model Evaluation {
   strength_comment String?
   weakness_comment String?
   submitted_at     DateTime       @default(now())
+  locked           Boolean        @default(true)
 
   week      Week @relation(fields: [week_id], references: [id], onDelete: Cascade)
   evaluator User @relation("EvalEvaluator", fields: [evaluator_id], references: [id], onDelete: Cascade)
   evaluatee User @relation("EvalEvaluatee", fields: [evaluatee_id], references: [id], onDelete: Cascade)
 
-  // one submission per (week, evaluator, evaluatee, type) — resubmission overwrites via upsert
+  // one row per (week, evaluator, evaluatee, type) — enforced by the DB, not just app
+  // logic, so it can never be duplicated even under concurrent submissions. Every
+  // successful write re-locks the row; only an Admin unlock (locked=false) permits
+  // the evaluator to submit an edit, which then re-locks it immediately.
   @@unique([week_id, evaluator_id, evaluatee_id, eval_type])
   @@index([week_id, evaluatee_id])
   @@map("evaluations")

@@ -154,3 +154,24 @@ export async function getRawTable(req, res, next) {
     next(err);
   }
 }
+
+/**
+ * Unlocks one specific evaluation row so its evaluator can submit exactly
+ * one corrective edit — the next successful submission re-locks it
+ * automatically (see evaluations.controller.js submitEvaluation). Every
+ * other resubmission attempt is rejected while locked, so this is the only
+ * way a professional's own evaluation can be revised after the fact.
+ */
+export async function unlockEvaluation(req, res) {
+  const evaluationId = Number(req.params.id);
+  const evaluation = await prisma.evaluation.findFirst({
+    where: { id: evaluationId, week: { project_id: req.user.project_id } },
+  });
+  if (!evaluation) return res.status(404).json({ error: "Evaluation not found" });
+
+  const updated = await prisma.evaluation.update({
+    where: { id: evaluationId },
+    data: { locked: false },
+  });
+  res.json({ evaluation: updated });
+}

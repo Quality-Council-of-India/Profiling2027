@@ -1,9 +1,11 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { adminApi, weeksApi } from "../api/endpoints.js";
 import { Card, Spinner, ErrorBanner } from "./ui.jsx";
 import { ROLE_LABELS, ROLE_COLORS } from "../utils/constants.js";
 import { Badge } from "./ui.jsx";
+
+const LOCKABLE_TABLES = ["self_evaluations", "peer_evaluations"];
 
 const TABLE_LABELS = {
   projects: "Projects",
@@ -25,6 +27,7 @@ const WEEK_FILTERABLE = ["self_evaluations", "peer_evaluations", "computed_score
  * evaluation submission) so score recomputation etc. stay correct.
  */
 export default function RawDataBrowser() {
+  const queryClient = useQueryClient();
   const [table, setTable] = useState("peer_evaluations");
   const [page, setPage] = useState(1);
   const [weekId, setWeekId] = useState("");
@@ -33,6 +36,11 @@ export default function RawDataBrowser() {
   const dataQuery = useQuery({
     queryKey: ["rawData", table, page, weekId],
     queryFn: () => adminApi.rawTable(table, { page, pageSize: 25, weekId: weekId || undefined }),
+  });
+
+  const unlockMutation = useMutation({
+    mutationFn: (id) => adminApi.unlockEvaluation(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["rawData"] }),
   });
 
   function selectTable(t) {
@@ -80,7 +88,12 @@ export default function RawDataBrowser() {
         <ErrorBanner message="Failed to load table data" />
       ) : (
         <>
-          <TableBody table={table} rows={dataQuery.data.rows} />
+          <TableBody
+            table={table}
+            rows={dataQuery.data.rows}
+            onUnlock={(id) => unlockMutation.mutate(id)}
+            unlockingId={unlockMutation.isPending ? unlockMutation.variables : null}
+          />
           <div className="flex items-center justify-between mt-3 text-xs text-slate-500">
             <span>
               {dataQuery.data.total} row{dataQuery.data.total === 1 ? "" : "s"} · page {dataQuery.data.page} of {dataQuery.data.totalPages}
@@ -112,14 +125,14 @@ function RoleBadge({ role }) {
   return <Badge text={ROLE_LABELS[role] || role} color={ROLE_COLORS[role] || "#6B7280"} />;
 }
 
-function TableBody({ table, rows }) {
+function TableBody({ table, rows, onUnlock, unlockingId }) {
   if (rows.length === 0) {
     return <p className="text-sm text-slate-400 text-center py-8">No rows.</p>;
   }
 
   const isSelf = table === "self_evaluations";
-  const isPeer = table === "peer_evaluations";
   const wrappingColumns = ["strength_comment", "weakness_comment"];
+  const isLockable = LOCKABLE_TABLES.includes(table);
 
   const columns = {
     projects: ["id", "name", "year", "start_date", "end_date", "is_active"],
@@ -128,16 +141,16 @@ function TableBody({ table, rows }) {
     peer_mappings: ["id", "evaluator", "evaluatee"],
     self_evaluations: [
       "id", "week", "evaluator", "scores", "problem_solving",
-      "strengths_tags", "weakness_tags", "strength_comment", "weakness_comment", "submitted_at",
+      "strengths_tags", "weakness_tags", "strength_comment", "weakness_comment", "submitted_at", "locked",
     ],
     peer_evaluations: [
       "id", "week", "evaluator", "evaluatee", "scores", "problem_solving",
-      "strengths_tags", "weakness_tags", "strength_comment", "weakness_comment", "submitted_at",
+      "strengths_tags", "weakness_tags", "strength_comment", "weakness_comment", "submitted_at", "locked",
     ],
     computed_scores: ["user", "week", "total_self", "total_peer", "peer_count", "expected_peer_count", "sapa_factor"],
   }[table];
 
-  const LABELS = { evaluator: isSelf ? "professional" : "evaluator", scores: "quantitative scores" };
+  const LABELS = { evaluator: isSelf ? "professional" : "evaluator", scores: "quantitative scores", locked: "status" };
 
   return (
     <div className="overflow-x-auto -mx-1">
@@ -161,13 +174,36 @@ function TableBody({ table, rows }) {
                     wrappingColumns.includes(c) ? "whitespace-normal max-w-[16rem] break-words" : "whitespace-nowrap"
                   }`}
                 >
-                  {renderCell(table, c, r)}
+                  {isLockable && c === "locked" ? (
+                    <LockCell locked={r.locked} onUnlock={() => onUnlock(r.id)} isUnlocking={unlockingId === r.id} />
+                  ) : (
+                    renderCell(table, c, r)
+                  )}
                 </td>
               ))}
             </tr>
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function LockCell({ locked, onUnlock, isUnlocking }) {
+  if (!locked) {
+    return <span className="inline-flex items-center gap-1 text-[11px] text-green-700">🔓 unlocked</span>;
+  }
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="text-[11px] text-slate-500">🔒 locked</span>
+      <button
+        onClick={onUnlock}
+        disabled={isUnlocking}
+        title="Unlock so the evaluator can submit one corrective edit"
+        className="px-1.5 py-0.5 rounded border border-slate-300 text-[10px] font-medium text-slate-600 hover:bg-slate-50 hover:border-slate-400 disabled:opacity-50 transition-standard"
+      >
+        {isUnlocking ? "…" : "Unlock"}
+      </button>
     </div>
   );
 }

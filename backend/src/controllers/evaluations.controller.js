@@ -48,15 +48,27 @@ export async function submitEvaluation(req, res, next) {
       }
     }
 
-    const evaluation = await prisma.evaluation.upsert({
-      where: {
-        week_id_evaluator_id_evaluatee_id_eval_type: {
-          week_id: body.week_id,
-          evaluator_id: req.user.id,
-          evaluatee_id: evaluateeId,
-          eval_type: body.eval_type,
-        },
+    const uniqueWhere = {
+      week_id_evaluator_id_evaluatee_id_eval_type: {
+        week_id: body.week_id,
+        evaluator_id: req.user.id,
+        evaluatee_id: evaluateeId,
+        eval_type: body.eval_type,
       },
+    };
+
+    // Every submission locks itself immediately — a second attempt is
+    // rejected unless an Admin has explicitly unlocked this exact row for
+    // a correction (locked=false), in which case this write re-locks it.
+    const existing = await prisma.evaluation.findUnique({ where: uniqueWhere });
+    if (existing?.locked) {
+      return res.status(403).json({
+        error: "This evaluation has already been submitted and is locked. Ask an Admin to unlock it if you need to make a correction.",
+      });
+    }
+
+    const evaluation = await prisma.evaluation.upsert({
+      where: uniqueWhere,
       create: {
         week_id: body.week_id,
         evaluator_id: req.user.id,
@@ -73,6 +85,7 @@ export async function submitEvaluation(req, res, next) {
         weakness_tags: body.weakness_tags,
         strength_comment: body.strength_comment || null,
         weakness_comment: body.weakness_comment || null,
+        locked: true,
       },
       update: {
         sincerity: body.sincerity,
@@ -87,6 +100,7 @@ export async function submitEvaluation(req, res, next) {
         strength_comment: body.strength_comment || null,
         weakness_comment: body.weakness_comment || null,
         submitted_at: new Date(),
+        locked: true,
       },
     });
 

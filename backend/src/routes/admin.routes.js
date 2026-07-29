@@ -12,6 +12,7 @@ import {
   listRawTables,
   getRawTable,
   impersonateRole,
+  unlockEvaluation,
 } from "../controllers/admin.controller.js";
 
 const ROSTER_EXTENSIONS = [".csv", ".xlsx"];
@@ -42,5 +43,6 @@ router.patch("/users/:id/active", authenticate, requireRole(ROLES.ADMIN), setUse
 router.get("/data", authenticate, requireRole(ROLES.ADMIN), listRawTables);
 router.get("/data/:table", authenticate, requireRole(ROLES.ADMIN), getRawTable);
 router.post("/impersonate/:role", authenticate, requireRole(ROLES.ADMIN), impersonateRole);
+router.patch("/evaluations/:id/unlock", authenticate, requireRole(ROLES.ADMIN), unlockEvaluation);
 
 export default router;

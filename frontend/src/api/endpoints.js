@@ -42,6 +42,7 @@ export const analyticsApi = {
 export const adminApi = {
   createWeek: () => api.post("/admin/weeks", {}).then((r) => r.data),
   impersonateRole: (role) => api.post(`/admin/impersonate/${role}`).then((r) => r.data),
+  unlockEvaluation: (id) => api.patch(`/admin/evaluations/${id}/unlock`).then((r) => r.data),
   openWeek: (weekId) => api.post(`/admin/weeks/${weekId}/open`).then((r) => r.data),
   closeWeek: (weekId) => api.post(`/admin/weeks/${weekId}/close`).then((r) => r.data),
   importRoster: (file) => {

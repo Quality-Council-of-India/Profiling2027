@@ -126,6 +126,7 @@ export async function queryTable(table, projectId, query) {
           strength_comment: r.strength_comment,
           weakness_comment: r.weakness_comment,
           submitted_at: r.submitted_at,
+          locked: r.locked,
         })),
       };
     }

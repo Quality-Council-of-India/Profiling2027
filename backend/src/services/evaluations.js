@@ -83,21 +83,23 @@ export async function getPendingForUserWeek(userId, weekId) {
     }),
     prisma.evaluation.findMany({
       where: { week_id: weekId, evaluator_id: userId, eval_type: "peer" },
-      select: { evaluatee_id: true },
+      select: { evaluatee_id: true, locked: true },
     }),
   ]);
 
-  const doneIds = new Set(peerEvalsGiven.map((e) => e.evaluatee_id));
+  const lockedByEvaluatee = new Map(peerEvalsGiven.map((e) => [e.evaluatee_id, e.locked]));
   const peers = mappings.map((m) => ({
     id: m.evaluatee.id,
     name: m.evaluatee.name,
     role: m.evaluatee.role,
     field: m.evaluatee.field,
-    done: doneIds.has(m.evaluatee.id),
+    done: lockedByEvaluatee.has(m.evaluatee.id),
+    locked: lockedByEvaluatee.get(m.evaluatee.id) ?? false,
   }));
 
   return {
     selfDone: !!selfEval,
+    selfLocked: selfEval?.locked ?? false,
     peers,
     completed: (selfEval ? 1 : 0) + peers.filter((p) => p.done).length,
     total: 1 + peers.length,
