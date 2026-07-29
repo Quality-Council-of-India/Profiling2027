@@ -62,6 +62,7 @@ export async function buildComplianceMatrix(projectId, weekId) {
       selfDone,
       peersDone: peers.filter((p) => p.done).length,
       peersExpected: peers.length,
+      peers, // [{ id, name, done }] — who's been evaluated vs still pending, by name
       pendingPeers: peers.filter((p) => !p.done).map((p) => p.name),
       completed,
       total,

@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../context/AuthContext.jsx";
 import { evaluationsApi } from "../api/endpoints.js";
-import { Card, Spinner, ErrorBanner } from "../components/ui.jsx";
+import { Card, Spinner, ErrorBanner, RefreshButton } from "../components/ui.jsx";
 import { PARAM_FIELDS, STRENGTH_TAGS, WEAKNESS_TAGS, NAV, ACCENT } from "../utils/constants.js";
 
 const DEFAULT_RATINGS = { sincerity: 4, team_spirit: 4, knowledge: 4, quantity: 3, quality: 4 };
@@ -38,8 +38,13 @@ export default function EvaluatePage() {
   // Auto-detects who still needs evaluating — the dropdown only offers
   // not-yet-done peers by default, so there's no need to hunt through
   // already-submitted names. "Show completed" is an escape hatch for
-  // deliberately revising a submission.
+  // reviewing a submission (editable only if an Admin has unlocked it).
   const visiblePeerOptions = showCompletedPeers ? peerOptions : pendingPeerOptions;
+  const selectedPeer = useMemo(
+    () => peerOptions.find((p) => String(p.id) === String(selectedPeerId)),
+    [peerOptions, selectedPeerId]
+  );
+  const isLocked = evalType === "self" ? !!pending?.selfLocked : !!selectedPeer?.locked;
 
   const toggleTag = (tag, list, setter) => {
     setter(list.includes(tag) ? list.filter((t) => t !== tag) : [...list, tag]);
@@ -116,11 +121,18 @@ export default function EvaluatePage() {
 
   return (
     <div className="space-y-6 max-w-3xl">
-      <div>
-        <h1 className="text-xl font-bold text-slate-900">Weekly Evaluation</h1>
-        <p className="text-sm text-slate-500">
-          {week.label} · {evalType === "self" ? "Self-Evaluation" : "Peer Evaluation"}
-        </p>
+      <div className="flex items-center gap-2">
+        <div>
+          <h1 className="text-xl font-bold text-slate-900">Weekly Evaluation</h1>
+          <p className="text-sm text-slate-500">
+            {week.label} · {evalType === "self" ? "Self-Evaluation" : "Peer Evaluation"}
+          </p>
+        </div>
+        <RefreshButton
+          onClick={() => queryClient.invalidateQueries({ queryKey: ["pending"] })}
+          isFetching={pendingQuery.isFetching}
+          label="Refresh pending evaluations"
+        />
       </div>
 
       <div className="inline-flex p-1 rounded-xl bg-slate-100 gap-1">
@@ -131,7 +143,7 @@ export default function EvaluatePage() {
           }`}
           style={evalType === "self" ? { background: NAV } : {}}
         >
-          Self-Evaluation {pending.selfDone && "✓"}
+          Self-Evaluation {pending.selfLocked ? "🔒" : pending.selfDone ? "✓" : ""}
         </button>
         <button
           onClick={() => setEvalType("peer")}
@@ -173,7 +185,7 @@ export default function EvaluatePage() {
               <option value="">— Select a peer —</option>
               {visiblePeerOptions.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.name} {p.done ? "(already submitted — resubmitting overwrites)" : ""}
+                  {p.name} {p.locked ? "(submitted — locked)" : p.done ? "(unlocked for correction)" : ""}
                 </option>
               ))}
             </select>
@@ -181,6 +193,20 @@ export default function EvaluatePage() {
         </Card>
       )}
 
+      {isLocked ? (
+        <Card className="p-8 text-center">
+          <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3 text-2xl">
+            🔒
+          </div>
+          <h2 className="text-sm font-semibold text-slate-800 mb-1">
+            {evalType === "self" ? "Your self-evaluation" : `Your evaluation for ${selectedPeer?.name}`} is locked
+          </h2>
+          <p className="text-sm text-slate-500 max-w-sm mx-auto">
+            It's already been submitted for {week.label}. Ask an Admin to unlock it from the Raw Data Browser if you need to make a correction.
+          </p>
+        </Card>
+      ) : (
+        <>
       <Card className="p-5">
         <h2 className="text-sm font-semibold text-slate-800 mb-1">Part I — Quantitative Parameters</h2>
         <p className="text-xs text-slate-400 mb-4">Rate each parameter on a scale of 1 to 5 (5 = highest)</p>
@@ -318,6 +344,8 @@ export default function EvaluatePage() {
         )}
         {submitMutation.isPending ? "Submitting…" : "Submit Evaluation"}
       </button>
+        </>
+      )}
     </div>
   );
 }

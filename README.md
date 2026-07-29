@@ -186,9 +186,11 @@ All `/api/*` routes except `/api/auth/*` require `Authorization: Bearer <JWT>`.
 | GET | `/api/analytics/heatmap/:weekId`, `/api/analytics/sapa/:weekId`, `/api/analytics/quadrant/:weekId` | leads/admin only |
 | GET | `/api/analytics/rankings?weeks=1,2,3` | every role — field + overall standing by Total Peer Score, one week or averaged across several |
 | GET | `/api/export/scores/:weekId`, `/api/export/scores/combined` | `.xlsx` download, admin only |
-| POST | `/api/admin/weeks/:id/open`, `/api/admin/weeks/:id/close`, `/api/admin/roster/import` | admin only |
+| POST | `/api/admin/weeks` | admin only — creates the next sequential week (auto-numbered/dated) |
+| POST | `/api/admin/weeks/:id/open`, `/api/admin/weeks/:id/close`, `/api/admin/roster/import` | admin only; roster import accepts `.csv` or `.xlsx` |
 | GET/PATCH | `/api/admin/users`, `/api/admin/users/:id/active` | admin only — roster list + deactivate/reactivate for mid-project changes |
-| GET | `/api/admin/data`, `/api/admin/data/:table` | admin only — view-only browser into every table (`projects`, `users`, `peer_mappings`, `weeks`, `evaluations`, `computed_scores`) |
+| GET | `/api/admin/data`, `/api/admin/data/:table` | admin only — view-only browser into every table (`projects`, `users`, `peer_mappings`, `weeks`, `self_evaluations`, `peer_evaluations`, `computed_scores`) |
+| POST | `/api/admin/impersonate/:role` | admin only — "View portal as…"; signs a token for the first active user of that role, so Admin can preview Evaluate/My Scores/etc. as a real professional would see them |
 
 ## Deployment
 

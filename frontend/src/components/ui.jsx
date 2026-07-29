@@ -64,6 +64,34 @@ export function ErrorBanner({ message }) {
   );
 }
 
+/** Manual re-fetch for a page — e.g. after an Admin imports a new roster
+ * or opens/closes a week, so other viewers don't have to wait for a
+ * background refetch or full page reload to see it. */
+export function RefreshButton({ onClick, isFetching = false, label = "Refresh" }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={isFetching}
+      title={label}
+      aria-label={label}
+      className="inline-flex items-center justify-center w-8 h-8 rounded-lg border border-slate-300 text-slate-500 hover:bg-slate-50 hover:border-slate-400 hover:text-slate-700 disabled:opacity-50 transition-standard flex-shrink-0"
+    >
+      <svg
+        className={`w-4 h-4 ${isFetching ? "animate-spin" : ""}`}
+        viewBox="0 0 20 20"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M4 10a6 6 0 0110.5-4M16 10a6 6 0 01-10.5 4" />
+        <path d="M14.5 2.5V6H11M5.5 17.5V14H9" />
+      </svg>
+    </button>
+  );
+}
+
 export function EmptyState({ icon = "○", title, message }) {
   return (
     <div className="flex flex-col items-center justify-center gap-2 py-12 text-center">

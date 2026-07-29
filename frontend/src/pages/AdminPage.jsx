@@ -1,14 +1,23 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "../context/AuthContext.jsx";
 import { weeksApi, adminApi, downloadExport } from "../api/endpoints.js";
-import { Card, Spinner, ErrorBanner, EmptyState } from "../components/ui.jsx";
+import { Card, Spinner, ErrorBanner, EmptyState, RefreshButton } from "../components/ui.jsx";
+import { ROLE_LABELS } from "../utils/constants.js";
 import RosterManager from "../components/RosterManager.jsx";
 import RawDataBrowser from "../components/RawDataBrowser.jsx";
 
+const PREVIEWABLE_ROLES = ["profiler", "group_anchor", "casu_anchor", "casu_lead", "project_lead"];
+
 export default function AdminPage() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const { impersonateRole } = useAuth();
   const weeksQuery = useQuery({ queryKey: ["weeks"], queryFn: weeksApi.list });
   const [exportError, setExportError] = useState("");
+  const [previewError, setPreviewError] = useState("");
+  const [previewingRole, setPreviewingRole] = useState(null);
 
   const createWeekMutation = useMutation({
     mutationFn: adminApi.createWeek,
@@ -32,11 +41,58 @@ export default function AdminPage() {
     }
   }
 
+  async function handlePreview(role) {
+    setPreviewError("");
+    setPreviewingRole(role);
+    try {
+      await impersonateRole(role);
+      navigate("/dashboard");
+    } catch (err) {
+      setPreviewError(err.response?.data?.error || `Couldn't preview as ${ROLE_LABELS[role]}`);
+    } finally {
+      setPreviewingRole(null);
+    }
+  }
+
+  function handleRefreshAll() {
+    queryClient.invalidateQueries({ queryKey: ["weeks"] });
+    queryClient.invalidateQueries({ queryKey: ["adminUsers"] });
+    queryClient.invalidateQueries({ queryKey: ["rawData"] });
+  }
+
   const weeks = weeksQuery.data || [];
 
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-bold text-slate-900">Admin Panel</h1>
+      <div className="flex items-center gap-2">
+        <h1 className="text-xl font-bold text-slate-900">Admin Panel</h1>
+        <RefreshButton onClick={handleRefreshAll} isFetching={weeksQuery.isFetching} label="Refresh Admin Panel" />
+      </div>
+
+      <Card className="p-5">
+        <h2 className="text-sm font-semibold text-slate-800 mb-1">View Portal As…</h2>
+        <p className="text-xs text-slate-500 mb-3">
+          Preview the portal exactly as a real professional would see it — useful for testing changes to the
+          questionnaire or scoring without needing a second account. Picks the first active user of that role.
+        </p>
+        {previewError && (
+          <div className="mb-3">
+            <ErrorBanner message={previewError} />
+          </div>
+        )}
+        <div className="flex flex-wrap gap-2">
+          {PREVIEWABLE_ROLES.map((role) => (
+            <button
+              key={role}
+              onClick={() => handlePreview(role)}
+              disabled={previewingRole !== null}
+              className="px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-medium text-slate-600 hover:bg-slate-50 hover:border-slate-400 disabled:opacity-50 transition-standard"
+            >
+              {previewingRole === role ? "Switching…" : `View as ${ROLE_LABELS[role]}`}
+            </button>
+          ))}
+        </div>
+      </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card className="p-5">

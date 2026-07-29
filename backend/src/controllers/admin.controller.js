@@ -3,6 +3,34 @@ import { importRoster } from "../services/roster.js";
 import { computeScoresForWeek } from "../services/scoreEngine.js";
 import { regeneratePeerMappings } from "../services/peerMapping.js";
 import { queryTable, TABLES } from "../services/rawData.js";
+import { signAuthToken } from "../utils/jwt.js";
+import { publicUser } from "./auth.controller.js";
+import { ALL_ROLES, ROLES } from "../utils/roles.js";
+
+/**
+ * "View portal as <role>" — lets Admin preview/test the app the way a real
+ * professional sees it (Evaluate, My Scores, etc. are meaningless for an
+ * Admin's own account, since Admins never submit or receive evaluations).
+ * Picks the first active user of that role in the project and signs them a
+ * token; the `impersonated_by` claim keeps a trace of who initiated it.
+ */
+export async function impersonateRole(req, res) {
+  const { role } = req.params;
+  if (role === ROLES.ADMIN || !ALL_ROLES.includes(role)) {
+    return res.status(400).json({ error: `Cannot preview as "${role}"` });
+  }
+
+  const target = await prisma.user.findFirst({
+    where: { project_id: req.user.project_id, role, is_active: true },
+    orderBy: { name: "asc" },
+  });
+  if (!target) {
+    return res.status(404).json({ error: `No active user with role "${role}" exists yet` });
+  }
+
+  const token = signAuthToken(target, { impersonated_by: req.user.id });
+  res.json({ token, user: publicUser(target) });
+}
 
 /**
  * Creates the next sequential week for the project (auto-numbered,
@@ -125,4 +153,25 @@ export async function getRawTable(req, res, next) {
   } catch (err) {
     next(err);
   }
+}
+
+/**
+ * Unlocks one specific evaluation row so its evaluator can submit exactly
+ * one corrective edit — the next successful submission re-locks it
+ * automatically (see evaluations.controller.js submitEvaluation). Every
+ * other resubmission attempt is rejected while locked, so this is the only
+ * way a professional's own evaluation can be revised after the fact.
+ */
+export async function unlockEvaluation(req, res) {
+  const evaluationId = Number(req.params.id);
+  const evaluation = await prisma.evaluation.findFirst({
+    where: { id: evaluationId, week: { project_id: req.user.project_id } },
+  });
+  if (!evaluation) return res.status(404).json({ error: "Evaluation not found" });
+
+  const updated = await prisma.evaluation.update({
+    where: { id: evaluationId },
+    data: { locked: false },
+  });
+  res.json({ evaluation: updated });
 }

@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../context/AuthContext.jsx";
 import { weeksApi, scoresApi, analyticsApi } from "../api/endpoints.js";
-import { Card, StatCard, Spinner, ErrorBanner, EmptyState } from "../components/ui.jsx";
+import { Card, StatCard, Spinner, ErrorBanner, EmptyState, RefreshButton } from "../components/ui.jsx";
 import WeekSelector from "../components/WeekSelector.jsx";
 import RankingCard from "../components/RankingCard.jsx";
 import RadarComparison from "../components/charts/RadarComparison.jsx";
@@ -30,6 +30,7 @@ function averageRows(rows) {
 
 export default function AnalyticsPage() {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const isAggregate = AGGREGATE_ROLES.includes(user.role);
 
   const weeksQuery = useQuery({ queryKey: ["weeks"], queryFn: weeksApi.list });
@@ -93,9 +94,22 @@ export default function AnalyticsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-xl font-bold text-slate-900">Analytics</h1>
-          <p className="text-sm text-slate-500">Pick any week(s) to explore — including a cumulative view across the whole cycle</p>
+        <div className="flex items-center gap-2">
+          <div>
+            <h1 className="text-xl font-bold text-slate-900">Analytics</h1>
+            <p className="text-sm text-slate-500">Pick any week(s) to explore — including a cumulative view across the whole cycle</p>
+          </div>
+          <RefreshButton
+            onClick={() => {
+              queryClient.invalidateQueries({ queryKey: ["trend"] });
+              queryClient.invalidateQueries({ queryKey: ["rankings"] });
+              queryClient.invalidateQueries({ queryKey: ["heatmap"] });
+              queryClient.invalidateQueries({ queryKey: ["sapa"] });
+              queryClient.invalidateQueries({ queryKey: ["quadrant"] });
+            }}
+            isFetching={trendQuery.isFetching || rankingsQuery.isFetching}
+            label="Refresh Analytics"
+          />
         </div>
       </div>
 
