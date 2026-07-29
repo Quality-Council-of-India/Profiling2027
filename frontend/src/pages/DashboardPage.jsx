@@ -1,15 +1,22 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 import { weeksApi, evaluationsApi, scoresApi } from "../api/endpoints.js";
-import { Card, StatCard, Spinner, ErrorBanner } from "../components/ui.jsx";
+import { Card, StatCard, Spinner, ErrorBanner, RefreshButton } from "../components/ui.jsx";
 import RadarComparison from "../components/charts/RadarComparison.jsx";
 import { ComplianceIcon, AnalyticsIcon, AdminIcon } from "../components/icons.jsx";
 import { ACCENT } from "../utils/constants.js";
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const weeksQuery = useQuery({ queryKey: ["weeks"], queryFn: weeksApi.list });
+
+  function handleRefresh() {
+    queryClient.invalidateQueries({ queryKey: ["weeks"] });
+    queryClient.invalidateQueries({ queryKey: ["pending"] });
+    queryClient.invalidateQueries({ queryKey: ["score"] });
+  }
 
   if (weeksQuery.isLoading) return <Spinner />;
   if (weeksQuery.isError) return <ErrorBanner message="Failed to load weeks" />;
@@ -23,8 +30,11 @@ export default function DashboardPage() {
         <div className="w-11 h-11 rounded-xl flex items-center justify-center bg-nav/10 text-nav font-display font-bold text-lg flex-shrink-0">
           {user.name.charAt(0).toUpperCase()}
         </div>
-        <div>
-          <h1 className="text-xl font-bold text-slate-900">Welcome, {user.name.split(" ")[0]}</h1>
+        <div className="flex-1">
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-bold text-slate-900">Welcome, {user.name.split(" ")[0]}</h1>
+            <RefreshButton onClick={handleRefresh} isFetching={weeksQuery.isFetching} label="Refresh Dashboard" />
+          </div>
           <p className="text-sm text-slate-500 mt-0.5">
             {openWeek ? (
               <span className="inline-flex items-center gap-1.5">

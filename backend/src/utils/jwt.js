@@ -5,13 +5,14 @@ if (!SECRET) {
   throw new Error("JWT_SECRET is not set — refusing to start with an insecure default.");
 }
 
-export function signAuthToken(user) {
+export function signAuthToken(user, extra = {}) {
   return jwt.sign(
     {
       sub: user.id,
       role: user.role,
       field: user.field,
       project_id: user.project_id,
+      ...extra,
     },
     SECRET,
     { expiresIn: process.env.JWT_EXPIRES_IN || "7d" }

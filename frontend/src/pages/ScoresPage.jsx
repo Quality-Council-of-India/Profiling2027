@@ -1,7 +1,7 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../context/AuthContext.jsx";
 import { scoresApi, weeksApi } from "../api/endpoints.js";
-import { Card, StatCard, Spinner, ErrorBanner } from "../components/ui.jsx";
+import { Card, StatCard, Spinner, ErrorBanner, RefreshButton } from "../components/ui.jsx";
 import RadarComparison from "../components/charts/RadarComparison.jsx";
 import SAPAGauge from "../components/charts/SAPAGauge.jsx";
 import { PARAM_LABELS, ACCENT, NAV } from "../utils/constants.js";
@@ -14,6 +14,7 @@ import { PARAM_LABELS, ACCENT, NAV } from "../utils/constants.js";
  */
 export default function ScoresPage({ userId, userLabel }) {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const targetId = userId || user.id;
 
   const weeksQuery = useQuery({ queryKey: ["weeks"], queryFn: weeksApi.list });
@@ -40,9 +41,16 @@ export default function ScoresPage({ userId, userLabel }) {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <div>
-          <h1 className="text-xl font-bold text-slate-900">My Scores</h1>
-          <p className="text-sm text-slate-500">{userLabel || targetUser.name} · {targetUser.field || "All Fields"}</p>
+        <div className="flex items-center gap-2">
+          <div>
+            <h1 className="text-xl font-bold text-slate-900">My Scores</h1>
+            <p className="text-sm text-slate-500">{userLabel || targetUser.name} · {targetUser.field || "All Fields"}</p>
+          </div>
+          <RefreshButton
+            onClick={() => queryClient.invalidateQueries({ queryKey: ["score", targetId] })}
+            isFetching={detailQuery.isFetching}
+            label="Refresh My Scores"
+          />
         </div>
         <span
           className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full"

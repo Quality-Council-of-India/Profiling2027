@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { weeksApi, scoresApi } from "../api/endpoints.js";
-import { Card, Spinner, ErrorBanner, EmptyState, Badge } from "../components/ui.jsx";
+import { Card, Spinner, ErrorBanner, EmptyState, Badge, RefreshButton } from "../components/ui.jsx";
 import { ROLE_LABELS, ROLE_COLORS } from "../utils/constants.js";
 
 /**
@@ -12,6 +12,7 @@ import { ROLE_LABELS, ROLE_COLORS } from "../utils/constants.js";
  * picker needed — just a week filter.
  */
 export default function TeamPage() {
+  const queryClient = useQueryClient();
   const weeksQuery = useQuery({ queryKey: ["weeks"], queryFn: weeksApi.list });
   const weeks = weeksQuery.data || [];
 
@@ -50,9 +51,16 @@ export default function TeamPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-xl font-bold text-slate-900">Team View</h1>
-          <p className="text-sm text-slate-500">{weeks.find((w) => w.id === weekId)?.label}</p>
+        <div className="flex items-center gap-2">
+          <div>
+            <h1 className="text-xl font-bold text-slate-900">Team View</h1>
+            <p className="text-sm text-slate-500">{weeks.find((w) => w.id === weekId)?.label}</p>
+          </div>
+          <RefreshButton
+            onClick={() => queryClient.invalidateQueries({ queryKey: ["team", weekId] })}
+            isFetching={teamQuery.isFetching}
+            label="Refresh Team View"
+          />
         </div>
         <select
           value={weekId}
@@ -83,7 +91,6 @@ export default function TeamPage() {
                   <th className="text-center px-3 py-2.5 text-xs font-medium text-white uppercase tracking-wide">Self Total</th>
                   <th className="text-center px-3 py-2.5 text-xs font-medium text-white uppercase tracking-wide">Peer Total</th>
                   <th className="text-center px-3 py-2.5 text-xs font-medium text-white uppercase tracking-wide">SAPA</th>
-                  <th className="text-center px-3 py-2.5 text-xs font-medium text-white uppercase tracking-wide">Peer Count</th>
                 </tr>
               </thead>
               <tbody>
@@ -104,7 +111,7 @@ function FieldGroup({ field, members, showHeader }) {
     <>
       {showHeader && (
         <tr>
-          <td colSpan={6} className="px-4 py-1.5 text-xs font-semibold text-slate-500 bg-slate-100 uppercase tracking-wide">
+          <td colSpan={5} className="px-4 py-1.5 text-xs font-semibold text-slate-500 bg-slate-100 uppercase tracking-wide">
             {field}
           </td>
         </tr>
@@ -125,7 +132,6 @@ function FieldGroup({ field, members, showHeader }) {
                 </span>
               ) : "—"}
             </td>
-            <td className="px-3 py-2 text-center text-slate-600">{c ? `${c.peer_count}/${c.expected_peer_count}` : "—"}</td>
           </tr>
         );
       })}

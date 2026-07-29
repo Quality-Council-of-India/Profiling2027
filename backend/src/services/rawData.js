@@ -6,7 +6,15 @@
 
 import { prisma } from "../utils/prisma.js";
 
-export const TABLES = ["projects", "users", "peer_mappings", "weeks", "evaluations", "computed_scores"];
+export const TABLES = [
+  "projects",
+  "users",
+  "peer_mappings",
+  "weeks",
+  "self_evaluations",
+  "peer_evaluations",
+  "computed_scores",
+];
 
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 500;
@@ -75,8 +83,14 @@ export async function queryTable(table, projectId, query) {
       };
     }
 
-    case "evaluations": {
-      const where = { week: { project_id: projectId }, ...(weekId ? { week_id: weekId } : {}) };
+    case "self_evaluations":
+    case "peer_evaluations": {
+      const evalType = table === "self_evaluations" ? "self" : "peer";
+      const where = {
+        week: { project_id: projectId },
+        eval_type: evalType,
+        ...(weekId ? { week_id: weekId } : {}),
+      };
       const result = await paged(
         prisma.evaluation,
         where,
@@ -88,7 +102,7 @@ export async function queryTable(table, projectId, query) {
       );
       const ids = [...new Set(result.rows.flatMap((r) => [r.evaluator_id, r.evaluatee_id]))];
       const [users, weeks] = await Promise.all([
-        prisma.user.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, role: true } }),
+        prisma.user.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, role: true, field: true } }),
         prisma.week.findMany({ where: { id: { in: [...new Set(result.rows.map((r) => r.week_id))] } }, select: { id: true, label: true } }),
       ]);
       const usersById = new Map(users.map((u) => [u.id, u]));
@@ -100,7 +114,6 @@ export async function queryTable(table, projectId, query) {
           week: weeksById.get(r.week_id) || null,
           evaluator: usersById.get(r.evaluator_id) || null,
           evaluatee: usersById.get(r.evaluatee_id) || null,
-          eval_type: r.eval_type,
           sincerity: r.sincerity,
           team_spirit: r.team_spirit,
           knowledge: r.knowledge,

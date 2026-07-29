@@ -30,8 +30,11 @@ export default function Sidebar() {
 
   const navItems = [
     { to: "/dashboard", label: "Dashboard", Icon: DashboardIcon, show: true },
-    { to: "/evaluate", label: "Evaluate", Icon: EvaluateIcon, show: true },
-    { to: "/scores", label: "My Scores", Icon: ScoresIcon, show: true },
+    // Admins never submit/receive evaluations — these two are meaningless
+    // for their own account; use "View portal as..." in the Admin Panel
+    // to preview them for real.
+    { to: "/evaluate", label: "Evaluate", Icon: EvaluateIcon, show: !isAdmin },
+    { to: "/scores", label: "My Scores", Icon: ScoresIcon, show: !isAdmin },
     { to: "/team", label: "Team View", Icon: TeamIcon, show: isAnchor || isLead || isAdmin },
     { to: "/compliance", label: "Compliance", Icon: ComplianceIcon, show: isLead || isAdmin },
     { to: "/analytics", label: "Analytics", Icon: AnalyticsIcon, show: true },

@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../context/AuthContext.jsx";
 import { evaluationsApi } from "../api/endpoints.js";
-import { Card, Spinner, ErrorBanner } from "../components/ui.jsx";
+import { Card, Spinner, ErrorBanner, RefreshButton } from "../components/ui.jsx";
 import { PARAM_FIELDS, STRENGTH_TAGS, WEAKNESS_TAGS, NAV, ACCENT } from "../utils/constants.js";
 
 const DEFAULT_RATINGS = { sincerity: 4, team_spirit: 4, knowledge: 4, quantity: 3, quality: 4 };
@@ -116,11 +116,18 @@ export default function EvaluatePage() {
 
   return (
     <div className="space-y-6 max-w-3xl">
-      <div>
-        <h1 className="text-xl font-bold text-slate-900">Weekly Evaluation</h1>
-        <p className="text-sm text-slate-500">
-          {week.label} · {evalType === "self" ? "Self-Evaluation" : "Peer Evaluation"}
-        </p>
+      <div className="flex items-center gap-2">
+        <div>
+          <h1 className="text-xl font-bold text-slate-900">Weekly Evaluation</h1>
+          <p className="text-sm text-slate-500">
+            {week.label} · {evalType === "self" ? "Self-Evaluation" : "Peer Evaluation"}
+          </p>
+        </div>
+        <RefreshButton
+          onClick={() => queryClient.invalidateQueries({ queryKey: ["pending"] })}
+          isFetching={pendingQuery.isFetching}
+          label="Refresh pending evaluations"
+        />
       </div>
 
       <div className="inline-flex p-1 rounded-xl bg-slate-100 gap-1">

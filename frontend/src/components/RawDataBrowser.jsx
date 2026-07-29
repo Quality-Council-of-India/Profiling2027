@@ -10,11 +10,12 @@ const TABLE_LABELS = {
   users: "Users",
   peer_mappings: "Peer Mappings",
   weeks: "Weeks",
-  evaluations: "Evaluations",
+  self_evaluations: "Self Evaluations",
+  peer_evaluations: "Peer Evaluations",
   computed_scores: "Computed Scores",
 };
 
-const WEEK_FILTERABLE = ["evaluations", "computed_scores"];
+const WEEK_FILTERABLE = ["self_evaluations", "peer_evaluations", "computed_scores"];
 
 /**
  * View-only browser into every backend table — so the admin can see who
@@ -24,7 +25,7 @@ const WEEK_FILTERABLE = ["evaluations", "computed_scores"];
  * evaluation submission) so score recomputation etc. stay correct.
  */
 export default function RawDataBrowser() {
-  const [table, setTable] = useState("evaluations");
+  const [table, setTable] = useState("peer_evaluations");
   const [page, setPage] = useState(1);
   const [weekId, setWeekId] = useState("");
 
@@ -116,14 +117,27 @@ function TableBody({ table, rows }) {
     return <p className="text-sm text-slate-400 text-center py-8">No rows.</p>;
   }
 
+  const isSelf = table === "self_evaluations";
+  const isPeer = table === "peer_evaluations";
+  const wrappingColumns = ["strength_comment", "weakness_comment"];
+
   const columns = {
     projects: ["id", "name", "year", "start_date", "end_date", "is_active"],
     users: ["id", "name", "email", "role", "field", "is_active"],
     weeks: ["id", "week_number", "label", "start_date", "end_date", "status"],
     peer_mappings: ["id", "evaluator", "evaluatee"],
-    evaluations: ["id", "week", "evaluator", "evaluatee", "eval_type", "scores", "problem_solving", "submitted_at"],
+    self_evaluations: [
+      "id", "week", "evaluator", "scores", "problem_solving",
+      "strengths_tags", "weakness_tags", "strength_comment", "weakness_comment", "submitted_at",
+    ],
+    peer_evaluations: [
+      "id", "week", "evaluator", "evaluatee", "scores", "problem_solving",
+      "strengths_tags", "weakness_tags", "strength_comment", "weakness_comment", "submitted_at",
+    ],
     computed_scores: ["user", "week", "total_self", "total_peer", "peer_count", "expected_peer_count", "sapa_factor"],
   }[table];
+
+  const LABELS = { evaluator: isSelf ? "professional" : "evaluator", scores: "quantitative scores" };
 
   return (
     <div className="overflow-x-auto -mx-1">
@@ -132,7 +146,7 @@ function TableBody({ table, rows }) {
           <tr className="border-b border-slate-200">
             {columns.map((c) => (
               <th key={c} className="text-left px-2 py-1.5 font-medium text-slate-500 uppercase whitespace-nowrap">
-                {c.replace(/_/g, " ")}
+                {(LABELS[c] || c).replace(/_/g, " ")}
               </th>
             ))}
           </tr>
@@ -141,7 +155,12 @@ function TableBody({ table, rows }) {
           {rows.map((r, i) => (
             <tr key={r.id ?? i} className={i % 2 === 0 ? "bg-slate-50/60" : ""}>
               {columns.map((c) => (
-                <td key={c} className="px-2 py-1.5 whitespace-nowrap align-top">
+                <td
+                  key={c}
+                  className={`px-2 py-1.5 align-top ${
+                    wrappingColumns.includes(c) ? "whitespace-normal max-w-[16rem] break-words" : "whitespace-nowrap"
+                  }`}
+                >
                   {renderCell(table, c, r)}
                 </td>
               ))}
@@ -153,20 +172,40 @@ function TableBody({ table, rows }) {
   );
 }
 
+const SCORE_PARAMS = [
+  ["Sincerity", "sincerity"],
+  ["Team Spirit", "team_spirit"],
+  ["Knowledge", "knowledge"],
+  ["Quantity", "quantity"],
+  ["Quality", "quality"],
+];
+
 function renderCell(table, column, row) {
   const val = row[column];
 
   if (column === "evaluator" || column === "evaluatee" || column === "user") {
-    return val ? <span>{val.name} <RoleBadge role={val.role} /></span> : "—";
+    if (!val) return "—";
+    return (
+      <span className="inline-flex items-center gap-1">
+        {val.name}
+        <RoleBadge role={val.role} />
+        {val.field && <span className="text-slate-400 text-[10px]">{val.field}</span>}
+      </span>
+    );
   }
   if (column === "week") return val?.label || "—";
   if (column === "role") return <RoleBadge role={val} />;
   if (column === "is_active") return val ? <span className="text-green-700">active</span> : <span className="text-slate-400">inactive</span>;
-  if (column === "scores" && table === "evaluations") {
+  if (column === "scores" && (table === "self_evaluations" || table === "peer_evaluations")) {
     return (
-      <span className="font-mono">
-        S{row.sincerity} T{row.team_spirit} K{row.knowledge} Q{row.quantity} Ql{row.quality}
-      </span>
+      <div className="grid grid-cols-[auto_auto] gap-x-2 gap-y-0.5">
+        {SCORE_PARAMS.map(([label, key]) => (
+          <div key={key} className="contents">
+            <span className="text-slate-400">{label}</span>
+            <span className="font-medium tabular-nums text-slate-700">{row[key]}</span>
+          </div>
+        ))}
+      </div>
     );
   }
   if (column === "submitted_at" || column === "start_date" || column === "end_date" || column === "computed_at") {
