@@ -221,3 +221,87 @@ export async function getRankings(projectId, requester, weekIds) {
 
   return { field, overall };
 }
+
+const HALL_OF_RECOGNITION_ROLES = [ROLES.PROFILER, ROLES.GROUP_ANCHOR, ROLES.CASU_ANCHOR];
+
+/**
+ * Hall of Recognition — per closed week (in order), the top Total Peer
+ * Score scorer for each of Profiler/Group Anchor/CASU Anchor, irrespective
+ * of field, plus — from the 2nd closed week onward — a single cross-role
+ * "Overall Star Performer": whoever has the highest CUMULATIVE average
+ * Total Peer Score across every closed week completed so far. Each
+ * person's average is over their own scored weeks only (not diluted by
+ * weeks before they joined), matching how the Combined Score Sheet already
+ * averages per person.
+ */
+export async function getHallOfRecognition(projectId) {
+  const closedWeeks = await prisma.week.findMany({
+    where: { project_id: projectId, status: "closed" },
+    orderBy: { week_number: "asc" },
+  });
+  if (closedWeeks.length === 0) return { weeks: [] };
+
+  const weekIds = closedWeeks.map((w) => w.id);
+  const scores = await prisma.computedScore.findMany({
+    where: {
+      week_id: { in: weekIds },
+      user: { project_id: projectId, is_active: true, role: { not: ROLES.ADMIN } },
+    },
+    include: { user: { select: { id: true, name: true, role: true, field: true } } },
+  });
+
+  const scoresByWeek = new Map();
+  for (const s of scores) {
+    if (!scoresByWeek.has(s.week_id)) scoresByWeek.set(s.week_id, []);
+    scoresByWeek.get(s.week_id).push(s);
+  }
+
+  const cumulative = new Map(); // user_id -> { sum, count, name, role, field }
+  const weeksOut = [];
+
+  closedWeeks.forEach((week, index) => {
+    const weekScores = scoresByWeek.get(week.id) || [];
+
+    const topByRole = {};
+    for (const role of HALL_OF_RECOGNITION_ROLES) {
+      const inRole = weekScores.filter((s) => s.user.role === role);
+      topByRole[role] =
+        inRole.length === 0
+          ? null
+          : inRole.reduce((best, s) => {
+              const top = { id: s.user.id, name: s.user.name, field: s.user.field, totalPeer: Number(s.total_peer) };
+              return !best || top.totalPeer > best.totalPeer ? top : best;
+            }, null);
+    }
+
+    for (const s of weekScores) {
+      const uid = s.user.id;
+      if (!cumulative.has(uid)) {
+        cumulative.set(uid, { sum: 0, count: 0, name: s.user.name, role: s.user.role, field: s.user.field });
+      }
+      const entry = cumulative.get(uid);
+      entry.sum += Number(s.total_peer);
+      entry.count += 1;
+    }
+
+    let overallStar = null;
+    if (index >= 1) {
+      for (const entry of cumulative.values()) {
+        const avgTotalPeer = Math.round((entry.sum / entry.count) * 100) / 100;
+        if (!overallStar || avgTotalPeer > overallStar.avgTotalPeer) {
+          overallStar = { name: entry.name, role: entry.role, field: entry.field, avgTotalPeer };
+        }
+      }
+    }
+
+    weeksOut.push({
+      week: { id: week.id, label: week.label, week_number: week.week_number },
+      topProfiler: topByRole[ROLES.PROFILER],
+      topGroupAnchor: topByRole[ROLES.GROUP_ANCHOR],
+      topCasuAnchor: topByRole[ROLES.CASU_ANCHOR],
+      overallStar,
+    });
+  });
+
+  return { weeks: weeksOut };
+}

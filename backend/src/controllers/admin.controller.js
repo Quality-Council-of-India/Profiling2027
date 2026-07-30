@@ -3,9 +3,13 @@ import { importRoster } from "../services/roster.js";
 import { computeScoresForWeek } from "../services/scoreEngine.js";
 import { regeneratePeerMappings } from "../services/peerMapping.js";
 import { queryTable, TABLES } from "../services/rawData.js";
+import { buildEvaluationsExportWorkbook } from "../services/export.js";
+import { streamWorkbook } from "./export.controller.js";
 import { signAuthToken } from "../utils/jwt.js";
 import { publicUser } from "./auth.controller.js";
 import { ALL_ROLES, ROLES } from "../utils/roles.js";
+
+const EXPORTABLE_TABLES = ["self_evaluations", "peer_evaluations"];
 
 /**
  * "View portal as <role>" — lets Admin preview/test the app the way a real
@@ -150,6 +154,21 @@ export async function getRawTable(req, res, next) {
     }
     const result = await queryTable(table, req.user.project_id, req.query);
     res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+/** .xlsx export of every row in a self/peer evaluations table, optionally filtered to one week. */
+export async function exportRawTable(req, res, next) {
+  try {
+    const { table } = req.params;
+    if (!EXPORTABLE_TABLES.includes(table)) {
+      return res.status(400).json({ error: `Only ${EXPORTABLE_TABLES.join(", ")} can be exported` });
+    }
+    const weekId = req.query.weekId ? Number(req.query.weekId) : undefined;
+    const { workbook, filename } = await buildEvaluationsExportWorkbook(req.user.project_id, table, weekId);
+    await streamWorkbook(res, workbook, filename);
   } catch (err) {
     next(err);
   }

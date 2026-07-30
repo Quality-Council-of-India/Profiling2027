@@ -4,7 +4,7 @@ import { buildWeekScoreWorkbook, buildCombinedScoreWorkbook } from "../services/
 // Buffered rather than streamed to res — safer across deployment targets
 // (works identically under plain Node, Docker, and Vercel's serverless
 // Node runtime, where writable-stream response support is less predictable).
-async function streamWorkbook(res, workbook, filename) {
+export async function streamWorkbook(res, workbook, filename) {
   const buffer = await workbook.xlsx.writeBuffer();
   res.setHeader(
     "Content-Type",
