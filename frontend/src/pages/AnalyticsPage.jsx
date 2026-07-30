@@ -5,6 +5,7 @@ import { weeksApi, scoresApi, analyticsApi } from "../api/endpoints.js";
 import { Card, StatCard, Spinner, ErrorBanner, EmptyState, RefreshButton } from "../components/ui.jsx";
 import WeekSelector from "../components/WeekSelector.jsx";
 import RankingCard from "../components/RankingCard.jsx";
+import HallOfRecognition from "../components/HallOfRecognition.jsx";
 import RadarComparison from "../components/charts/RadarComparison.jsx";
 import HeatmapGrid from "../components/charts/HeatmapGrid.jsx";
 import QuadrantPlot from "../components/charts/QuadrantPlot.jsx";
@@ -106,6 +107,7 @@ export default function AnalyticsPage() {
               queryClient.invalidateQueries({ queryKey: ["heatmap"] });
               queryClient.invalidateQueries({ queryKey: ["sapa"] });
               queryClient.invalidateQueries({ queryKey: ["quadrant"] });
+              queryClient.invalidateQueries({ queryKey: ["hallOfRecognition"] });
             }}
             isFetching={trendQuery.isFetching || rankingsQuery.isFetching}
             label="Refresh Analytics"
@@ -194,6 +196,15 @@ export default function AnalyticsPage() {
       {/* ── Leads/Admin: full aggregate views (single most-recent selected week) ── */}
       {isAggregate && (
         <>
+          <Card className="p-5">
+            <h2 className="text-sm font-semibold text-slate-800 mb-1">🏆 Hall of Recognition</h2>
+            <p className="text-xs text-slate-500 mb-4">
+              Top Total Peer Score by role each closed week, irrespective of field, plus a cumulative
+              Overall Star Performer from the 2nd closed week onward.
+            </p>
+            <HallOfRecognition />
+          </Card>
+
           <div>
             <h2 className="text-base font-semibold text-slate-800 mt-2">
               Team-Wide Analytics — {weeks.find((w) => w.id === aggregateWeekId)?.label}

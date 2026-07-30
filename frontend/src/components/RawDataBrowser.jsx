@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { adminApi, weeksApi } from "../api/endpoints.js";
+import { adminApi, weeksApi, downloadExport } from "../api/endpoints.js";
 import { Card, Spinner, ErrorBanner } from "./ui.jsx";
 import { ROLE_LABELS, ROLE_COLORS } from "../utils/constants.js";
 import { Badge } from "./ui.jsx";
 
 const LOCKABLE_TABLES = ["self_evaluations", "peer_evaluations"];
+const EXPORTABLE_TABLES = ["self_evaluations", "peer_evaluations"];
 
 const TABLE_LABELS = {
   projects: "Projects",
@@ -43,9 +44,29 @@ export default function RawDataBrowser() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["rawData"] }),
   });
 
+  const [exportError, setExportError] = useState("");
+  const [isExporting, setIsExporting] = useState(false);
+
   function selectTable(t) {
     setTable(t);
     setPage(1);
+  }
+
+  async function handleExport() {
+    setExportError("");
+    setIsExporting(true);
+    try {
+      const weekLabel = weekId ? (weeksQuery.data || []).find((w) => String(w.id) === String(weekId))?.label : null;
+      const suffix = weekLabel ? `_${weekLabel.replace(/\s+/g, "_")}` : "_all_weeks";
+      await downloadExport(
+        `/admin/data/${table}/export${weekId ? `?weekId=${weekId}` : ""}`,
+        `${table}${suffix}.xlsx`
+      );
+    } catch (err) {
+      setExportError(err.response?.data?.error || "Export failed");
+    } finally {
+      setIsExporting(false);
+    }
   }
 
   return (
@@ -65,8 +86,24 @@ export default function RawDataBrowser() {
               ))}
             </select>
           )}
+          {EXPORTABLE_TABLES.includes(table) && (
+            <button
+              onClick={handleExport}
+              disabled={isExporting}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs font-medium text-slate-600 hover:bg-slate-50 hover:border-slate-400 disabled:opacity-50 transition-standard"
+            >
+              <ExportIcon />
+              {isExporting ? "Exporting…" : "Export (.xlsx)"}
+            </button>
+          )}
         </div>
       </div>
+
+      {exportError && (
+        <div className="mb-4">
+          <ErrorBanner message={exportError} />
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-1.5 mb-4">
         {Object.entries(TABLE_LABELS).map(([key, label]) => (
@@ -118,6 +155,15 @@ export default function RawDataBrowser() {
         </>
       )}
     </Card>
+  );
+}
+
+function ExportIcon() {
+  return (
+    <svg className="w-3.5 h-3.5 text-slate-400" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10 3v9.5M6 9l4 4 4-4" />
+      <path d="M3.5 15v1a1.5 1.5 0 001.5 1.5h10a1.5 1.5 0 001.5-1.5v-1" />
+    </svg>
   );
 }
 

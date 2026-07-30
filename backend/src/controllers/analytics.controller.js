@@ -1,6 +1,12 @@
 import { prisma } from "../utils/prisma.js";
 import { analyticsScope } from "../services/access.js";
-import { getFieldHeatmap, getSapaDistribution, getQuadrantData, getRankings } from "../services/analytics.js";
+import {
+  getFieldHeatmap,
+  getSapaDistribution,
+  getQuadrantData,
+  getRankings,
+  getHallOfRecognition,
+} from "../services/analytics.js";
 
 async function requireAggregateAccess(req, res) {
   const scope = analyticsScope(req.user);
@@ -80,4 +86,15 @@ export async function rankings(req, res, next) {
   } catch (err) {
     next(err);
   }
+}
+
+/** Hall of Recognition — per-role weekly stars + cumulative Overall Star Performer, aggregate roles only. */
+export async function hallOfRecognition(req, res) {
+  if (analyticsScope(req.user) === "personal") {
+    return res.status(403).json({
+      error: "Your role has a personalised analytics view only — use /api/scores/:userId instead",
+    });
+  }
+  const data = await getHallOfRecognition(req.user.project_id);
+  res.json(data);
 }

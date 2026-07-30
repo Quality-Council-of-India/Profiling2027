@@ -60,6 +60,60 @@ export async function getSubjectiveSummary(weekId, userId) {
   };
 }
 
+function formatProblemSolving(value) {
+  if (value === "satisfied") return "Satisfied";
+  if (value === "not_satisfied") return "Not Satisfied";
+  return "";
+}
+
+/**
+ * Batch subjective aggregation for every given user in one week — backs the
+ * Week Scoresheet / Combined Score Sheet exports (§4.6.05). Two queries
+ * regardless of roster size, rather than getSubjectiveSummary() per user.
+ * Peer remarks are concatenated one-per-line (matches the original
+ * 'Scores for Week XX' spreadsheet's TEXTJOIN formula) rather than
+ * summarised, so every individual's wording survives intact.
+ */
+export async function getSubjectiveSummaryBatch(weekId, userIds) {
+  const [selfEvals, peerEvals] = await Promise.all([
+    prisma.evaluation.findMany({
+      where: { week_id: weekId, eval_type: "self", evaluatee_id: { in: userIds } },
+      select: { evaluatee_id: true, problem_solving: true, strength_comment: true, weakness_comment: true },
+    }),
+    prisma.evaluation.findMany({
+      where: { week_id: weekId, eval_type: "peer", evaluatee_id: { in: userIds } },
+      select: { evaluatee_id: true, problem_solving: true, strength_comment: true, weakness_comment: true },
+    }),
+  ]);
+
+  const selfByUser = new Map(selfEvals.map((e) => [e.evaluatee_id, e]));
+  const peersByUser = new Map();
+  for (const e of peerEvals) {
+    if (!peersByUser.has(e.evaluatee_id)) peersByUser.set(e.evaluatee_id, []);
+    peersByUser.get(e.evaluatee_id).push(e);
+  }
+
+  const result = new Map();
+  for (const userId of userIds) {
+    const self = selfByUser.get(userId);
+    const peers = peersByUser.get(userId) || [];
+    const satisfied = peers.filter((p) => p.problem_solving === "satisfied").length;
+    const notSatisfied = peers.filter((p) => p.problem_solving === "not_satisfied").length;
+
+    result.set(userId, {
+      selfProblemSolving: self ? formatProblemSolving(self.problem_solving) : "",
+      selfStrength: self?.strength_comment || "",
+      selfWeakness: self?.weakness_comment || "",
+      peerProblemSolving: peers.length ? `Satisfied: ${satisfied} | Not Satisfied: ${notSatisfied}` : "",
+      peerSatisfiedCount: satisfied,
+      peerNotSatisfiedCount: notSatisfied,
+      peerStrength: peers.map((p) => p.strength_comment).filter(Boolean).join("\n"),
+      peerWeakness: peers.map((p) => p.weakness_comment).filter(Boolean).join("\n"),
+    });
+  }
+  return result;
+}
+
 /**
  * Builds the "pending evaluations" view for one user in one week:
  * self-eval status + which mapped peers still need to be evaluated.
