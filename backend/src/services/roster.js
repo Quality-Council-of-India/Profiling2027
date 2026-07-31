@@ -39,17 +39,22 @@ async function parseXlsxRows(buffer) {
 
 /**
  * Bulk imports a team roster from a .csv or .xlsx file (columns:
- * name,email,role,field) for a project, then rebuilds peer_mappings from the
- * new roster (§4.2.2 / §5 POST /api/admin/roster/import).
+ * name,email,role,field, optionally photo_url) for a project, then rebuilds
+ * peer_mappings from the new roster (§4.2.2 / §5 POST /api/admin/roster/import).
  *
  * New users get a random temp password (emailed to them, best-effort);
  * existing users (matched by email) have name/role/field updated but keep
- * their current password.
+ * their current password. photo_url is only touched when the uploaded file
+ * actually has that column — a re-import for an unrelated fix (e.g.
+ * correcting someone's field) without a photo_url column won't wipe out
+ * photos set by an earlier import.
  */
 export async function importRoster(projectId, buffer, filename = "roster.csv") {
   const rows = filename.toLowerCase().endsWith(".xlsx")
     ? await parseXlsxRows(buffer)
     : parse(buffer.toString("utf-8"), { columns: true, skip_empty_lines: true, trim: true });
+
+  const hasPhotoColumn = rows.some((r) => Object.prototype.hasOwnProperty.call(r, "photo_url"));
 
   const created = [];
   const updated = [];
@@ -61,6 +66,7 @@ export async function importRoster(projectId, buffer, filename = "roster.csv") {
     const email = row.email?.trim().toLowerCase();
     const role = row.role?.trim();
     const field = row.field?.trim() || null;
+    const photoFields = hasPhotoColumn ? { photo_url: row.photo_url?.trim() || null } : {};
 
     if (!name || !email || !role) {
       errors.push({ line, error: "name, email, and role are required" });
@@ -75,14 +81,14 @@ export async function importRoster(projectId, buffer, filename = "roster.csv") {
     if (existing) {
       const user = await prisma.user.update({
         where: { email },
-        data: { name, role, field, project_id: projectId, is_active: true },
+        data: { name, role, field, project_id: projectId, is_active: true, ...photoFields },
       });
       updated.push({ id: user.id, name, email, role, field });
     } else {
       const tempPassword = generateTempPassword();
       const password_hash = await bcrypt.hash(tempPassword, 12);
       const user = await prisma.user.create({
-        data: { project_id: projectId, name, email, role, field, password_hash },
+        data: { project_id: projectId, name, email, role, field, password_hash, ...photoFields },
       });
       created.push({ id: user.id, name, email, role, field, tempPassword });
 

@@ -16,6 +16,7 @@ export function publicUser(user) {
     email: user.email,
     role: user.role,
     field: user.field,
+    photo_url: user.photo_url,
     project_id: user.project_id,
   };
 }
@@ -46,6 +47,18 @@ export async function login(req, res, next) {
   }
 }
 
+/** Shared by self-service "forgot password" and the Admin's "send reset email" action. */
+export async function sendPasswordResetEmail(user) {
+  const resetToken = signPurposeToken({ sub: user.id, purpose: "password_reset" }, "30m");
+  const frontendUrl = process.env.CORS_ORIGIN || "http://localhost:5173";
+  const link = `${frontendUrl}/reset-password?token=${resetToken}`;
+  await sendMail({
+    to: user.email,
+    subject: "Reset your Profiling 2027 Feedback Portal password",
+    html: `<p>Hi ${user.name},</p><p>Click below to reset your password (expires in 30 minutes):</p><p><a href="${link}">${link}</a></p>`,
+  });
+}
+
 // Step 1: request a reset link. Always responds 200 so email enumeration
 // isn't possible from the response alone.
 export async function requestPasswordReset(req, res, next) {
@@ -54,14 +67,7 @@ export async function requestPasswordReset(req, res, next) {
     const user = await prisma.user.findUnique({ where: { email } });
 
     if (user) {
-      const resetToken = signPurposeToken({ sub: user.id, purpose: "password_reset" }, "30m");
-      const frontendUrl = process.env.CORS_ORIGIN || "http://localhost:5173";
-      const link = `${frontendUrl}/reset-password?token=${resetToken}`;
-      await sendMail({
-        to: user.email,
-        subject: "Reset your Profiling 2027 Feedback Portal password",
-        html: `<p>Hi ${user.name},</p><p>Click below to reset your password (expires in 30 minutes):</p><p><a href="${link}">${link}</a></p>`,
-      });
+      await sendPasswordResetEmail(user);
     }
 
     res.json({ message: "If that email is registered, a reset link has been sent." });

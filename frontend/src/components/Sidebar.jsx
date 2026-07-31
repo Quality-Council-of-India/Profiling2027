@@ -8,6 +8,7 @@ import {
   TeamIcon,
   ComplianceIcon,
   AnalyticsIcon,
+  TrophyIcon,
   AdminIcon,
 } from "./icons.jsx";
 
@@ -38,6 +39,7 @@ export default function Sidebar() {
     { to: "/team", label: "Team View", Icon: TeamIcon, show: isAnchor || isLead || isAdmin },
     { to: "/compliance", label: "Compliance", Icon: ComplianceIcon, show: isLead || isAdmin },
     { to: "/analytics", label: "Analytics", Icon: AnalyticsIcon, show: true },
+    { to: "/hall-of-recognition", label: "Hall of Recognition", Icon: TrophyIcon, show: true },
     { to: "/admin", label: "Admin Panel", Icon: AdminIcon, show: isAdmin },
   ];
 

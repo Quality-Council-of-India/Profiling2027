@@ -67,6 +67,7 @@ model User {
   password_hash String   @db.VarChar(255)
   role          Role
   field         String?  @db.VarChar(50)
+  photo_url     String?  @db.VarChar(500)
   is_active     Boolean  @default(true)
   created_at    DateTime @default(now())
 

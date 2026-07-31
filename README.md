@@ -185,12 +185,14 @@ All `/api/*` routes except `/api/auth/*` require `Authorization: Bearer <JWT>`.
 | GET/POST | `/api/compliance/:weekId`, `/api/compliance/:weekId/remind` | |
 | GET | `/api/analytics/heatmap/:weekId`, `/api/analytics/sapa/:weekId`, `/api/analytics/quadrant/:weekId` | leads/admin only |
 | GET | `/api/analytics/rankings?weeks=1,2,3` | every role — field + overall standing by Total Peer Score, one week or averaged across several |
-| GET | `/api/analytics/hall-of-recognition` | leads/admin only — per closed week, top Total Peer Score by role (Profiler/Group Anchor/CASU Anchor) irrespective of field, plus a cumulative cross-role Overall Star Performer from the 2nd closed week onward |
-| GET | `/api/export/scores/:weekId`, `/api/export/scores/combined` | `.xlsx` download, admin only — one row per professional, Self/Peer per parameter + subjective fields (peer strength/weakness comments concatenated, combined sheet prefixes each week's remarks with `-> WEEK N`) |
+| GET | `/api/analytics/hall-of-recognition` | every role — per closed week, top Total Peer Score by role (Profiler/Group Anchor/CASU Anchor) irrespective of field, plus a cumulative cross-role Overall Star Performer from the 2nd closed week onward; own top-level tab, not just Analytics |
+| GET | `/api/export/scores/:weekId`, `/api/export/scores/combined` | `.xlsx` download, admin only — one row per professional, Self/Peer per parameter + subjective fields (Problem Reason and Strengths/Weakness Tags with frequency counts, peer strength/weakness comments concatenated; combined sheet prefixes each week's free-text remarks with `-> WEEK N` but sums tag frequencies cumulatively across all weeks) |
 | GET | `/api/admin/data/:table/export` | admin only — `.xlsx` download of every row in `self_evaluations`/`peer_evaluations`, optionally filtered to one week; flattened columns (individual quantitative parameters, Field for evaluator+evaluatee, a per-submission Total) rather than the on-screen browser's compact view |
 | POST | `/api/admin/weeks` | admin only — creates the next sequential week (auto-numbered/dated) |
-| POST | `/api/admin/weeks/:id/open`, `/api/admin/weeks/:id/close`, `/api/admin/roster/import` | admin only; roster import accepts `.csv` or `.xlsx` |
+| POST | `/api/admin/weeks/:id/open`, `/api/admin/weeks/:id/close`, `/api/admin/roster/import` | admin only; roster import accepts `.csv` or `.xlsx`, with an optional `photo_url` column (only touched when present, so an unrelated re-import never wipes existing photos) |
 | GET/PATCH | `/api/admin/users`, `/api/admin/users/:id/active` | admin only — roster list + deactivate/reactivate for mid-project changes |
+| PATCH | `/api/admin/users/:id/password` | admin only — sets a brand-new password directly; existing password hashes are never readable by anyone, including Admin |
+| POST | `/api/admin/users/:id/send-reset` | admin only — sends the same reset-link email a user would get from "Forgot password?", on their behalf |
 | GET | `/api/admin/data`, `/api/admin/data/:table` | admin only — view-only browser into every table (`projects`, `users`, `peer_mappings`, `weeks`, `self_evaluations`, `peer_evaluations`, `computed_scores`) |
 | POST | `/api/admin/impersonate/:role` | admin only — "View portal as…"; signs a token for the first active user of that role, so Admin can preview Evaluate/My Scores/etc. as a real professional would see them |
 | PATCH | `/api/admin/evaluations/:id/unlock` | admin only — lets one locked evaluation take exactly one corrective resubmission before re-locking |

@@ -56,6 +56,9 @@ export const adminApi = {
   listUsers: () => api.get("/admin/users").then((r) => r.data.users),
   setUserActive: (userId, is_active) =>
     api.patch(`/admin/users/${userId}/active`, { is_active }).then((r) => r.data),
+  setUserPassword: (userId, password) =>
+    api.patch(`/admin/users/${userId}/password`, { password }).then((r) => r.data),
+  sendUserPasswordReset: (userId) => api.post(`/admin/users/${userId}/send-reset`).then((r) => r.data),
   rawTables: () => api.get("/admin/data").then((r) => r.data.tables),
   rawTable: (table, { page = 1, pageSize = 50, weekId } = {}) =>
     api

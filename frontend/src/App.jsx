@@ -9,6 +9,7 @@ import ScoresPage from "./pages/ScoresPage.jsx";
 import TeamPage from "./pages/TeamPage.jsx";
 import CompliancePage from "./pages/CompliancePage.jsx";
 import AnalyticsPage from "./pages/AnalyticsPage.jsx";
+import HallOfRecognitionPage from "./pages/HallOfRecognitionPage.jsx";
 import AdminPage from "./pages/AdminPage.jsx";
 
 export default function App() {
@@ -44,6 +45,7 @@ export default function App() {
           }
         />
         <Route path="/analytics" element={<AnalyticsPage />} />
+        <Route path="/hall-of-recognition" element={<HallOfRecognitionPage />} />
         <Route
           path="/admin"
           element={
