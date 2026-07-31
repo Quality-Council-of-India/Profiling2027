@@ -247,7 +247,7 @@ export async function getHallOfRecognition(projectId) {
       week_id: { in: weekIds },
       user: { project_id: projectId, is_active: true, role: { not: ROLES.ADMIN } },
     },
-    include: { user: { select: { id: true, name: true, role: true, field: true } } },
+    include: { user: { select: { id: true, name: true, role: true, field: true, photo_url: true } } },
   });
 
   const scoresByWeek = new Map();
@@ -269,7 +269,13 @@ export async function getHallOfRecognition(projectId) {
         inRole.length === 0
           ? null
           : inRole.reduce((best, s) => {
-              const top = { id: s.user.id, name: s.user.name, field: s.user.field, totalPeer: Number(s.total_peer) };
+              const top = {
+                id: s.user.id,
+                name: s.user.name,
+                field: s.user.field,
+                photo_url: s.user.photo_url,
+                totalPeer: Number(s.total_peer),
+              };
               return !best || top.totalPeer > best.totalPeer ? top : best;
             }, null);
     }
@@ -277,7 +283,14 @@ export async function getHallOfRecognition(projectId) {
     for (const s of weekScores) {
       const uid = s.user.id;
       if (!cumulative.has(uid)) {
-        cumulative.set(uid, { sum: 0, count: 0, name: s.user.name, role: s.user.role, field: s.user.field });
+        cumulative.set(uid, {
+          sum: 0,
+          count: 0,
+          name: s.user.name,
+          role: s.user.role,
+          field: s.user.field,
+          photo_url: s.user.photo_url,
+        });
       }
       const entry = cumulative.get(uid);
       entry.sum += Number(s.total_peer);
@@ -289,7 +302,13 @@ export async function getHallOfRecognition(projectId) {
       for (const entry of cumulative.values()) {
         const avgTotalPeer = Math.round((entry.sum / entry.count) * 100) / 100;
         if (!overallStar || avgTotalPeer > overallStar.avgTotalPeer) {
-          overallStar = { name: entry.name, role: entry.role, field: entry.field, avgTotalPeer };
+          overallStar = {
+            name: entry.name,
+            role: entry.role,
+            field: entry.field,
+            photo_url: entry.photo_url,
+            avgTotalPeer,
+          };
         }
       }
     }

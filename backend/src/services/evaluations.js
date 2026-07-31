@@ -66,23 +66,46 @@ function formatProblemSolving(value) {
   return "";
 }
 
+/** "Tag (count)" formatting shared by the weekly and combined sheet exports. */
+function formatTagFrequency(freq) {
+  return freq.map(({ tag, count }) => `${tag} (${count})`).join(", ");
+}
+
 /**
  * Batch subjective aggregation for every given user in one week — backs the
  * Week Scoresheet / Combined Score Sheet exports (§4.6.05). Two queries
  * regardless of roster size, rather than getSubjectiveSummary() per user.
  * Peer remarks are concatenated one-per-line (matches the original
  * 'Scores for Week XX' spreadsheet's TEXTJOIN formula) rather than
- * summarised, so every individual's wording survives intact.
+ * summarised, so every individual's wording survives intact. Tag arrays are
+ * additionally exposed raw (unformatted) so the Combined Score Sheet can sum
+ * frequencies across every week rather than repeating this week's counts.
  */
 export async function getSubjectiveSummaryBatch(weekId, userIds) {
   const [selfEvals, peerEvals] = await Promise.all([
     prisma.evaluation.findMany({
       where: { week_id: weekId, eval_type: "self", evaluatee_id: { in: userIds } },
-      select: { evaluatee_id: true, problem_solving: true, strength_comment: true, weakness_comment: true },
+      select: {
+        evaluatee_id: true,
+        problem_solving: true,
+        problem_reason: true,
+        strength_comment: true,
+        weakness_comment: true,
+        strengths_tags: true,
+        weakness_tags: true,
+      },
     }),
     prisma.evaluation.findMany({
       where: { week_id: weekId, eval_type: "peer", evaluatee_id: { in: userIds } },
-      select: { evaluatee_id: true, problem_solving: true, strength_comment: true, weakness_comment: true },
+      select: {
+        evaluatee_id: true,
+        problem_solving: true,
+        problem_reason: true,
+        strength_comment: true,
+        weakness_comment: true,
+        strengths_tags: true,
+        weakness_tags: true,
+      },
     }),
   ]);
 
@@ -99,16 +122,34 @@ export async function getSubjectiveSummaryBatch(weekId, userIds) {
     const peers = peersByUser.get(userId) || [];
     const satisfied = peers.filter((p) => p.problem_solving === "satisfied").length;
     const notSatisfied = peers.filter((p) => p.problem_solving === "not_satisfied").length;
+    const peerStrengthsFrequency = tagFrequency(peers, "strengths_tags");
+    const peerWeaknessFrequency = tagFrequency(peers, "weakness_tags");
+    const selfStrengthsTagsRaw = self?.strengths_tags || [];
+    const selfWeaknessTagsRaw = self?.weakness_tags || [];
 
     result.set(userId, {
       selfProblemSolving: self ? formatProblemSolving(self.problem_solving) : "",
+      selfProblemReason: self?.problem_solving === "not_satisfied" ? self.problem_reason || "" : "",
       selfStrength: self?.strength_comment || "",
       selfWeakness: self?.weakness_comment || "",
+      selfStrengthsTags: formatTagFrequency(tagFrequency(self ? [self] : [], "strengths_tags")),
+      selfWeaknessTags: formatTagFrequency(tagFrequency(self ? [self] : [], "weakness_tags")),
+      selfStrengthsTagsRaw,
+      selfWeaknessTagsRaw,
       peerProblemSolving: peers.length ? `Satisfied: ${satisfied} | Not Satisfied: ${notSatisfied}` : "",
       peerSatisfiedCount: satisfied,
       peerNotSatisfiedCount: notSatisfied,
+      peerProblemReason: peers
+        .filter((p) => p.problem_solving === "not_satisfied")
+        .map((p) => p.problem_reason)
+        .filter(Boolean)
+        .join("\n"),
       peerStrength: peers.map((p) => p.strength_comment).filter(Boolean).join("\n"),
       peerWeakness: peers.map((p) => p.weakness_comment).filter(Boolean).join("\n"),
+      peerStrengthsTags: formatTagFrequency(peerStrengthsFrequency),
+      peerWeaknessTags: formatTagFrequency(peerWeaknessFrequency),
+      peerStrengthsFrequency,
+      peerWeaknessFrequency,
     });
   }
   return result;

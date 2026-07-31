@@ -60,6 +60,16 @@ export function AnalyticsIcon(props) {
   );
 }
 
+export function TrophyIcon(props) {
+  return (
+    <svg viewBox="0 0 20 20" width="18" height="18" {...base} {...props}>
+      <path d="M6 3h8v4.5a4 4 0 01-8 0V3z" />
+      <path d="M6 4.5H3.5a2 2 0 002 3.5H6M14 4.5h2.5a2 2 0 01-2 3.5H14" />
+      <path d="M10 11.5v3M7.5 17h5M8.3 14.5h3.4l.5 2.5H7.8l.5-2.5z" />
+    </svg>
+  );
+}
+
 export function AdminIcon(props) {
   return (
     <svg viewBox="0 0 20 20" width="18" height="18" {...base} {...props}>

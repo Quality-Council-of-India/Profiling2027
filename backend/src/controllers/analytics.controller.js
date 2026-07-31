@@ -88,13 +88,8 @@ export async function rankings(req, res, next) {
   }
 }
 
-/** Hall of Recognition — per-role weekly stars + cumulative Overall Star Performer, aggregate roles only. */
+/** Hall of Recognition — per-role weekly stars + cumulative Overall Star Performer. Visible to every role. */
 export async function hallOfRecognition(req, res) {
-  if (analyticsScope(req.user) === "personal") {
-    return res.status(403).json({
-      error: "Your role has a personalised analytics view only — use /api/scores/:userId instead",
-    });
-  }
   const data = await getHallOfRecognition(req.user.project_id);
   res.json(data);
 }

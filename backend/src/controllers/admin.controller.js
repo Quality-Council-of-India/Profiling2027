@@ -1,3 +1,5 @@
+import bcrypt from "bcryptjs";
+import { z } from "zod";
 import { prisma } from "../utils/prisma.js";
 import { importRoster } from "../services/roster.js";
 import { computeScoresForWeek } from "../services/scoreEngine.js";
@@ -6,10 +8,11 @@ import { queryTable, TABLES } from "../services/rawData.js";
 import { buildEvaluationsExportWorkbook } from "../services/export.js";
 import { streamWorkbook } from "./export.controller.js";
 import { signAuthToken } from "../utils/jwt.js";
-import { publicUser } from "./auth.controller.js";
+import { publicUser, sendPasswordResetEmail } from "./auth.controller.js";
 import { ALL_ROLES, ROLES } from "../utils/roles.js";
 
 const EXPORTABLE_TABLES = ["self_evaluations", "peer_evaluations"];
+const setPasswordSchema = z.object({ password: z.string().min(8) });
 
 /**
  * "View portal as <role>" — lets Admin preview/test the app the way a real
@@ -107,7 +110,7 @@ export async function listUsers(req, res) {
   const users = await prisma.user.findMany({
     where: { project_id: req.user.project_id },
     orderBy: [{ is_active: "desc" }, { field: "asc" }, { role: "asc" }, { name: "asc" }],
-    select: { id: true, name: true, email: true, role: true, field: true, is_active: true },
+    select: { id: true, name: true, email: true, role: true, field: true, photo_url: true, is_active: true },
   });
   res.json({ users });
 }
@@ -138,6 +141,45 @@ export async function setUserActive(req, res) {
   const { mappingsCreated } = await regeneratePeerMappings(req.user.project_id);
 
   res.json({ user: updated, mappingsCreated });
+}
+
+/**
+ * Directly sets a user's password — the only way an Admin can act on a
+ * password, alongside sendUserPasswordReset below. Existing passwords are
+ * bcrypt hashes and are never readable, viewable, or exportable by anyone,
+ * including Admin — there is no "view password" capability, by design.
+ */
+export async function setUserPassword(req, res, next) {
+  try {
+    const userId = Number(req.params.id);
+    const { password } = setPasswordSchema.parse(req.body);
+
+    const user = await prisma.user.findFirst({ where: { id: userId, project_id: req.user.project_id } });
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    const password_hash = await bcrypt.hash(password, 12);
+    await prisma.user.update({ where: { id: userId }, data: { password_hash } });
+    res.json({ message: `Password updated for ${user.name}.` });
+  } catch (err) {
+    if (err.name === "ZodError") {
+      return res.status(400).json({ error: "Password must be at least 8 characters" });
+    }
+    next(err);
+  }
+}
+
+/** Sends the same self-service reset-link email, on the Admin's behalf, for a specific user. */
+export async function sendUserPasswordReset(req, res, next) {
+  try {
+    const userId = Number(req.params.id);
+    const user = await prisma.user.findFirst({ where: { id: userId, project_id: req.user.project_id } });
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    await sendPasswordResetEmail(user);
+    res.json({ message: `Reset link emailed to ${user.email}.` });
+  } catch (err) {
+    next(err);
+  }
 }
 
 /** Lists the tables the raw-data browser can show. */

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { analyticsApi } from "../api/endpoints.js";
 import { Card, Spinner, ErrorBanner, EmptyState } from "./ui.jsx";
@@ -63,13 +64,37 @@ function RecognitionCell({ winner, isOverall = false }) {
   const score = isOverall ? winner.avgTotalPeer : winner.totalPeer;
   return (
     <td className="px-3 py-2.5">
-      <div className="flex items-baseline gap-1.5">
-        <span className="font-medium text-slate-800">{winner.name}</span>
-        <span className="text-xs font-mono tabular-nums" style={{ color: ACCENT }}>
-          {score.toFixed(1)}
-        </span>
+      <div className="flex items-center gap-2">
+        <WinnerPhoto photoUrl={winner.photo_url} name={winner.name} />
+        <div>
+          <div className="flex items-baseline gap-1.5">
+            <span className="font-medium text-slate-800">{winner.name}</span>
+            <span className="text-xs font-mono tabular-nums" style={{ color: ACCENT }}>
+              {score.toFixed(1)}
+            </span>
+          </div>
+          {winner.field && <span className="text-[11px] text-slate-400">{winner.field}</span>}
+        </div>
       </div>
-      {winner.field && <span className="text-[11px] text-slate-400">{winner.field}</span>}
     </td>
+  );
+}
+
+function WinnerPhoto({ photoUrl, name }) {
+  const [failed, setFailed] = useState(false);
+  if (photoUrl && !failed) {
+    return (
+      <img
+        src={photoUrl}
+        alt={name}
+        className="w-8 h-8 rounded-full object-cover flex-shrink-0 ring-1 ring-slate-200"
+        onError={() => setFailed(true)}
+      />
+    );
+  }
+  return (
+    <div className="w-8 h-8 rounded-full bg-nav/10 text-nav text-xs font-display font-bold flex items-center justify-center flex-shrink-0">
+      {name?.charAt(0).toUpperCase() || "?"}
+    </div>
   );
 }

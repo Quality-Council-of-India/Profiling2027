@@ -9,6 +9,8 @@ import {
   importRosterHandler,
   listUsers,
   setUserActive,
+  setUserPassword,
+  sendUserPasswordReset,
   listRawTables,
   getRawTable,
   exportRawTable,
@@ -41,6 +43,8 @@ router.post(
 );
 router.get("/users", authenticate, requireRole(ROLES.ADMIN), listUsers);
 router.patch("/users/:id/active", authenticate, requireRole(ROLES.ADMIN), setUserActive);
+router.patch("/users/:id/password", authenticate, requireRole(ROLES.ADMIN), setUserPassword);
+router.post("/users/:id/send-reset", authenticate, requireRole(ROLES.ADMIN), sendUserPasswordReset);
 router.get("/data", authenticate, requireRole(ROLES.ADMIN), listRawTables);
 router.get("/data/:table", authenticate, requireRole(ROLES.ADMIN), getRawTable);
 router.get("/data/:table/export", authenticate, requireRole(ROLES.ADMIN), exportRawTable);

@@ -35,13 +35,30 @@ const COLUMNS = [
   { header: "SAPA Factor", key: "sapa_factor", width: 12 },
   { header: "Problem Solving (Self)", key: "self_problem_solving", width: 16 },
   { header: "Problem Solving (Peer)", key: "peer_problem_solving", width: 22 },
+  { header: "Problem Reason (Self)", key: "self_problem_reason", width: 30 },
+  { header: "Problem Reason (Peer)", key: "peer_problem_reason", width: 36 },
+  { header: "Strengths Tags (Self)", key: "self_strengths_tags", width: 30 },
+  { header: "Strengths Tags (Peer)", key: "peer_strengths_tags", width: 40 },
   { header: "Strength (Self)", key: "self_strength", width: 34 },
   { header: "Strength (Peer)", key: "peer_strength", width: 40 },
+  { header: "Weakness Tags (Self)", key: "self_weakness_tags", width: 30 },
+  { header: "Weakness Tags (Peer)", key: "peer_weakness_tags", width: 40 },
   { header: "Weakness (Self)", key: "self_weakness", width: 34 },
   { header: "Weakness (Peer)", key: "peer_weakness", width: 40 },
 ];
 
-const WRAPPING_KEYS = ["self_strength", "peer_strength", "self_weakness", "peer_weakness"];
+const WRAPPING_KEYS = [
+  "self_problem_reason",
+  "peer_problem_reason",
+  "self_strengths_tags",
+  "peer_strengths_tags",
+  "self_strength",
+  "peer_strength",
+  "self_weakness_tags",
+  "peer_weakness_tags",
+  "self_weakness",
+  "peer_weakness",
+];
 
 function applyWrap(row) {
   for (const key of WRAPPING_KEYS) {
@@ -87,8 +104,14 @@ export async function buildWeekScoreWorkbook(projectId, weekId) {
       sapa_factor: s.sapa_factor === null ? "" : Number(s.sapa_factor),
       self_problem_solving: subj?.selfProblemSolving || "",
       peer_problem_solving: subj?.peerProblemSolving || "",
+      self_problem_reason: subj?.selfProblemReason || "",
+      peer_problem_reason: subj?.peerProblemReason || "",
+      self_strengths_tags: subj?.selfStrengthsTags || "",
+      peer_strengths_tags: subj?.peerStrengthsTags || "",
       self_strength: subj?.selfStrength || "",
       peer_strength: subj?.peerStrength || "",
+      self_weakness_tags: subj?.selfWeaknessTags || "",
+      peer_weakness_tags: subj?.peerWeaknessTags || "",
       self_weakness: subj?.selfWeakness || "",
       peer_weakness: subj?.peerWeakness || "",
     });
@@ -141,10 +164,20 @@ export async function buildCombinedScoreWorkbook(projectId) {
     let selfNotSatisfied = 0;
     let peerSatisfied = 0;
     let peerNotSatisfied = 0;
+    const selfProblemReasonBlocks = [];
+    const peerProblemReasonBlocks = [];
     const selfStrengthBlocks = [];
     const peerStrengthBlocks = [];
     const selfWeaknessBlocks = [];
     const peerWeaknessBlocks = [];
+    // Tags are compact by nature (unlike free-text comments), so — unlike
+    // the per-week "-> WEEK N" blocks above — these sum frequencies across
+    // every week into one cumulative count per tag rather than repeating a
+    // growing list of per-week blocks.
+    const selfStrengthsFreq = new Map();
+    const peerStrengthsFreq = new Map();
+    const selfWeaknessFreq = new Map();
+    const peerWeaknessFreq = new Map();
 
     for (const s of scored) {
       const subj = subjectiveByWeek.get(s.week_id)?.get(u.id);
@@ -155,10 +188,17 @@ export async function buildCombinedScoreWorkbook(projectId) {
       peerNotSatisfied += subj.peerNotSatisfiedCount;
 
       const label = `-> WEEK ${s.week.week_number}`;
+      selfProblemReasonBlocks.push(`${label}\n\n${subj.selfProblemReason}`);
+      peerProblemReasonBlocks.push(`${label}\n\n${subj.peerProblemReason}`);
       selfStrengthBlocks.push(`${label}\n\n${subj.selfStrength}`);
       peerStrengthBlocks.push(`${label}\n\n${subj.peerStrength}`);
       selfWeaknessBlocks.push(`${label}\n\n${subj.selfWeakness}`);
       peerWeaknessBlocks.push(`${label}\n\n${subj.peerWeakness}`);
+
+      addRawTags(selfStrengthsFreq, subj.selfStrengthsTagsRaw);
+      addFrequencyEntries(peerStrengthsFreq, subj.peerStrengthsFrequency);
+      addRawTags(selfWeaknessFreq, subj.selfWeaknessTagsRaw);
+      addFrequencyEntries(peerWeaknessFreq, subj.peerWeaknessFrequency);
     }
 
     const row = sheet.addRow({
@@ -184,8 +224,14 @@ export async function buildCombinedScoreWorkbook(projectId) {
         selfSatisfied + selfNotSatisfied > 0 ? `Satisfied: ${selfSatisfied} | Not Satisfied: ${selfNotSatisfied}` : "",
       peer_problem_solving:
         peerSatisfied + peerNotSatisfied > 0 ? `Satisfied: ${peerSatisfied} | Not Satisfied: ${peerNotSatisfied}` : "",
+      self_problem_reason: selfProblemReasonBlocks.join("\n"),
+      peer_problem_reason: peerProblemReasonBlocks.join("\n"),
+      self_strengths_tags: formatFrequencyMap(selfStrengthsFreq),
+      peer_strengths_tags: formatFrequencyMap(peerStrengthsFreq),
       self_strength: selfStrengthBlocks.join("\n"),
       peer_strength: peerStrengthBlocks.join("\n"),
+      self_weakness_tags: formatFrequencyMap(selfWeaknessFreq),
+      peer_weakness_tags: formatFrequencyMap(peerWeaknessFreq),
       self_weakness: selfWeaknessBlocks.join("\n"),
       peer_weakness: peerWeaknessBlocks.join("\n"),
       weeks: scored.length,
@@ -199,6 +245,21 @@ export async function buildCombinedScoreWorkbook(projectId) {
 
 function round2(n) {
   return Math.round(n * 100) / 100;
+}
+
+function addRawTags(freqMap, tags) {
+  for (const tag of tags || []) freqMap.set(tag, (freqMap.get(tag) || 0) + 1);
+}
+
+function addFrequencyEntries(freqMap, entries) {
+  for (const { tag, count } of entries || []) freqMap.set(tag, (freqMap.get(tag) || 0) + count);
+}
+
+function formatFrequencyMap(freqMap) {
+  return [...freqMap.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([tag, count]) => `${tag} (${count})`)
+    .join(", ");
 }
 
 const RAW_EVAL_WRAP_KEYS = ["strengths_tags", "weakness_tags", "strength_comment", "weakness_comment", "problem_reason"];

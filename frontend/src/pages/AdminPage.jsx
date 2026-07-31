@@ -6,6 +6,7 @@ import { weeksApi, adminApi, downloadExport } from "../api/endpoints.js";
 import { Card, Spinner, ErrorBanner, EmptyState, RefreshButton } from "../components/ui.jsx";
 import { ROLE_LABELS } from "../utils/constants.js";
 import RosterManager from "../components/RosterManager.jsx";
+import PasswordManager from "../components/PasswordManager.jsx";
 import RawDataBrowser from "../components/RawDataBrowser.jsx";
 
 const PREVIEWABLE_ROLES = ["profiler", "group_anchor", "casu_anchor", "casu_lead", "project_lead"];
@@ -149,8 +150,10 @@ export default function AdminPage() {
         <RosterManager />
       </div>
 
+      <PasswordManager />
+
       <Card className="p-5">
-        <h2 className="text-sm font-semibold text-slate-800 mb-3">Export Data</h2>
+        <h2 className="text-sm font-semibold text-slate-800 mb-3">Export Scoresheets</h2>
         {exportError && <ErrorBanner message={exportError} />}
         <div className="flex flex-wrap gap-3 mt-2">
           {weeks.filter((w) => w.status !== "upcoming").map((w) => (
@@ -160,7 +163,7 @@ export default function AdminPage() {
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-300 text-sm text-slate-700 hover:bg-slate-50 hover:border-slate-400 transition-standard"
             >
               <DownloadIcon />
-              Export {w.label} (.xlsx)
+              Export Scores for {w.label} (.xlsx)
             </button>
           ))}
           <button
