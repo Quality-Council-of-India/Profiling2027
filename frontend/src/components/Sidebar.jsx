@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 import { ROLE_LABELS, AZURE } from "../utils/constants.js";
+import AboutProfileModal from "./AboutProfileModal.jsx";
 import {
   DashboardIcon,
   EvaluateIcon,
@@ -9,12 +11,14 @@ import {
   ComplianceIcon,
   AnalyticsIcon,
   TrophyIcon,
+  ConcernIcon,
   AdminIcon,
 } from "./icons.jsx";
 
 export default function Sidebar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [showProfile, setShowProfile] = useState(false);
 
   // Navigate explicitly (with no `state`) instead of letting ProtectedRoute's
   // post-logout redirect carry the current path forward as `state.from` —
@@ -40,7 +44,9 @@ export default function Sidebar() {
     { to: "/compliance", label: "Compliance", Icon: ComplianceIcon, show: isLead || isAdmin },
     { to: "/analytics", label: "Analytics", Icon: AnalyticsIcon, show: true },
     { to: "/hall-of-recognition", label: "Hall of Recognition", Icon: TrophyIcon, show: true },
+    { to: "/concerns", label: "Raise Your Concern", Icon: ConcernIcon, show: !isAdmin },
     { to: "/admin", label: "Admin Panel", Icon: AdminIcon, show: isAdmin },
+    { to: "/admin/grievances", label: "Grievances", Icon: ConcernIcon, show: isAdmin },
   ];
 
   return (
@@ -86,13 +92,16 @@ export default function Sidebar() {
           ))}
       </nav>
       <div className="p-3 border-t border-white/10">
-        <div className="px-3 py-2 mb-2">
+        <button
+          onClick={() => setShowProfile(true)}
+          className="w-full text-left px-3 py-2 mb-2 rounded-lg hover:bg-white/5 transition-standard"
+        >
           <p className="text-white text-sm font-medium truncate">{user.name}</p>
           <p className="text-xs truncate" style={{ color: AZURE }}>
             {ROLE_LABELS[user.role]}
             {user.field ? ` · ${user.field}` : ""}
           </p>
-        </div>
+        </button>
         <button
           onClick={handleLogout}
           className="w-full px-3 py-1.5 rounded-lg text-white/50 hover:text-white hover:bg-white/10 text-xs transition-standard"
@@ -100,6 +109,8 @@ export default function Sidebar() {
           Sign Out
         </button>
       </div>
+
+      {showProfile && <AboutProfileModal user={user} onClose={() => setShowProfile(false)} />}
     </div>
   );
 }

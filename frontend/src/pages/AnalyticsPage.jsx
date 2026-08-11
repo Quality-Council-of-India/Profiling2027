@@ -5,7 +5,7 @@ import { weeksApi, scoresApi, analyticsApi } from "../api/endpoints.js";
 import { Card, StatCard, Spinner, ErrorBanner, EmptyState, RefreshButton } from "../components/ui.jsx";
 import WeekSelector from "../components/WeekSelector.jsx";
 import RankingCard from "../components/RankingCard.jsx";
-import RadarComparison from "../components/charts/RadarComparison.jsx";
+import PeerScoreTrendChart from "../components/charts/PeerScoreTrendChart.jsx";
 import HeatmapGrid from "../components/charts/HeatmapGrid.jsx";
 import QuadrantPlot from "../components/charts/QuadrantPlot.jsx";
 import SAPAGauge from "../components/charts/SAPAGauge.jsx";
@@ -49,6 +49,12 @@ export default function AnalyticsPage() {
     queryFn: () => scoresApi.trend(user.id),
   });
   const allRows = trendQuery.data?.trend || [];
+
+  const peerTrendQuery = useQuery({
+    queryKey: ["peerTrend", user.id],
+    queryFn: () => analyticsApi.peerTrend(user.id),
+  });
+  const peerTrendRows = peerTrendQuery.data?.trend || [];
   const selectedWeekNums = weeks.filter((w) => selectedWeekIds.includes(w.id)).map((w) => w.week_number);
   const selectedRows = allRows.filter((r) => selectedWeekNums.includes(r.week_number));
   const summary = averageRows(selectedRows);
@@ -102,6 +108,7 @@ export default function AnalyticsPage() {
           <RefreshButton
             onClick={() => {
               queryClient.invalidateQueries({ queryKey: ["trend"] });
+              queryClient.invalidateQueries({ queryKey: ["peerTrend"] });
               queryClient.invalidateQueries({ queryKey: ["rankings"] });
               queryClient.invalidateQueries({ queryKey: ["heatmap"] });
               queryClient.invalidateQueries({ queryKey: ["sapa"] });
@@ -133,34 +140,45 @@ export default function AnalyticsPage() {
             </Card>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <Card interactive className="p-5">
-              <h2 className="text-sm font-semibold text-slate-800 mb-2">Self vs Peer — {rangeLabel}</h2>
-              <RadarComparison computed={summary} height={260} />
-            </Card>
-            <Card interactive className="p-5">
-              <h2 className="text-sm font-semibold text-slate-800 mb-3">Per-Parameter Breakdown</h2>
-              <div className="space-y-3">
-                {PARAM_LABELS.map((label, i) => {
-                  const key = ["sincerity", "team_spirit", "knowledge", "quantity", "quality"][i];
-                  const self = summary[`${key}_self`];
-                  const peer = summary[`${key}_peer`];
-                  return (
-                    <div key={label}>
-                      <div className="flex justify-between text-xs text-slate-600 mb-1">
-                        <span>{label}</span>
-                        <span className="tabular-nums"><span style={{ color: ACCENT }}>{self.toFixed(1)}</span> self · <span style={{ color: NAV }}>{peer.toFixed(1)}</span> peer</span>
-                      </div>
-                      <div className="flex gap-1 h-1.5">
-                        <div className="flex-1 bg-slate-100 rounded-full overflow-hidden"><div className="h-full rounded-full" style={{ width: `${(self / 5) * 100}%`, background: ACCENT }} /></div>
-                        <div className="flex-1 bg-slate-100 rounded-full overflow-hidden"><div className="h-full rounded-full" style={{ width: `${(peer / 5) * 100}%`, background: NAV }} /></div>
-                      </div>
+          <Card interactive className="p-5">
+            <h2 className="text-sm font-semibold text-slate-800 mb-1">Total Peer Score — Week on Week</h2>
+            <p className="text-xs text-slate-500 mb-3">
+              Your Total Peer Score each week, against your sub-field's average and the overall team's average for
+              that same week.
+            </p>
+            {peerTrendQuery.isLoading ? (
+              <Spinner />
+            ) : peerTrendQuery.isError ? (
+              <ErrorBanner message="Failed to load weekly trend" />
+            ) : peerTrendRows.length === 0 ? (
+              <p className="text-sm text-slate-400 text-center py-8">No weeks have opened yet.</p>
+            ) : (
+              <PeerScoreTrendChart trend={peerTrendRows} fieldLabel={user.field} />
+            )}
+          </Card>
+
+          <Card interactive className="p-5">
+            <h2 className="text-sm font-semibold text-slate-800 mb-3">Per-Parameter Breakdown — {rangeLabel}</h2>
+            <div className="space-y-3">
+              {PARAM_LABELS.map((label, i) => {
+                const key = ["sincerity", "team_spirit", "knowledge", "quantity", "quality"][i];
+                const self = summary[`${key}_self`];
+                const peer = summary[`${key}_peer`];
+                return (
+                  <div key={label}>
+                    <div className="flex justify-between text-xs text-slate-600 mb-1">
+                      <span>{label}</span>
+                      <span className="tabular-nums"><span style={{ color: ACCENT }}>{self.toFixed(1)}</span> self · <span style={{ color: NAV }}>{peer.toFixed(1)}</span> peer</span>
                     </div>
-                  );
-                })}
-              </div>
-            </Card>
-          </div>
+                    <div className="flex gap-1 h-1.5">
+                      <div className="flex-1 bg-slate-100 rounded-full overflow-hidden"><div className="h-full rounded-full" style={{ width: `${(self / 5) * 100}%`, background: ACCENT }} /></div>
+                      <div className="flex-1 bg-slate-100 rounded-full overflow-hidden"><div className="h-full rounded-full" style={{ width: `${(peer / 5) * 100}%`, background: NAV }} /></div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
         </>
       )}
 

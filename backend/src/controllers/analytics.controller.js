@@ -1,11 +1,12 @@
 import { prisma } from "../utils/prisma.js";
-import { analyticsScope } from "../services/access.js";
+import { analyticsScope, canViewUser } from "../services/access.js";
 import {
   getFieldHeatmap,
   getSapaDistribution,
   getQuadrantData,
   getRankings,
   getHallOfRecognition,
+  getPeerScoreTrendComparison,
 } from "../services/analytics.js";
 
 async function requireAggregateAccess(req, res) {
@@ -86,6 +87,24 @@ export async function rankings(req, res, next) {
   } catch (err) {
     next(err);
   }
+}
+
+/**
+ * Week-on-week Total Peer Score comparison for the Analytics tab's line
+ * graph — the requester's own score vs their sub-field average vs the
+ * overall team average, one point per open/closed week.
+ */
+export async function peerTrend(req, res) {
+  const userId = Number(req.params.userId);
+  const target = await prisma.user.findFirst({
+    where: { id: userId, project_id: req.user.project_id },
+  });
+  if (!target) return res.status(404).json({ error: "User not found" });
+  if (!canViewUser(req.user, target)) {
+    return res.status(403).json({ error: "You cannot view this user's scores" });
+  }
+  const trend = await getPeerScoreTrendComparison(req.user.project_id, target);
+  res.json({ user: { id: target.id, name: target.name, field: target.field }, trend });
 }
 
 /** Hall of Recognition — per-role weekly stars + cumulative Overall Star Performer. Visible to every role. */

@@ -41,6 +41,26 @@ enum ProblemSolving {
   not_satisfied
 }
 
+enum TicketCategory {
+  password_email_change
+  portal_bug
+  feature_not_working
+  other
+}
+
+enum TicketStatus {
+  open
+  in_progress
+  resolved
+}
+
+enum NotificationType {
+  ticket_created
+  ticket_resolved
+  week_opened
+  week_closed
+}
+
 // 3.1.1 projects — one record per annual cycle (Padma 2027, Padma 2028, ...)
 model Project {
   id          Int       @id @default(autoincrement())
@@ -54,6 +74,8 @@ model Project {
   users         User[]
   weeks         Week[]
   peer_mappings PeerMapping[]
+  tickets       Ticket[]
+  notifications Notification[]
 
   @@map("projects")
 }
@@ -78,6 +100,8 @@ model User {
   evaluationsGiven    Evaluation[]     @relation("EvalEvaluator")
   evaluationsReceived Evaluation[]     @relation("EvalEvaluatee")
   computedScores      ComputedScore[]
+  tickets             Ticket[]
+  notifications       Notification[]
 
   @@index([project_id])
   @@map("users")
@@ -179,4 +203,48 @@ model ComputedScore {
 
   @@unique([week_id, user_id])
   @@map("computed_scores")
+}
+
+// Grievance Redressal — "Raise Your Concern" tickets any non-admin user can
+// file (password/email changes, portal bugs, feature issues, or anything
+// else); Admin triages and responds from the Grievances tab.
+model Ticket {
+  id             Int            @id @default(autoincrement())
+  project_id     Int
+  user_id        Int
+  category       TicketCategory
+  subject        String         @db.VarChar(200)
+  description    String
+  status         TicketStatus   @default(open)
+  admin_response String?
+  created_at     DateTime       @default(now())
+  updated_at     DateTime       @updatedAt
+  resolved_at    DateTime?
+
+  project Project @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([project_id, status])
+  @@index([user_id])
+  @@map("tickets")
+}
+
+// Bell-icon notifications — Admin gets one per new ticket, everyone gets one
+// when a week opens/closes, and a ticket's filer gets one when it's resolved.
+model Notification {
+  id         Int              @id @default(autoincrement())
+  project_id Int
+  user_id    Int
+  type       NotificationType
+  title      String           @db.VarChar(200)
+  body       String?
+  link       String?          @db.VarChar(300)
+  is_read    Boolean          @default(false)
+  created_at DateTime         @default(now())
+
+  project Project @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, is_read])
+  @@map("notifications")
 }
