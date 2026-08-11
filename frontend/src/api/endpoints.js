@@ -38,6 +38,7 @@ export const analyticsApi = {
   quadrant: (weekId) => api.get(`/analytics/quadrant/${weekId}`).then((r) => r.data),
   rankings: (weekIds) => api.get(`/analytics/rankings?weeks=${weekIds.join(",")}`).then((r) => r.data),
   hallOfRecognition: () => api.get("/analytics/hall-of-recognition").then((r) => r.data),
+  peerTrend: (userId) => api.get(`/analytics/peer-trend/${userId}`).then((r) => r.data),
 };
 
 export const adminApi = {

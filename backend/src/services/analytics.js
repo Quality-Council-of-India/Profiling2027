@@ -222,6 +222,59 @@ export async function getRankings(projectId, requester, weekIds) {
   return { field, overall };
 }
 
+function round2(n) {
+  return Math.round(n * 100) / 100;
+}
+
+/**
+ * Week-on-week Total Peer Score comparison for the Analytics tab's line
+ * graph: the requester's own score vs their sub-field's average vs the
+ * whole (non-admin) team's average, one point per open/closed week.
+ * Field/overall averages only count users who already have a
+ * computed_scores row for that week (mirrors getFieldHeatmap) — a week
+ * nobody's been scored in yet simply produces a null average, not a 0.
+ */
+export async function getPeerScoreTrendComparison(projectId, targetUser) {
+  const weeks = await prisma.week.findMany({
+    where: { project_id: projectId, status: { not: "upcoming" } },
+    orderBy: { week_number: "asc" },
+  });
+  if (weeks.length === 0) return [];
+  const weekIds = weeks.map((w) => w.id);
+
+  const scores = await prisma.computedScore.findMany({
+    where: {
+      week_id: { in: weekIds },
+      user: { project_id: projectId, is_active: true, role: { not: ROLES.ADMIN } },
+    },
+    select: { week_id: true, user_id: true, total_peer: true, user: { select: { field: true } } },
+  });
+
+  const byWeek = new Map();
+  for (const s of scores) {
+    if (!byWeek.has(s.week_id)) byWeek.set(s.week_id, []);
+    byWeek.get(s.week_id).push(s);
+  }
+
+  return weeks.map((w) => {
+    const rows = byWeek.get(w.id) || [];
+    const mine = rows.find((r) => r.user_id === targetUser.id);
+    const fieldRows = targetUser.field ? rows.filter((r) => r.user.field === targetUser.field) : [];
+    const fieldAvg = fieldRows.length
+      ? round2(fieldRows.reduce((a, r) => a + Number(r.total_peer), 0) / fieldRows.length)
+      : null;
+    const overallAvg = rows.length
+      ? round2(rows.reduce((a, r) => a + Number(r.total_peer), 0) / rows.length)
+      : null;
+    return {
+      week: { id: w.id, label: w.label, week_number: w.week_number },
+      selfTotalPeer: mine ? Number(mine.total_peer) : null,
+      fieldAvgTotalPeer: fieldAvg,
+      overallAvgTotalPeer: overallAvg,
+    };
+  });
+}
+
 const HALL_OF_RECOGNITION_ROLES = [ROLES.PROFILER, ROLES.GROUP_ANCHOR, ROLES.CASU_ANCHOR];
 
 /**
