@@ -1,5 +1,6 @@
 import { Outlet, useNavigate } from "react-router-dom";
 import Sidebar from "./Sidebar.jsx";
+import TopBar from "./TopBar.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { ROLE_LABELS } from "../utils/constants.js";
 
@@ -30,11 +31,14 @@ export default function Layout() {
       )}
       <div className="flex flex-1 overflow-hidden">
         <Sidebar />
-        <main className="flex-1 overflow-y-auto bg-slate-50">
-          <div className="max-w-[1400px] mx-auto p-6 lg:p-8">
-            <Outlet />
-          </div>
-        </main>
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <TopBar />
+          <main className="flex-1 overflow-y-auto bg-slate-50">
+            <div className="max-w-[1400px] mx-auto p-6 lg:p-8">
+              <Outlet />
+            </div>
+          </main>
+        </div>
       </div>
     </div>
   );

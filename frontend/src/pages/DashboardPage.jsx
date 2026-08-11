@@ -1,7 +1,8 @@
+import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
-import { weeksApi, evaluationsApi, scoresApi } from "../api/endpoints.js";
+import { weeksApi, evaluationsApi, scoresApi, downloadExport } from "../api/endpoints.js";
 import { Card, StatCard, Spinner, ErrorBanner, RefreshButton } from "../components/ui.jsx";
 import RadarComparison from "../components/charts/RadarComparison.jsx";
 import { ComplianceIcon, AnalyticsIcon, AdminIcon } from "../components/icons.jsx";
@@ -96,6 +97,22 @@ function QuickLink({ to, Icon, title, desc }) {
 function ProfessionalSummary({ user, weeks, openWeek }) {
   const pendingQuery = useQuery({ queryKey: ["pending"], queryFn: evaluationsApi.pending, retry: false });
   const latestScoredWeek = [...weeks].reverse().find((w) => w.status !== "upcoming");
+  const latestClosedWeek = [...weeks].reverse().find((w) => w.status === "closed");
+  const [scorecardError, setScorecardError] = useState("");
+  const [downloadingScorecard, setDownloadingScorecard] = useState(false);
+
+  async function handleDownloadScorecard() {
+    if (!latestClosedWeek) return;
+    setScorecardError("");
+    setDownloadingScorecard(true);
+    try {
+      await downloadExport(`/export/scorecard/${latestClosedWeek.id}`, `${user.name.replace(/\s+/g, "_")}_${latestClosedWeek.label.replace(/\s+/g, "_")}_Scorecard.docx`);
+    } catch (err) {
+      setScorecardError(err.response?.data?.error || "Failed to generate scorecard");
+    } finally {
+      setDownloadingScorecard(false);
+    }
+  }
 
   const scoreQuery = useQuery({
     queryKey: ["score", user.id, latestScoredWeek?.id],
@@ -126,6 +143,25 @@ function ProfessionalSummary({ user, weeks, openWeek }) {
           sub={latestScoredWeek ? `Received in ${latestScoredWeek.label}` : ""}
         />
       </div>
+
+      {latestClosedWeek && (
+        <Card className="p-4 flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <p className="text-sm font-medium text-slate-800">Your Performance Scorecard</p>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Current vs previous week, cumulative average, and feedback highlights — as a downloadable report.
+            </p>
+            {scorecardError && <p className="text-xs text-red-600 mt-1">{scorecardError}</p>}
+          </div>
+          <button
+            onClick={handleDownloadScorecard}
+            disabled={downloadingScorecard}
+            className="px-3.5 py-2 rounded-lg text-white text-xs font-medium bg-nav hover:bg-nav-deep disabled:opacity-50 transition-standard whitespace-nowrap"
+          >
+            {downloadingScorecard ? "Generating…" : `Download Scorecard (${latestClosedWeek.label})`}
+          </button>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <Card className="lg:col-span-2 p-5">

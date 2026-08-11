@@ -1,5 +1,6 @@
 import { prisma } from "../utils/prisma.js";
 import { buildWeekScoreWorkbook, buildCombinedScoreWorkbook } from "../services/export.js";
+import { buildScorecardDocx } from "../services/scorecard.js";
 
 // Buffered rather than streamed to res — safer across deployment targets
 // (works identically under plain Node, Docker, and Vercel's serverless
@@ -33,6 +34,27 @@ export async function exportCombinedScores(req, res, next) {
   try {
     const { workbook, filename } = await buildCombinedScoreWorkbook(req.user.project_id);
     await streamWorkbook(res, workbook, filename);
+  } catch (err) {
+    next(err);
+  }
+}
+
+/** Own MIS scorecard (.docx) for a closed week — see services/scorecard.js. */
+export async function exportScorecard(req, res, next) {
+  try {
+    const weekId = Number(req.params.weekId);
+    const week = await prisma.week.findFirst({ where: { id: weekId, project_id: req.user.project_id } });
+    if (!week) return res.status(404).json({ error: "Week not found" });
+    if (week.status !== "closed") {
+      return res.status(400).json({ error: `${week.label} hasn't closed yet — the scorecard becomes available once Admin closes it.` });
+    }
+
+    const result = await buildScorecardDocx(req.user.project_id, req.user, weekId);
+    if (!result) return res.status(404).json({ error: "No scorecard available for this week yet" });
+
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+    res.setHeader("Content-Disposition", `attachment; filename="${result.filename}"`);
+    res.end(result.buffer);
   } catch (err) {
     next(err);
   }

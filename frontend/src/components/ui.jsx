@@ -92,6 +92,35 @@ export function RefreshButton({ onClick, isFetching = false, label = "Refresh" }
   );
 }
 
+/** Simple centered overlay modal — click the backdrop or the × to close. */
+export function Modal({ title, onClose, children, widthClass = "max-w-lg" }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+      onClick={onClose}
+    >
+      <div
+        className={`bg-white rounded-xl shadow-xl w-full ${widthClass} max-h-[85vh] overflow-y-auto`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 sticky top-0 bg-white">
+          <h2 className="text-sm font-semibold text-slate-800">{title}</h2>
+          <button
+            onClick={onClose}
+            className="text-slate-400 hover:text-slate-600 transition-standard"
+            aria-label="Close"
+          >
+            <svg className="w-5 h-5" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+              <path d="M5 5l10 10M15 5L5 15" />
+            </svg>
+          </button>
+        </div>
+        <div className="p-5">{children}</div>
+      </div>
+    </div>
+  );
+}
+
 export function EmptyState({ icon = "○", title, message }) {
   return (
     <div className="flex flex-col items-center justify-center gap-2 py-12 text-center">

@@ -65,6 +65,25 @@ export const ROLE_COLORS = {
   profiler: "#6B7280",
 };
 
+export const TICKET_CATEGORY_LABELS = {
+  password_email_change: "Password / Email Change",
+  portal_bug: "Portal Not Working",
+  feature_not_working: "Functionality Not Working",
+  other: "Other",
+};
+
+export const TICKET_STATUS_LABELS = {
+  open: "Open",
+  in_progress: "In Progress",
+  resolved: "Resolved",
+};
+
+export const TICKET_STATUS_COLORS = {
+  open: "#E07B00",
+  in_progress: "#2563EB",
+  resolved: "#059669",
+};
+
 export const NAV = "#1F3864";
 export const ACCENT = "#E07B00";
 export const AZURE = "#A5C9EB";

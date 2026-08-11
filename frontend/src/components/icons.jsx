@@ -70,6 +70,24 @@ export function TrophyIcon(props) {
   );
 }
 
+export function ConcernIcon(props) {
+  return (
+    <svg viewBox="0 0 20 20" width="18" height="18" {...base} {...props}>
+      <path d="M2.5 5.5a2 2 0 012-2h11a2 2 0 012 2v6a2 2 0 01-2 2H8l-3.8 3v-3H4.5a2 2 0 01-2-2v-6z" />
+      <path d="M10 7.2v2.3M10 11.8v.1" />
+    </svg>
+  );
+}
+
+export function BellIcon(props) {
+  return (
+    <svg viewBox="0 0 20 20" width="18" height="18" {...base} {...props}>
+      <path d="M5 8.5a5 5 0 0110 0c0 2.3.6 3.6 1.4 4.6.3.4 0 1-.5 1H4.1c-.5 0-.8-.6-.5-1C4.4 12.1 5 10.8 5 8.5z" />
+      <path d="M8.2 16a1.8 1.8 0 003.6 0" />
+    </svg>
+  );
+}
+
 export function AdminIcon(props) {
   return (
     <svg viewBox="0 0 20 20" width="18" height="18" {...base} {...props}>

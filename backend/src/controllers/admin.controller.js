@@ -10,6 +10,7 @@ import { streamWorkbook } from "./export.controller.js";
 import { signAuthToken } from "../utils/jwt.js";
 import { publicUser, sendPasswordResetEmail } from "./auth.controller.js";
 import { ALL_ROLES, ROLES } from "../utils/roles.js";
+import { notify, getActiveNonAdminIds } from "../services/notifications.js";
 
 const EXPORTABLE_TABLES = ["self_evaluations", "peer_evaluations"];
 const setPasswordSchema = z.object({ password: z.string().min(8) });
@@ -77,6 +78,21 @@ export async function openWeek(req, res) {
   if (!week) return res.status(404).json({ error: "Week not found" });
 
   const updated = await prisma.week.update({ where: { id: weekId }, data: { status: "open" } });
+
+  const recipientIds = await getActiveNonAdminIds(req.user.project_id);
+  await notify(req.user.project_id, recipientIds, {
+    type: "week_opened",
+    title: `${updated.label} is now open`,
+    body: "Submit your Self-Evaluation and Peer Evaluations before the window closes.",
+    link: "/dashboard",
+    emailHtml: (u) => `
+      <p>Hi ${u.name},</p>
+      <p><strong>${updated.label}</strong> is now open on the Profiling 2027 Feedback Portal. Please log in and submit
+      your Self-Evaluation and Peer Evaluations before the window closes.</p>
+      <p>— QCI Core Team</p>
+    `,
+  });
+
   res.json({ week: updated });
 }
 
@@ -90,6 +106,21 @@ export async function closeWeek(req, res) {
   const updated = await prisma.week.update({ where: { id: weekId }, data: { status: "closed" } });
   // Final recompute on close so every professional (even non-responders) has a row.
   await computeScoresForWeek(weekId, req.user.project_id);
+
+  const recipientIds = await getActiveNonAdminIds(req.user.project_id);
+  await notify(req.user.project_id, recipientIds, {
+    type: "week_closed",
+    title: `${updated.label} is now closed`,
+    body: "Your scores for this week are final — check My Scores or Analytics.",
+    link: "/scores",
+    emailHtml: (u) => `
+      <p>Hi ${u.name},</p>
+      <p><strong>${updated.label}</strong> has closed on the Profiling 2027 Feedback Portal. Your scores for this
+      week are now final — check "My Scores" or "Analytics" to see them.</p>
+      <p>— QCI Core Team</p>
+    `,
+  });
+
   res.json({ week: updated });
 }
 

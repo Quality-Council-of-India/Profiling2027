@@ -10,6 +10,8 @@ import TeamPage from "./pages/TeamPage.jsx";
 import CompliancePage from "./pages/CompliancePage.jsx";
 import AnalyticsPage from "./pages/AnalyticsPage.jsx";
 import HallOfRecognitionPage from "./pages/HallOfRecognitionPage.jsx";
+import RaiseConcernPage from "./pages/RaiseConcernPage.jsx";
+import AdminGrievancesPage from "./pages/AdminGrievancesPage.jsx";
 import AdminPage from "./pages/AdminPage.jsx";
 
 export default function App() {
@@ -47,10 +49,26 @@ export default function App() {
         <Route path="/analytics" element={<AnalyticsPage />} />
         <Route path="/hall-of-recognition" element={<HallOfRecognitionPage />} />
         <Route
+          path="/concerns"
+          element={
+            <ProtectedRoute roles={["profiler", "group_anchor", "casu_anchor", "casu_lead", "project_lead"]}>
+              <RaiseConcernPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/admin"
           element={
             <ProtectedRoute roles={["admin"]}>
               <AdminPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/grievances"
+          element={
+            <ProtectedRoute roles={["admin"]}>
+              <AdminGrievancesPage />
             </ProtectedRoute>
           }
         />

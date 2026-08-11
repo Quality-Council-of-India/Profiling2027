@@ -9,6 +9,21 @@ export const authApi = {
 
 export const usersApi = {
   me: () => api.get("/users/me").then((r) => r.data.user),
+  myPeers: () => api.get("/users/me/peers").then((r) => r.data),
+};
+
+export const ticketsApi = {
+  create: (payload) => api.post("/tickets", payload).then((r) => r.data),
+  mine: () => api.get("/tickets/mine").then((r) => r.data.tickets),
+  listAll: (status) => api.get("/tickets", { params: status ? { status } : {} }).then((r) => r.data.tickets),
+  respond: (id, payload) => api.patch(`/tickets/${id}`, payload).then((r) => r.data),
+};
+
+export const notificationsApi = {
+  list: () => api.get("/notifications").then((r) => r.data.notifications),
+  unreadCount: () => api.get("/notifications/unread-count").then((r) => r.data.count),
+  markRead: (id) => api.patch(`/notifications/${id}/read`).then((r) => r.data),
+  markAllRead: () => api.patch("/notifications/read-all").then((r) => r.data),
 };
 
 export const weeksApi = {
