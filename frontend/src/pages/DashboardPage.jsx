@@ -129,8 +129,8 @@ function ProfessionalSummary({ user, weeks, openWeek }) {
   return (
     <>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Total Self Score" value={totalSelf.toFixed(1)} sub="Out of 25" />
-        <StatCard label="Total Peer Score" value={totalPeer.toFixed(1)} sub="Out of 25" />
+        <StatCard label="Total Self Score" value={totalSelf.toFixed(1)} sub="Out of 49" />
+        <StatCard label="Total Peer Score" value={totalPeer.toFixed(1)} sub="Out of 49" />
         <StatCard
           label="SAPA Factor"
           value={sapa !== null ? sapa.toFixed(2) : "—"}

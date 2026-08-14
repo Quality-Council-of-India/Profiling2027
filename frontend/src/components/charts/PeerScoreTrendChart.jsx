@@ -31,7 +31,7 @@ export default function PeerScoreTrendChart({ trend, fieldLabel, height = 280 })
       <LineChart data={data}>
         <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
         <XAxis dataKey="week" tick={{ fontSize: 11 }} />
-        <YAxis domain={[0, 25]} tick={{ fontSize: 11 }} />
+        <YAxis domain={[0, 49]} tick={{ fontSize: 11 }} />
         <Tooltip contentStyle={{ fontSize: 12 }} />
         <Legend iconSize={8} wrapperStyle={{ fontSize: 11 }} />
         <Line type="monotone" dataKey="My Total Peer Score" stroke={ACCENT} strokeWidth={2.5} dot={{ r: 3 }} connectNulls />
