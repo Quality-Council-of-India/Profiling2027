@@ -70,6 +70,41 @@ export function TrophyIcon(props) {
   );
 }
 
+export function SearchIcon(props) {
+  return (
+    <svg viewBox="0 0 20 20" width="18" height="18" {...base} {...props}>
+      <circle cx="8.5" cy="8.5" r="5.5" />
+      <path d="M16.5 16.5l-4-4" />
+    </svg>
+  );
+}
+
+export function AnchorIcon(props) {
+  return (
+    <svg viewBox="0 0 20 20" width="18" height="18" {...base} {...props}>
+      <circle cx="10" cy="4" r="1.6" />
+      <path d="M10 5.8V16M5.5 10H3M17 10h-2.5M4 13.5c0 3 2.7 4.8 6 5 3.3-.2 6-2 6-5" />
+      <path d="M6.5 8.2c-1 .6-1.7 1.3-2.5 1.8M13.5 8.2c1 .6 1.7 1.3 2.5 1.8" />
+    </svg>
+  );
+}
+
+export function ShieldIcon(props) {
+  return (
+    <svg viewBox="0 0 20 20" width="18" height="18" {...base} {...props}>
+      <path d="M10 2.3l6 2.2v5c0 4-2.6 6.9-6 8.2-3.4-1.3-6-4.2-6-8.2v-5l6-2.2z" />
+    </svg>
+  );
+}
+
+export function StarIcon(props) {
+  return (
+    <svg viewBox="0 0 20 20" width="18" height="18" {...base} {...props}>
+      <path d="M10 2.5l2.3 4.9 5.3.7-3.9 3.7 1 5.3-4.7-2.6-4.7 2.6 1-5.3-3.9-3.7 5.3-.7z" />
+    </svg>
+  );
+}
+
 export function ConcernIcon(props) {
   return (
     <svg viewBox="0 0 20 20" width="18" height="18" {...base} {...props}>

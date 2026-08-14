@@ -52,6 +52,7 @@ export const analyticsApi = {
   sapa: (weekId) => api.get(`/analytics/sapa/${weekId}`).then((r) => r.data),
   quadrant: (weekId) => api.get(`/analytics/quadrant/${weekId}`).then((r) => r.data),
   rankings: (weekIds) => api.get(`/analytics/rankings?weeks=${weekIds.join(",")}`).then((r) => r.data),
+  fieldStandings: (weekIds) => api.get(`/analytics/field-standings?weeks=${weekIds.join(",")}`).then((r) => r.data),
   hallOfRecognition: () => api.get("/analytics/hall-of-recognition").then((r) => r.data),
   peerTrend: (userId) => api.get(`/analytics/peer-trend/${userId}`).then((r) => r.data),
 };
@@ -74,6 +75,13 @@ export const adminApi = {
     api.patch(`/admin/users/${userId}/active`, { is_active }).then((r) => r.data),
   setUserPassword: (userId, password) =>
     api.patch(`/admin/users/${userId}/password`, { password }).then((r) => r.data),
+  uploadUserPhoto: (userId, blob) => {
+    const form = new FormData();
+    form.append("photo", blob, "photo.jpg");
+    return api
+      .patch(`/admin/users/${userId}/photo`, form, { headers: { "Content-Type": "multipart/form-data" } })
+      .then((r) => r.data);
+  },
   sendUserPasswordReset: (userId) => api.post(`/admin/users/${userId}/send-reset`).then((r) => r.data),
   rawTables: () => api.get("/admin/data").then((r) => r.data.tables),
   rawTable: (table, { page = 1, pageSize = 50, weekId } = {}) =>

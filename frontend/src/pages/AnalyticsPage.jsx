@@ -5,6 +5,7 @@ import { weeksApi, scoresApi, analyticsApi } from "../api/endpoints.js";
 import { Card, StatCard, Spinner, ErrorBanner, EmptyState, RefreshButton } from "../components/ui.jsx";
 import WeekSelector from "../components/WeekSelector.jsx";
 import RankingCard from "../components/RankingCard.jsx";
+import FieldStandingCard from "../components/FieldStandingCard.jsx";
 import PeerScoreTrendChart from "../components/charts/PeerScoreTrendChart.jsx";
 import HeatmapGrid from "../components/charts/HeatmapGrid.jsx";
 import QuadrantPlot from "../components/charts/QuadrantPlot.jsx";
@@ -65,6 +66,15 @@ export default function AnalyticsPage() {
     enabled: selectedWeekIds.length > 0,
   });
 
+  // Admin/CASU Lead/Project Lead don't belong to a single field, so "Standing
+  // in your field" is meaningless for them — show a field-vs-field
+  // leaderboard instead.
+  const fieldStandingsQuery = useQuery({
+    queryKey: ["fieldStandings", selectedWeekIds],
+    queryFn: () => analyticsApi.fieldStandings(selectedWeekIds),
+    enabled: selectedWeekIds.length > 0 && !user.field,
+  });
+
   // Aggregate (heatmap/SAPA/quadrant) views are inherently single-week —
   // use the most recent week among the current selection.
   const aggregateWeekId = [...selectedWeekIds].sort((a, b) => b - a)[0];
@@ -110,6 +120,7 @@ export default function AnalyticsPage() {
               queryClient.invalidateQueries({ queryKey: ["trend"] });
               queryClient.invalidateQueries({ queryKey: ["peerTrend"] });
               queryClient.invalidateQueries({ queryKey: ["rankings"] });
+              queryClient.invalidateQueries({ queryKey: ["fieldStandings"] });
               queryClient.invalidateQueries({ queryKey: ["heatmap"] });
               queryClient.invalidateQueries({ queryKey: ["sapa"] });
               queryClient.invalidateQueries({ queryKey: ["quadrant"] });
@@ -190,16 +201,24 @@ export default function AnalyticsPage() {
           <ErrorBanner message="Failed to load rankings" />
         ) : (
           <>
+            {user.field ? (
+              <RankingCard
+                title={`Standing in ${user.field} — ${rangeLabel}`}
+                myRank={rankingsQuery.data.field?.myRank}
+                total={rankingsQuery.data.field?.totalInField}
+                list={rankingsQuery.data.field?.list}
+                meId={user.id}
+                emptyLabel="Not enough data yet for this range."
+              />
+            ) : fieldStandingsQuery.isLoading ? (
+              <Spinner />
+            ) : fieldStandingsQuery.isError ? (
+              <ErrorBanner message="Failed to load field standings" />
+            ) : (
+              <FieldStandingCard title={`Field-Wise Standing — ${rangeLabel}`} standings={fieldStandingsQuery.data?.standings} />
+            )}
             <RankingCard
-              title={`Standing in ${user.field || "your field"} — ${rangeLabel}`}
-              myRank={rankingsQuery.data.field?.myRank}
-              total={rankingsQuery.data.field?.totalInField}
-              list={rankingsQuery.data.field?.list}
-              meId={user.id}
-              emptyLabel={user.field ? "Not enough data yet for this range." : "Leads and Admin aren't part of a single field."}
-            />
-            <RankingCard
-              title={`Overall Standing — ${rangeLabel}`}
+              title={`Team's Overall Standing — ${rangeLabel}`}
               myRank={rankingsQuery.data.overall?.myRank}
               total={rankingsQuery.data.overall?.totalOverall}
               list={rankingsQuery.data.overall?.list}

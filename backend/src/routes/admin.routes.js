@@ -16,6 +16,7 @@ import {
   exportRawTable,
   impersonateRole,
   unlockEvaluation,
+  uploadUserPhoto,
 } from "../controllers/admin.controller.js";
 
 const ROSTER_EXTENSIONS = [".csv", ".xlsx"];
@@ -27,6 +28,14 @@ const upload = multer({
     const ok = ROSTER_EXTENSIONS.some((ext) => file.originalname.toLowerCase().endsWith(ext));
     cb(ok ? null : new Error("Only .csv or .xlsx files are accepted"), ok);
   },
+});
+
+// Compressed client-side before upload (see PhotoUpload.jsx), so 800KB is
+// generous headroom for a ~200x200 JPEG — well under what bloats a
+// base64-in-Postgres row for a ~70-person roster.
+const uploadPhoto = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 800 * 1024 },
 });
 
 const router = Router();
@@ -44,6 +53,13 @@ router.post(
 router.get("/users", authenticate, requireRole(ROLES.ADMIN), listUsers);
 router.patch("/users/:id/active", authenticate, requireRole(ROLES.ADMIN), setUserActive);
 router.patch("/users/:id/password", authenticate, requireRole(ROLES.ADMIN), setUserPassword);
+router.patch(
+  "/users/:id/photo",
+  authenticate,
+  requireRole(ROLES.ADMIN),
+  uploadPhoto.single("photo"),
+  uploadUserPhoto
+);
 router.post("/users/:id/send-reset", authenticate, requireRole(ROLES.ADMIN), sendUserPasswordReset);
 router.get("/data", authenticate, requireRole(ROLES.ADMIN), listRawTables);
 router.get("/data/:table", authenticate, requireRole(ROLES.ADMIN), getRawTable);

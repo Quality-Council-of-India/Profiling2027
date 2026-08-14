@@ -213,6 +213,31 @@ export async function sendUserPasswordReset(req, res, next) {
   }
 }
 
+const PHOTO_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"];
+
+/**
+ * Admin uploads a user's photo (for the Hall of Recognition winner cards).
+ * Stored as a base64 data: URI directly in photo_url — there's no object
+ * storage (S3/Cloudinary) in this stack, and a handful of small compressed
+ * photos for a ~70-person roster is trivial for Postgres to hold as text.
+ */
+export async function uploadUserPhoto(req, res) {
+  const userId = Number(req.params.id);
+  if (!req.file) {
+    return res.status(400).json({ error: "Upload an image file under the 'photo' field" });
+  }
+  if (!PHOTO_MIME_TYPES.includes(req.file.mimetype)) {
+    return res.status(400).json({ error: "Only JPEG, PNG, or WEBP images are accepted" });
+  }
+
+  const user = await prisma.user.findFirst({ where: { id: userId, project_id: req.user.project_id } });
+  if (!user) return res.status(404).json({ error: "User not found" });
+
+  const photo_url = `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
+  const updated = await prisma.user.update({ where: { id: userId }, data: { photo_url } });
+  res.json({ user: { id: updated.id, photo_url: updated.photo_url } });
+}
+
 /** Lists the tables the raw-data browser can show. */
 export async function listRawTables(req, res) {
   res.json({ tables: TABLES });

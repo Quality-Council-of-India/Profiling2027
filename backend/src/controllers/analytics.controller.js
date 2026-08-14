@@ -5,6 +5,7 @@ import {
   getSapaDistribution,
   getQuadrantData,
   getRankings,
+  getFieldStandings,
   getHallOfRecognition,
   getPeerScoreTrendComparison,
 } from "../services/analytics.js";
@@ -84,6 +85,48 @@ export async function rankings(req, res, next) {
       weeks.map((w) => w.id)
     );
     res.json({ weeksUsed: weeks, ...data });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Field-Wise Standing — a leaderboard of fields, not individuals. For
+ * Admin/CASU Lead/Project Lead, who don't belong to a single field and so
+ * have no personal "standing in your field" to show.
+ * ?weeks=1,2,3 — one ID for a single week, several for an averaged view.
+ */
+export async function fieldStandings(req, res, next) {
+  try {
+    const scope = analyticsScope(req.user);
+    if (scope === "personal") {
+      return res.status(403).json({ error: "Your role has a personal field standing instead — use rankings" });
+    }
+    const weeksParam = req.query.weeks;
+    if (!weeksParam) {
+      return res.status(400).json({ error: "Provide one or more week IDs via ?weeks=1,2,3" });
+    }
+    const weekIds = String(weeksParam)
+      .split(",")
+      .map((s) => Number(s.trim()))
+      .filter((n) => Number.isInteger(n));
+    if (weekIds.length === 0) {
+      return res.status(400).json({ error: "No valid week IDs provided" });
+    }
+
+    const weeks = await prisma.week.findMany({
+      where: { id: { in: weekIds }, project_id: req.user.project_id },
+    });
+    if (weeks.length === 0) {
+      return res.status(404).json({ error: "No matching weeks found" });
+    }
+
+    const standings = await getFieldStandings(
+      req.user.project_id,
+      weeks.map((w) => w.id),
+      scope
+    );
+    res.json({ standings });
   } catch (err) {
     next(err);
   }
