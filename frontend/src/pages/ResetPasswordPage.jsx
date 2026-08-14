@@ -34,7 +34,7 @@ export default function ResetPasswordPage() {
     >
       <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
         <div className="inline-flex items-center justify-center w-11 h-11 rounded-lg bg-nav mb-5">
-          <span className="text-white text-sm font-bold font-display">QCI</span>
+          <span className="text-white text-sm font-bold font-display">P27</span>
         </div>
         <h1 className="text-lg font-bold text-slate-900 mb-1">Set a new password</h1>
         <p className="text-sm text-slate-500 mb-5">Choose a password with at least 8 characters.</p>

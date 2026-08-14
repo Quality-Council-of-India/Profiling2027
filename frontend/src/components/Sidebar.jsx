@@ -57,7 +57,7 @@ export default function Sidebar() {
       <div className="p-4 border-b border-white/10">
         <div className="flex items-center gap-2.5">
           <div className="w-9 h-9 rounded-lg bg-white/10 ring-1 ring-white/15 flex items-center justify-center text-white text-xs font-bold font-display">
-            QCI
+            P27
           </div>
           <div>
             <p className="text-white text-sm font-semibold leading-tight font-display">Profiling 2027</p>

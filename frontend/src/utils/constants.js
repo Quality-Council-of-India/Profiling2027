@@ -110,7 +110,7 @@ export const WEAKNESS_TAGS = [
 ];
 
 export const ROLE_LABELS = {
-  admin: "Admin (QCI Core Team)",
+  admin: "Admin (Core Team)",
   project_lead: "Project Lead",
   casu_lead: "CASU Lead",
   group_anchor: "Group Anchor",

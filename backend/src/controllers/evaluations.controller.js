@@ -119,7 +119,7 @@ export async function submitEvaluation(req, res, next) {
 
 export async function pendingForCurrentUser(req, res) {
   if (req.user.role === "admin") {
-    // Admin (QCI Core Team) monitors the process but doesn't submit
+    // Admin (Core Team) monitors the process but doesn't submit
     // self/peer evaluations — excluded from peer_mappings and scoring.
     return res.status(404).json({ error: "Admins do not submit evaluations" });
   }
