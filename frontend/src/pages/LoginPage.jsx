@@ -49,7 +49,7 @@ export default function LoginPage() {
     <div className="min-h-screen flex">
       {/* Brand panel — hidden on small screens, the story behind the form */}
       <div
-        className="hidden lg:flex lg:w-[45%] relative flex-col justify-between p-12 overflow-hidden"
+        className="hidden lg:flex lg:w-[45%] relative flex-col justify-center p-12 overflow-hidden"
         style={{ background: "linear-gradient(155deg, #1F3864 0%, #12233F 100%)" }}
       >
         <div
