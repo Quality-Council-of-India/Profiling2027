@@ -29,6 +29,13 @@
 -- CreateEnum
 CREATE TYPE "Trajectory" AS ENUM ('improved', 'stayed_same', 'declined', 'not_applicable');
 
+-- The 2027 questionnaire replaces the 2026 5-parameter/binary-problem-solving
+-- structure outright (not a like-for-like column rename), and every existing
+-- row predates the portal going live — these are test submissions only, not
+-- real evaluation data, so they're cleared here rather than backfilled.
+DELETE FROM "evaluations";
+DELETE FROM "computed_scores";
+
 -- AlterTable
 ALTER TABLE "computed_scores" DROP COLUMN "knowledge_peer",
 DROP COLUMN "knowledge_self",
