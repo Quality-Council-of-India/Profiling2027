@@ -55,6 +55,7 @@ export async function importRoster(projectId, buffer, filename = "roster.csv") {
     : parse(buffer.toString("utf-8"), { columns: true, skip_empty_lines: true, trim: true });
 
   const hasPhotoColumn = rows.some((r) => Object.prototype.hasOwnProperty.call(r, "photo_url"));
+  const hasEmpIdColumn = rows.some((r) => Object.prototype.hasOwnProperty.call(r, "emp_id"));
 
   const created = [];
   const updated = [];
@@ -67,6 +68,7 @@ export async function importRoster(projectId, buffer, filename = "roster.csv") {
     const role = row.role?.trim();
     const field = row.field?.trim() || null;
     const photoFields = hasPhotoColumn ? { photo_url: row.photo_url?.trim() || null } : {};
+    const empIdFields = hasEmpIdColumn ? { emp_id: row.emp_id?.trim() || null } : {};
 
     if (!name || !email || !role) {
       errors.push({ line, error: "name, email, and role are required" });
@@ -81,14 +83,14 @@ export async function importRoster(projectId, buffer, filename = "roster.csv") {
     if (existing) {
       const user = await prisma.user.update({
         where: { email },
-        data: { name, role, field, project_id: projectId, is_active: true, ...photoFields },
+        data: { name, role, field, project_id: projectId, is_active: true, ...photoFields, ...empIdFields },
       });
       updated.push({ id: user.id, name, email, role, field });
     } else {
       const tempPassword = generateTempPassword();
       const password_hash = await bcrypt.hash(tempPassword, 12);
       const user = await prisma.user.create({
-        data: { project_id: projectId, name, email, role, field, password_hash, ...photoFields },
+        data: { project_id: projectId, name, email, role, field, password_hash, ...photoFields, ...empIdFields },
       });
       created.push({ id: user.id, name, email, role, field, tempPassword });
 

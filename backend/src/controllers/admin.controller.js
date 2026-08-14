@@ -141,7 +141,7 @@ export async function listUsers(req, res) {
   const users = await prisma.user.findMany({
     where: { project_id: req.user.project_id },
     orderBy: [{ is_active: "desc" }, { field: "asc" }, { role: "asc" }, { name: "asc" }],
-    select: { id: true, name: true, email: true, role: true, field: true, photo_url: true, is_active: true },
+    select: { id: true, name: true, email: true, emp_id: true, role: true, field: true, photo_url: true, is_active: true },
   });
   res.json({ users });
 }

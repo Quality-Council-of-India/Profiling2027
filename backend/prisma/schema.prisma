@@ -91,6 +91,9 @@ model User {
   password_hash String   @db.VarChar(255)
   role          Role
   field         String?  @db.VarChar(50)
+  // Org Employee ID from the team roster — nullable since not everyone has
+  // one assigned yet (e.g. new hires pending HR onboarding).
+  emp_id        String?  @unique @db.VarChar(20)
   // Text, not VarChar — holds a data: URI (base64) for admin-uploaded photos
   // in the common case, so needs to fit a small compressed image, not just a URL.
   photo_url     String?  @db.Text

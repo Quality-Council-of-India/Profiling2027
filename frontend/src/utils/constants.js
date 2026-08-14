@@ -3,7 +3,7 @@ export const FIELDS = [
   "Literature & Education",
   "Medicine",
   "Others",
-  "Public Affairs & Civil Service",
+  "Public Affairs & Civil Services",
   "Science & Engineering",
   "Social Work",
   "Sports",
