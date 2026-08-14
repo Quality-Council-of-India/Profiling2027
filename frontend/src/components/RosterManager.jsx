@@ -82,6 +82,7 @@ export default function RosterManager() {
               <tr className="border-b border-slate-200 sticky top-0 bg-white">
                 <th className="text-left px-2 py-1.5 font-medium text-slate-500 uppercase">Photo</th>
                 <th className="text-left px-2 py-1.5 font-medium text-slate-500 uppercase">Name</th>
+                <th className="text-left px-2 py-1.5 font-medium text-slate-500 uppercase">Emp ID</th>
                 <th className="text-left px-2 py-1.5 font-medium text-slate-500 uppercase">Role</th>
                 <th className="text-left px-2 py-1.5 font-medium text-slate-500 uppercase">Field</th>
                 <th className="text-center px-2 py-1.5 font-medium text-slate-500 uppercase">Status</th>
@@ -92,6 +93,7 @@ export default function RosterManager() {
                 <tr key={u.id} className={`border-b border-slate-50 ${!u.is_active ? "opacity-50" : ""} ${i % 2 === 0 ? "bg-slate-50/60" : ""}`}>
                   <td className="px-2 py-1.5"><PhotoCell user={u} /></td>
                   <td className="px-2 py-1.5 font-medium text-slate-800">{u.name}</td>
+                  <td className="px-2 py-1.5 text-slate-500">{u.emp_id || "—"}</td>
                   <td className="px-2 py-1.5"><Badge text={ROLE_LABELS[u.role]} color={ROLE_COLORS[u.role]} /></td>
                   <td className="px-2 py-1.5 text-slate-600">{u.field || "—"}</td>
                   <td className="px-2 py-1.5 text-center">
