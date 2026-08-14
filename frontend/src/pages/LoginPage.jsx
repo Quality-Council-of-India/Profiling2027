@@ -65,9 +65,6 @@ export default function LoginPage() {
           }}
         />
         <div className="relative">
-          <div className="inline-flex items-center justify-center w-11 h-11 rounded-lg bg-white/10 ring-1 ring-white/15 mb-8">
-            <span className="text-white text-sm font-bold font-display">P27</span>
-          </div>
           <h1 className="font-display text-3xl font-bold text-white leading-tight mb-3">
             Profiling 2027
             <br />
@@ -84,9 +81,6 @@ export default function LoginPage() {
       <div className="flex-1 flex items-center justify-center p-6 bg-slate-50 lg:bg-white">
         <div className="w-full max-w-sm">
           <div className="lg:hidden text-center mb-8">
-            <div className="inline-flex items-center justify-center w-12 h-12 rounded-lg bg-nav mb-3">
-              <span className="text-white text-sm font-bold font-display">P27</span>
-            </div>
             <h1 className="font-display text-lg font-bold text-slate-900">Profiling 2027</h1>
             <p className="text-sm text-slate-500">Feedback Portal</p>
           </div>
