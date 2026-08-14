@@ -48,6 +48,6 @@ export function reminderEmailBody(user, weekLabel, pending) {
     <p>You still have pending submissions for <strong>${weekLabel}</strong> on the Profiling 2027 Feedback Portal:</p>
     <ul>${items.join("")}</ul>
     <p>Please log in and complete these before the window closes.</p>
-    <p>— QCI Core Team</p>
+    <p>— Core Team</p>
   `;
 }

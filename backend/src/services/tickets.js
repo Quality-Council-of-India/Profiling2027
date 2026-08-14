@@ -76,7 +76,7 @@ export async function respondToTicket(projectId, ticketId, { status, admin_respo
         <p>Hi ${u.name},</p>
         <p>Your concern <strong>"${existing.subject}"</strong> has been marked resolved.</p>
         ${admin_response ? `<p><strong>Admin's response:</strong><br/>${admin_response}</p>` : ""}
-        <p>— QCI Core Team</p>
+        <p>— Core Team</p>
       `,
     });
   }

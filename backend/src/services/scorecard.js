@@ -18,7 +18,7 @@ import { getSubjectiveSummary } from "./evaluations.js";
 import { PARAM_FIELDS } from "../utils/constants.js";
 
 const ROLE_LABELS = {
-  admin: "Admin (QCI Core Team)",
+  admin: "Admin (Core Team)",
   project_lead: "Project Lead",
   casu_lead: "CASU Lead",
   group_anchor: "Group Anchor",
@@ -186,7 +186,7 @@ export async function buildScorecardDocx(projectId, user, weekId) {
             : [new Paragraph({ text: "No peer feedback received yet this week.", spacing: { after: 40 } })]),
 
           new Paragraph({
-            children: [new TextRun({ text: "— QCI Core Team, Profiling 2027", italics: true, color: "888888", size: 18 })],
+            children: [new TextRun({ text: "— Core Team, Profiling 2027", italics: true, color: "888888", size: 18 })],
             spacing: { before: 300 },
           }),
         ],
