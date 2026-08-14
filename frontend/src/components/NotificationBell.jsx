@@ -63,7 +63,7 @@ export default function NotificationBell() {
   }
 
   return (
-    <div className="relative">
+    <div className="relative" data-tour="notifications">
       <button
         onClick={toggle}
         className="relative w-9 h-9 rounded-lg flex items-center justify-center text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-standard"

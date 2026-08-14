@@ -102,15 +102,16 @@ export default function CompliancePage() {
               label="Overall Completion"
               value={`${data.summary.completionPct}%`}
               sub={`${data.summary.totalReceived} of ${data.summary.totalExpected} submissions`}
+              tone={data.summary.completionPct >= 90 ? "success" : data.summary.completionPct >= 60 ? "warning" : "danger"}
             />
             <StatCard
               label="Self-Eval Done"
               value={`${data.summary.selfDone}/${data.summary.totalProfessionals}`}
               sub={`${data.summary.totalProfessionals - data.summary.selfDone} yet to fill`}
-              accent={data.summary.selfDone < data.summary.totalProfessionals}
+              tone={data.summary.selfDone < data.summary.totalProfessionals ? "warning" : "success"}
             />
-            <StatCard label="Fully Complete" value={data.summary.fullyCompliant} sub={`of ${data.summary.totalProfessionals} professionals`} />
-            <StatCard label="Non-Compliant" value={data.summary.totalProfessionals - data.summary.fullyCompliant} sub="Need follow-up" accent />
+            <StatCard label="Fully Complete" value={data.summary.fullyCompliant} sub={`of ${data.summary.totalProfessionals} professionals`} tone="success" />
+            <StatCard label="Non-Compliant" value={data.summary.totalProfessionals - data.summary.fullyCompliant} sub="Need follow-up" tone={data.summary.totalProfessionals - data.summary.fullyCompliant > 0 ? "danger" : "success"} />
           </div>
 
           <Card className="p-0 overflow-hidden">

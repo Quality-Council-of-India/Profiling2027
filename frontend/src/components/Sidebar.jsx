@@ -2,18 +2,8 @@ import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 import { ROLE_LABELS, AZURE } from "../utils/constants.js";
+import { getNavItems } from "../utils/navItems.js";
 import AboutProfileModal from "./AboutProfileModal.jsx";
-import {
-  DashboardIcon,
-  EvaluateIcon,
-  ScoresIcon,
-  TeamIcon,
-  ComplianceIcon,
-  AnalyticsIcon,
-  TrophyIcon,
-  ConcernIcon,
-  AdminIcon,
-} from "./icons.jsx";
 
 export default function Sidebar() {
   const { user, logout } = useAuth();
@@ -29,25 +19,7 @@ export default function Sidebar() {
     navigate("/login", { replace: true });
   }
 
-  const isAdmin = user.role === "admin";
-  const isLead = ["casu_lead", "project_lead"].includes(user.role);
-  const isAnchor = ["group_anchor", "casu_anchor"].includes(user.role);
-
-  const navItems = [
-    { to: "/dashboard", label: "Dashboard", Icon: DashboardIcon, show: true },
-    // Admins never submit/receive evaluations — these two are meaningless
-    // for their own account; use "View portal as..." in the Admin Panel
-    // to preview them for real.
-    { to: "/evaluate", label: "Evaluate", Icon: EvaluateIcon, show: !isAdmin },
-    { to: "/scores", label: "My Scores", Icon: ScoresIcon, show: !isAdmin },
-    { to: "/team", label: "Team View", Icon: TeamIcon, show: isAnchor || isLead || isAdmin },
-    { to: "/compliance", label: "Compliance", Icon: ComplianceIcon, show: isLead || isAdmin },
-    { to: "/analytics", label: "Analytics", Icon: AnalyticsIcon, show: true },
-    { to: "/hall-of-recognition", label: "Hall of Recognition", Icon: TrophyIcon, show: true },
-    { to: "/concerns", label: "Raise Your Concern", Icon: ConcernIcon, show: !isAdmin },
-    { to: "/admin", label: "Admin Panel", Icon: AdminIcon, show: isAdmin },
-    { to: "/admin/grievances", label: "Grievances", Icon: ConcernIcon, show: isAdmin },
-  ];
+  const navItems = getNavItems(user);
 
   return (
     <div
@@ -55,7 +27,7 @@ export default function Sidebar() {
       style={{ background: "linear-gradient(180deg, #1F3864 0%, #142647 100%)" }}
     >
       <div className="p-4 border-b border-white/10">
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5" data-tour="logo">
           <div className="w-9 h-9 rounded-lg bg-white/10 ring-1 ring-white/15 flex items-center justify-center text-white text-xs font-bold font-display">
             P27
           </div>
@@ -73,6 +45,7 @@ export default function Sidebar() {
               key={n.to}
               to={n.to}
               end
+              data-tour={`nav-${n.to}`}
               className={({ isActive }) =>
                 `group relative w-full flex items-center gap-2.5 pl-3 pr-3 py-2 rounded-lg text-sm transition-standard ${
                   isActive ? "bg-white/10 text-white font-medium" : "text-white/55 hover:text-white/90 hover:bg-white/5"
@@ -96,6 +69,7 @@ export default function Sidebar() {
         <button
           onClick={() => setShowProfile(true)}
           title="View profile"
+          data-tour="profile"
           className="group w-full flex items-center justify-between gap-2 text-left px-3 py-2 mb-2 rounded-lg hover:bg-white/5 transition-standard"
         >
           <div className="min-w-0">

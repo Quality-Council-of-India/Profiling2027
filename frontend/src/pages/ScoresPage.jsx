@@ -98,8 +98,8 @@ export default function ScoresPage({ userId, userLabel }) {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <StatCard label="Total Self" value={totalSelf.toFixed(1)} sub="/49" />
-            <StatCard label="Total Peer" value={totalPeer.toFixed(1)} sub={`${computed.peer_count} of ${computed.expected_peer_count} peers responded`} />
+            <StatCard label="Total Self" value={totalSelf.toFixed(1)} sub="/49" tone="accent" />
+            <StatCard label="Total Peer" value={totalPeer.toFixed(1)} sub={`${computed.peer_count} of ${computed.expected_peer_count} peers responded`} tone="info" />
           </div>
 
           <Card className="p-5">
