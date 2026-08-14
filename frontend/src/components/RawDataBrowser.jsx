@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { adminApi, weeksApi, downloadExport } from "../api/endpoints.js";
 import { Card, Spinner, ErrorBanner } from "./ui.jsx";
-import { ROLE_LABELS, ROLE_COLORS } from "../utils/constants.js";
+import { ROLE_LABELS, ROLE_COLORS, PARAM_FIELDS, TRAJECTORY_LABELS } from "../utils/constants.js";
 import { Badge } from "./ui.jsx";
 
 const LOCKABLE_TABLES = ["self_evaluations", "peer_evaluations"];
@@ -177,7 +177,7 @@ function TableBody({ table, rows, onUnlock, unlockingId }) {
   }
 
   const isSelf = table === "self_evaluations";
-  const wrappingColumns = ["strength_comment", "weakness_comment"];
+  const wrappingColumns = ["improvement_suggestion"];
   const isLockable = LOCKABLE_TABLES.includes(table);
 
   const columns = {
@@ -186,12 +186,12 @@ function TableBody({ table, rows, onUnlock, unlockingId }) {
     weeks: ["id", "week_number", "label", "start_date", "end_date", "status"],
     peer_mappings: ["id", "evaluator", "evaluatee"],
     self_evaluations: [
-      "id", "week", "evaluator", "scores", "problem_solving",
-      "strengths_tags", "weakness_tags", "strength_comment", "weakness_comment", "submitted_at", "locked",
+      "id", "week", "evaluator", "scores", "trajectory",
+      "strengths_tags", "weakness_tags", "improvement_suggestion", "submitted_at", "locked",
     ],
     peer_evaluations: [
-      "id", "week", "evaluator", "evaluatee", "scores", "problem_solving",
-      "strengths_tags", "weakness_tags", "strength_comment", "weakness_comment", "submitted_at", "locked",
+      "id", "week", "evaluator", "evaluatee", "scores", "trajectory",
+      "strengths_tags", "weakness_tags", "improvement_suggestion", "submitted_at", "locked",
     ],
     computed_scores: ["user", "week", "total_self", "total_peer", "peer_count", "expected_peer_count", "sapa_factor"],
   }[table];
@@ -254,13 +254,7 @@ function LockCell({ locked, onUnlock, isUnlocking }) {
   );
 }
 
-const SCORE_PARAMS = [
-  ["Sincerity", "sincerity"],
-  ["Team Spirit", "team_spirit"],
-  ["Knowledge", "knowledge"],
-  ["Quantity", "quantity"],
-  ["Quality", "quality"],
-];
+const SCORE_PARAMS = PARAM_FIELDS.map((p) => [p.label, p.key]);
 
 function renderCell(table, column, row) {
   const val = row[column];
@@ -277,6 +271,7 @@ function renderCell(table, column, row) {
   }
   if (column === "week") return val?.label || "—";
   if (column === "role") return <RoleBadge role={val} />;
+  if (column === "trajectory") return TRAJECTORY_LABELS[val] || "—";
   if (column === "is_active") return val ? <span className="text-green-700">active</span> : <span className="text-slate-400">inactive</span>;
   if (column === "scores" && (table === "self_evaluations" || table === "peer_evaluations")) {
     return (

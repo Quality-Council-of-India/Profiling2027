@@ -4,9 +4,18 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../context/AuthContext.jsx";
 import { evaluationsApi } from "../api/endpoints.js";
 import { Card, Spinner, ErrorBanner, RefreshButton } from "../components/ui.jsx";
-import { PARAM_FIELDS, STRENGTH_TAGS, WEAKNESS_TAGS, NAV, ACCENT } from "../utils/constants.js";
+import {
+  PARAM_FIELDS,
+  STRENGTH_TAGS,
+  WEAKNESS_TAGS,
+  RATING_SCALE,
+  TRAJECTORY_OPTIONS,
+  MAX_TAGS_PER_CATEGORY,
+  NAV,
+  ACCENT,
+} from "../utils/constants.js";
 
-const DEFAULT_RATINGS = { sincerity: 4, team_spirit: 4, knowledge: 4, quantity: 3, quality: 4 };
+const DEFAULT_RATINGS = Object.fromEntries(PARAM_FIELDS.map((p) => [p.key, 4]));
 
 export default function EvaluatePage() {
   const { user } = useAuth();
@@ -19,12 +28,10 @@ export default function EvaluatePage() {
   const [selectedPeerId, setSelectedPeerId] = useState(searchParams.get("peer") || "");
   const [showCompletedPeers, setShowCompletedPeers] = useState(false);
   const [ratings, setRatings] = useState(DEFAULT_RATINGS);
-  const [problemSolving, setProblemSolving] = useState("satisfied");
-  const [problemReason, setProblemReason] = useState("");
   const [selectedStrengths, setSelectedStrengths] = useState([]);
   const [selectedWeaknesses, setSelectedWeaknesses] = useState([]);
-  const [strengthComment, setStrengthComment] = useState("");
-  const [weaknessComment, setWeaknessComment] = useState("");
+  const [improvementSuggestion, setImprovementSuggestion] = useState("");
+  const [trajectory, setTrajectory] = useState("");
   const [submitted, setSubmitted] = useState(false);
 
   useEffect(() => {
@@ -45,9 +52,16 @@ export default function EvaluatePage() {
     [peerOptions, selectedPeerId]
   );
   const isLocked = evalType === "self" ? !!pending?.selfLocked : !!selectedPeer?.locked;
+  // The Trajectory question needs a prior week to compare against — Week 1
+  // submissions skip it entirely and send "not_applicable" automatically.
+  const needsTrajectory = !!week && week.week_number >= 2;
 
   const toggleTag = (tag, list, setter) => {
-    setter(list.includes(tag) ? list.filter((t) => t !== tag) : [...list, tag]);
+    if (list.includes(tag)) {
+      setter(list.filter((t) => t !== tag));
+    } else if (list.length < MAX_TAGS_PER_CATEGORY) {
+      setter([...list, tag]);
+    }
   };
 
   const submitMutation = useMutation({
@@ -62,12 +76,10 @@ export default function EvaluatePage() {
   function resetForm() {
     setSubmitted(false);
     setRatings(DEFAULT_RATINGS);
-    setProblemSolving("satisfied");
-    setProblemReason("");
     setSelectedStrengths([]);
     setSelectedWeaknesses([]);
-    setStrengthComment("");
-    setWeaknessComment("");
+    setImprovementSuggestion("");
+    setTrajectory("");
   }
 
   function handleSubmit() {
@@ -80,12 +92,10 @@ export default function EvaluatePage() {
       evaluatee_id: evaluateeId,
       eval_type: evalType,
       ...ratings,
-      problem_solving: problemSolving,
-      problem_reason: problemSolving === "not_satisfied" ? problemReason : null,
       strengths_tags: selectedStrengths,
       weakness_tags: selectedWeaknesses,
-      strength_comment: strengthComment || null,
-      weakness_comment: weaknessComment || null,
+      improvement_suggestion: improvementSuggestion || null,
+      trajectory: needsTrajectory ? trajectory : "not_applicable",
     });
   }
 
@@ -209,7 +219,7 @@ export default function EvaluatePage() {
         <>
       <Card className="p-5">
         <h2 className="text-sm font-semibold text-slate-800 mb-1">Part I — Quantitative Parameters</h2>
-        <p className="text-xs text-slate-400 mb-4">Rate each parameter on a scale of 1 to 5 (5 = highest)</p>
+        <p className="text-xs text-slate-400 mb-4">Rate each parameter on a scale of 1 to 7. Use the anchor labels to guide your rating.</p>
         <div className="space-y-5">
           {PARAM_FIELDS.map((p) => (
             <div key={p.key}>
@@ -218,19 +228,22 @@ export default function EvaluatePage() {
                 <span className="text-lg font-bold" style={{ color: NAV }}>{ratings[p.key]}</span>
               </div>
               <p className="text-xs text-slate-400 mb-2">{p.desc}</p>
-              <div className="flex gap-2">
-                {[1, 2, 3, 4, 5].map((v) => (
+              <div className="grid grid-cols-7 gap-1">
+                {RATING_SCALE.map(({ value: v, label }) => (
                   <button
                     key={v}
                     onClick={() => setRatings({ ...ratings, [p.key]: v })}
-                    className={`flex-1 py-2 rounded-lg text-sm font-medium border-2 transition-standard ${
+                    className={`flex flex-col items-center gap-0.5 py-1.5 rounded-lg text-sm font-medium border-2 transition-standard ${
                       ratings[p.key] === v
                         ? "text-white border-transparent shadow-sm scale-105"
                         : "text-slate-600 border-slate-200 hover:border-slate-400 hover:bg-slate-50"
                     }`}
                     style={ratings[p.key] === v ? { background: NAV, borderColor: NAV } : {}}
                   >
-                    {v}
+                    <span>{v}</span>
+                    <span className={`text-[9px] leading-tight ${ratings[p.key] === v ? "text-white/80" : "text-slate-400"}`}>
+                      {label}
+                    </span>
                   </button>
                 ))}
               </div>
@@ -243,87 +256,106 @@ export default function EvaluatePage() {
         <h2 className="text-sm font-semibold text-slate-800 mb-1">Part II — Subjective Parameters</h2>
 
         <div className="mt-4">
-          <p className="text-sm font-medium text-slate-700 mb-2">Problem Solving</p>
-          <p className="text-xs text-slate-400 mb-2">
-            How effectively do {evalType === "self" ? "you" : "they"} address and resolve doubts or challenges?
-          </p>
-          <div className="flex gap-2">
-            {["satisfied", "not_satisfied"].map((v) => (
-              <button
-                key={v}
-                onClick={() => setProblemSolving(v)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium border-2 transition-standard ${problemSolving === v ? "text-white border-transparent shadow-sm" : "text-slate-600 border-slate-200 hover:border-slate-400"}`}
-                style={problemSolving === v ? { background: v === "satisfied" ? "#059669" : "#DC2626", borderColor: v === "satisfied" ? "#059669" : "#DC2626" } : {}}
-              >
-                {v === "satisfied" ? "✓ Satisfied" : "✗ Not Satisfied"}
-              </button>
-            ))}
-          </div>
-          {problemSolving === "not_satisfied" && (
-            <textarea
-              rows={2}
-              value={problemReason}
-              onChange={(e) => setProblemReason(e.target.value)}
-              placeholder="Provide the reason with a relevant example..."
-              className="w-full mt-2 px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-standard resize-none"
-            />
-          )}
-        </div>
-
-        <div className="mt-5">
           <p className="text-sm font-medium text-slate-700 mb-2">
-            Strengths <span className="text-xs text-slate-400">(select all that apply)</span>
+            Strengths{" "}
+            <span className="text-xs text-slate-400">
+              (select up to {MAX_TAGS_PER_CATEGORY}) · {selectedStrengths.length}/{MAX_TAGS_PER_CATEGORY} selected
+            </span>
           </p>
+          <p className="text-xs text-slate-400 mb-2">Choose the most distinguishing strengths.</p>
           <div className="flex flex-wrap gap-1.5">
-            {STRENGTH_TAGS.map((tag) => (
-              <button
-                key={tag}
-                onClick={() => toggleTag(tag, selectedStrengths, setSelectedStrengths)}
-                className={`px-2.5 py-1.5 rounded-md text-xs transition-standard border ${selectedStrengths.includes(tag) ? "bg-green-50 border-green-400 text-green-700 font-medium" : "border-slate-200 text-slate-600 hover:border-slate-400 hover:bg-slate-50"}`}
-              >
-                {selectedStrengths.includes(tag) ? "✓ " : ""}{tag}
-              </button>
-            ))}
+            {STRENGTH_TAGS.map((tag) => {
+              const selected = selectedStrengths.includes(tag);
+              const disabled = !selected && selectedStrengths.length >= MAX_TAGS_PER_CATEGORY;
+              return (
+                <button
+                  key={tag}
+                  onClick={() => toggleTag(tag, selectedStrengths, setSelectedStrengths)}
+                  disabled={disabled}
+                  className={`px-2.5 py-1.5 rounded-md text-xs transition-standard border ${
+                    selected
+                      ? "bg-green-50 border-green-400 text-green-700 font-medium"
+                      : disabled
+                      ? "border-slate-100 text-slate-300 cursor-not-allowed"
+                      : "border-slate-200 text-slate-600 hover:border-slate-400 hover:bg-slate-50"
+                  }`}
+                >
+                  {selected ? "✓ " : ""}{tag}
+                </button>
+              );
+            })}
           </div>
         </div>
 
         <div className="mt-5">
           <p className="text-sm font-medium text-slate-700 mb-2">
-            Areas of Improvement <span className="text-xs text-slate-400">(select all that apply)</span>
+            Areas of Improvement{" "}
+            <span className="text-xs text-slate-400">
+              (select up to {MAX_TAGS_PER_CATEGORY}) · {selectedWeaknesses.length}/{MAX_TAGS_PER_CATEGORY} selected
+            </span>
           </p>
+          <p className="text-xs text-slate-400 mb-2">Choose the most pressing improvement areas.</p>
           <div className="flex flex-wrap gap-1.5">
-            {WEAKNESS_TAGS.map((tag) => (
-              <button
-                key={tag}
-                onClick={() => toggleTag(tag, selectedWeaknesses, setSelectedWeaknesses)}
-                className={`px-2.5 py-1.5 rounded-md text-xs transition-standard border ${selectedWeaknesses.includes(tag) ? "bg-red-50 border-red-300 text-red-700 font-medium" : "border-slate-200 text-slate-600 hover:border-slate-400 hover:bg-slate-50"}`}
-              >
-                {selectedWeaknesses.includes(tag) ? "✓ " : ""}{tag}
-              </button>
-            ))}
+            {WEAKNESS_TAGS.map((tag) => {
+              const selected = selectedWeaknesses.includes(tag);
+              const disabled = !selected && selectedWeaknesses.length >= MAX_TAGS_PER_CATEGORY;
+              return (
+                <button
+                  key={tag}
+                  onClick={() => toggleTag(tag, selectedWeaknesses, setSelectedWeaknesses)}
+                  disabled={disabled}
+                  className={`px-2.5 py-1.5 rounded-md text-xs transition-standard border ${
+                    selected
+                      ? "bg-red-50 border-red-300 text-red-700 font-medium"
+                      : disabled
+                      ? "border-slate-100 text-slate-300 cursor-not-allowed"
+                      : "border-slate-200 text-slate-600 hover:border-slate-400 hover:bg-slate-50"
+                  }`}
+                >
+                  {selected ? "✓ " : ""}{tag}
+                </button>
+              );
+            })}
           </div>
         </div>
 
         <div className="mt-5">
-          <p className="text-sm font-medium text-slate-700 mb-2">Additional Strength Remarks</p>
+          <p className="text-sm font-medium text-slate-700 mb-2">
+            What is the single most impactful action {evalType === "self" ? "you" : "this person"} could take to improve?
+          </p>
+          <p className="text-xs text-slate-400 mb-2">Optional. One concrete, specific suggestion.</p>
           <textarea
             rows={2}
-            value={strengthComment}
-            onChange={(e) => setStrengthComment(e.target.value)}
-            placeholder="Share any additional observations highlighting key strengths..."
+            value={improvementSuggestion}
+            onChange={(e) => setImprovementSuggestion(e.target.value)}
+            placeholder="Share one concrete, specific suggestion..."
             className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-standard resize-none"
           />
         </div>
-        <div className="mt-3">
-          <p className="text-sm font-medium text-slate-700 mb-2">Additional Improvement Remarks</p>
-          <textarea
-            rows={2}
-            value={weaknessComment}
-            onChange={(e) => setWeaknessComment(e.target.value)}
-            placeholder="Share any observations indicating areas of growth..."
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-standard resize-none"
-          />
-        </div>
+
+        {needsTrajectory && (
+          <div className="mt-5">
+            <p className="text-sm font-medium text-slate-700 mb-2">
+              Compared to last week, has {evalType === "self" ? "your" : "this person's"} overall performance:
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {TRAJECTORY_OPTIONS.map(({ value: v, label }) => (
+                <button
+                  key={v}
+                  onClick={() => setTrajectory(v)}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium border-2 transition-standard ${
+                    trajectory === v
+                      ? "text-white border-transparent shadow-sm"
+                      : "text-slate-600 border-slate-200 hover:border-slate-400"
+                  }`}
+                  style={trajectory === v ? { background: NAV, borderColor: NAV } : {}}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </Card>
 
       {submitMutation.isError && (
@@ -332,7 +364,9 @@ export default function EvaluatePage() {
 
       <button
         onClick={handleSubmit}
-        disabled={submitMutation.isPending || (evalType === "peer" && !selectedPeerId)}
+        disabled={
+          submitMutation.isPending || (evalType === "peer" && !selectedPeerId) || (needsTrajectory && !trajectory)
+        }
         className="px-6 py-2.5 rounded-lg text-white font-medium text-sm disabled:opacity-50 transition-standard hover:shadow-md flex items-center gap-2"
         style={{ background: ACCENT }}
       >

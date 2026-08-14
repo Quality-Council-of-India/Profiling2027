@@ -1,6 +1,7 @@
 import { prisma } from "../utils/prisma.js";
 import { canViewUser, teamViewFilter } from "../services/access.js";
 import { getSubjectiveSummary } from "../services/evaluations.js";
+import { PARAM_FIELDS } from "../utils/constants.js";
 
 export async function getUserWeekScore(req, res) {
   const userId = Number(req.params.userId);
@@ -50,25 +51,19 @@ export async function getUserTrend(req, res) {
 
   res.json({
     user: { id: target.id, name: target.name, role: target.role, field: target.field },
-    trend: scores.map((s) => ({
-      week: s.week.label,
-      week_number: s.week.week_number,
-      sincerity_self: s.sincerity_self,
-      sincerity_peer: s.sincerity_peer,
-      team_spirit_self: s.team_spirit_self,
-      team_spirit_peer: s.team_spirit_peer,
-      knowledge_self: s.knowledge_self,
-      knowledge_peer: s.knowledge_peer,
-      quantity_self: s.quantity_self,
-      quantity_peer: s.quantity_peer,
-      quality_self: s.quality_self,
-      quality_peer: s.quality_peer,
-      total_self: s.total_self,
-      total_peer: s.total_peer,
-      peer_count: s.peer_count,
-      expected_peer_count: s.expected_peer_count,
-      sapa_factor: s.sapa_factor,
-    })),
+    trend: scores.map((s) => {
+      const row = { week: s.week.label, week_number: s.week.week_number };
+      for (const p of PARAM_FIELDS) {
+        row[`${p.key}_self`] = s[`${p.key}_self`];
+        row[`${p.key}_peer`] = s[`${p.key}_peer`];
+      }
+      row.total_self = s.total_self;
+      row.total_peer = s.total_peer;
+      row.peer_count = s.peer_count;
+      row.expected_peer_count = s.expected_peer_count;
+      row.sapa_factor = s.sapa_factor;
+      return row;
+    }),
   });
 }
 

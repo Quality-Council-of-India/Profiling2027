@@ -10,17 +10,13 @@ import PeerScoreTrendChart from "../components/charts/PeerScoreTrendChart.jsx";
 import HeatmapGrid from "../components/charts/HeatmapGrid.jsx";
 import QuadrantPlot from "../components/charts/QuadrantPlot.jsx";
 import SAPAGauge from "../components/charts/SAPAGauge.jsx";
-import { PARAM_LABELS, ACCENT, NAV } from "../utils/constants.js";
+import { PARAM_FIELDS, ACCENT, NAV } from "../utils/constants.js";
 
 const AGGREGATE_ROLES = ["project_lead", "casu_lead", "admin"];
 
 function averageRows(rows) {
   if (!rows.length) return null;
-  const keys = [
-    "sincerity_self", "sincerity_peer", "team_spirit_self", "team_spirit_peer",
-    "knowledge_self", "knowledge_peer", "quantity_self", "quantity_peer",
-    "quality_self", "quality_peer", "total_self", "total_peer",
-  ];
+  const keys = [...PARAM_FIELDS.flatMap((p) => [`${p.key}_self`, `${p.key}_peer`]), "total_self", "total_peer"];
   const avg = {};
   for (const k of keys) avg[k] = rows.reduce((a, r) => a + Number(r[k]), 0) / rows.length;
   const peer_count = rows.reduce((a, r) => a + r.peer_count, 0);
@@ -143,7 +139,7 @@ export default function AnalyticsPage() {
       ) : (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <StatCard label="Total Self" value={summary.total_self.toFixed(1)} sub={`${rangeLabel} · /25`} />
+            <StatCard label="Total Self" value={summary.total_self.toFixed(1)} sub={`${rangeLabel} · /49`} />
             <StatCard label="Total Peer" value={summary.total_peer.toFixed(1)} sub={`${summary.peer_count} of ${summary.expected_peer_count} peer responses`} />
             <Card className="p-4">
               <p className="text-xs uppercase tracking-wide text-slate-500 mb-2">SAPA Factor</p>
@@ -171,8 +167,7 @@ export default function AnalyticsPage() {
           <Card interactive className="p-5">
             <h2 className="text-sm font-semibold text-slate-800 mb-3">Per-Parameter Breakdown — {rangeLabel}</h2>
             <div className="space-y-3">
-              {PARAM_LABELS.map((label, i) => {
-                const key = ["sincerity", "team_spirit", "knowledge", "quantity", "quality"][i];
+              {PARAM_FIELDS.map(({ key, label }) => {
                 const self = summary[`${key}_self`];
                 const peer = summary[`${key}_peer`];
                 return (
@@ -182,8 +177,8 @@ export default function AnalyticsPage() {
                       <span className="tabular-nums"><span style={{ color: ACCENT }}>{self.toFixed(1)}</span> self · <span style={{ color: NAV }}>{peer.toFixed(1)}</span> peer</span>
                     </div>
                     <div className="flex gap-1 h-1.5">
-                      <div className="flex-1 bg-slate-100 rounded-full overflow-hidden"><div className="h-full rounded-full" style={{ width: `${(self / 5) * 100}%`, background: ACCENT }} /></div>
-                      <div className="flex-1 bg-slate-100 rounded-full overflow-hidden"><div className="h-full rounded-full" style={{ width: `${(peer / 5) * 100}%`, background: NAV }} /></div>
+                      <div className="flex-1 bg-slate-100 rounded-full overflow-hidden"><div className="h-full rounded-full" style={{ width: `${(self / 7) * 100}%`, background: ACCENT }} /></div>
+                      <div className="flex-1 bg-slate-100 rounded-full overflow-hidden"><div className="h-full rounded-full" style={{ width: `${(peer / 7) * 100}%`, background: NAV }} /></div>
                     </div>
                   </div>
                 );
@@ -215,7 +210,11 @@ export default function AnalyticsPage() {
             ) : fieldStandingsQuery.isError ? (
               <ErrorBanner message="Failed to load field standings" />
             ) : (
-              <FieldStandingCard title={`Field-Wise Standing — ${rangeLabel}`} standings={fieldStandingsQuery.data?.standings} />
+              <FieldStandingCard
+                title={`Field-Wise Standing — ${rangeLabel}`}
+                standings={fieldStandingsQuery.data?.standings}
+                weekIds={selectedWeekIds}
+              />
             )}
             <RankingCard
               title={`Team's Overall Standing — ${rangeLabel}`}
