@@ -12,8 +12,8 @@ export function Badge({ text, color }) {
 export function Card({ children, className = "", interactive = false }) {
   return (
     <div
-      className={`bg-white rounded-xl border border-slate-200 shadow-sm transition-standard ${
-        interactive ? "hover:shadow-md hover:border-slate-300 cursor-pointer" : ""
+      className={`bg-white rounded-xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_2px_8px_rgba(15,23,42,0.04)] transition-standard ${
+        interactive ? "hover:shadow-[0_4px_16px_rgba(15,23,42,0.09)] hover:border-slate-300 hover:-translate-y-0.5 cursor-pointer" : ""
       } ${className}`}
     >
       {children}
@@ -21,17 +21,26 @@ export function Card({ children, className = "", interactive = false }) {
   );
 }
 
-export function StatCard({ label, value, sub, accent = false }) {
+// tone drives both the left accent bar and the value color — pick the tone
+// that matches what the number means, not just "is this the primary metric":
+// accent = primary/self metric, info = neutral/peer metric, success = good
+// news (aligned, on track), warning = needs a look, danger = a real problem.
+const STAT_TONES = {
+  accent: { bar: "#E07B00", text: "text-orange-600" },
+  info: { bar: "#2563EB", text: "text-blue-700" },
+  success: { bar: "#059669", text: "text-emerald-700" },
+  warning: { bar: "#D97706", text: "text-amber-700" },
+  danger: { bar: "#DC2626", text: "text-red-700" },
+  neutral: { bar: "#A5C9EB", text: "text-slate-900" },
+};
+
+export function StatCard({ label, value, sub, accent = false, tone }) {
+  const resolved = STAT_TONES[tone] || (accent ? STAT_TONES.accent : STAT_TONES.neutral);
   return (
     <Card className="p-4 relative overflow-hidden">
-      <div
-        className="absolute left-0 top-0 bottom-0 w-1"
-        style={{ background: accent ? "#E07B00" : "#A5C9EB" }}
-      />
+      <div className="absolute left-0 top-0 bottom-0 w-1" style={{ background: resolved.bar }} />
       <p className="text-xs uppercase tracking-wide text-slate-500 mb-1 pl-1.5">{label}</p>
-      <p className={`font-display text-2xl font-bold tabular-nums pl-1.5 ${accent ? "text-orange-600" : "text-slate-900"}`}>
-        {value}
-      </p>
+      <p className={`font-display text-2xl font-bold tabular-nums pl-1.5 ${resolved.text}`}>{value}</p>
       {sub && <p className="text-xs text-slate-400 mt-1 pl-1.5">{sub}</p>}
     </Card>
   );

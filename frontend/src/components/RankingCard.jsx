@@ -8,7 +8,10 @@ import { ROLE_LABELS, ROLE_COLORS, NAV, ACCENT } from "../utils/constants.js";
  * services/analytics.js getRankings on the API side).
  */
 export default function RankingCard({ title, myRank, total, list, meId, emptyLabel }) {
-  if (!myRank) {
+  // Admin has no personal rank (never scored) but should still see the full
+  // named list — only bail out to the empty state when there's truly
+  // nothing to show either way.
+  if (!myRank && !list?.length) {
     return (
       <Card className="p-5">
         <h2 className="text-sm font-semibold text-slate-800 mb-3">{title}</h2>
@@ -22,13 +25,17 @@ export default function RankingCard({ title, myRank, total, list, meId, emptyLab
   return (
     <Card className="p-5">
       <h2 className="text-sm font-semibold text-slate-800 mb-3">{title}</h2>
-      <div className="flex items-baseline gap-2 mb-1">
-        <span className="text-3xl font-bold" style={{ color: NAV }}>#{myRank}</span>
-        <span className="text-sm text-slate-500">of {total}</span>
-      </div>
-      <div className="w-full bg-slate-100 rounded-full h-1.5 mb-4">
-        <div className="h-1.5 rounded-full" style={{ width: `${pct}%`, background: ACCENT }} />
-      </div>
+      {myRank && (
+        <>
+          <div className="flex items-baseline gap-2 mb-1">
+            <span className="text-3xl font-bold" style={{ color: NAV }}>#{myRank}</span>
+            <span className="text-sm text-slate-500">of {total}</span>
+          </div>
+          <div className="w-full bg-slate-100 rounded-full h-1.5 mb-4">
+            <div className="h-1.5 rounded-full" style={{ width: `${pct}%`, background: ACCENT }} />
+          </div>
+        </>
+      )}
 
       {list && (
         <div className="max-h-64 overflow-y-auto -mx-1 px-1">

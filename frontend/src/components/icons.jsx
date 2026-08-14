@@ -123,6 +123,16 @@ export function BellIcon(props) {
   );
 }
 
+export function HelpIcon(props) {
+  return (
+    <svg viewBox="0 0 20 20" width="18" height="18" {...base} {...props}>
+      <circle cx="10" cy="10" r="7.25" />
+      <path d="M7.7 7.8a2.3 2.3 0 014.4.9c0 1.5-2.1 1.7-2.1 3.3" strokeLinecap="round" />
+      <path d="M10 14.8v.1" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function AdminIcon(props) {
   return (
     <svg viewBox="0 0 20 20" width="18" height="18" {...base} {...props}>

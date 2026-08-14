@@ -129,18 +129,19 @@ function ProfessionalSummary({ user, weeks, openWeek }) {
   return (
     <>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Total Self Score" value={totalSelf.toFixed(1)} sub="Out of 49" />
-        <StatCard label="Total Peer Score" value={totalPeer.toFixed(1)} sub="Out of 49" />
+        <StatCard label="Total Self Score" value={totalSelf.toFixed(1)} sub="Out of 49" tone="accent" />
+        <StatCard label="Total Peer Score" value={totalPeer.toFixed(1)} sub="Out of 49" tone="info" />
         <StatCard
           label="SAPA Factor"
           value={sapa !== null ? sapa.toFixed(2) : "—"}
           sub={sapa === null ? "Awaiting data" : sapa > 1.1 ? "Over-rater" : sapa < 0.9 ? "Under-rater" : "Aligned"}
-          accent={sapa !== null && (sapa > 1.1 || sapa < 0.9)}
+          tone={sapa === null ? "neutral" : sapa > 1.1 || sapa < 0.9 ? "warning" : "success"}
         />
         <StatCard
           label="Peer Responses"
           value={computed ? `${computed.peer_count}/${computed.expected_peer_count}` : "—"}
           sub={latestScoredWeek ? `Received in ${latestScoredWeek.label}` : ""}
+          tone={computed && computed.peer_count < computed.expected_peer_count ? "warning" : "success"}
         />
       </div>
 
