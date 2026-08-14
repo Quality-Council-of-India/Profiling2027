@@ -275,6 +275,47 @@ export async function getPeerScoreTrendComparison(projectId, targetUser) {
   });
 }
 
+/**
+ * Field-Wise Standing — a leaderboard of FIELDS rather than individuals, for
+ * roles that don't belong to a single field themselves (Admin, CASU Lead,
+ * Project Lead) and so have no meaningful "your field" rank. Same averaging
+ * rule as getRankings: one or more week IDs, averaged per person first, then
+ * per field.
+ */
+export async function getFieldStandings(projectId, weekIds, scope) {
+  const users = await prisma.user.findMany({
+    where: {
+      project_id: projectId,
+      is_active: true,
+      role: { not: ROLES.ADMIN },
+      field: { not: null },
+      ...roleFilterForScope(scope),
+    },
+    include: { computedScores: { where: { week_id: { in: weekIds } } } },
+  });
+
+  const byField = new Map();
+  for (const u of users) {
+    const scores = u.computedScores;
+    if (scores.length === 0) continue;
+    const avgTotalPeer = scores.reduce((a, s) => a + Number(s.total_peer), 0) / scores.length;
+    if (!byField.has(u.field)) byField.set(u.field, { sum: 0, count: 0 });
+    const entry = byField.get(u.field);
+    entry.sum += avgTotalPeer;
+    entry.count += 1;
+  }
+
+  const standings = [...byField.entries()]
+    .map(([field, { sum, count }]) => ({
+      field,
+      avgTotalPeer: Math.round((sum / count) * 100) / 100,
+      memberCount: count,
+    }))
+    .sort((a, b) => b.avgTotalPeer - a.avgTotalPeer);
+
+  return standings.map((s, i) => ({ ...s, rank: i + 1 }));
+}
+
 const HALL_OF_RECOGNITION_ROLES = [ROLES.PROFILER, ROLES.GROUP_ANCHOR, ROLES.CASU_ANCHOR];
 
 /**

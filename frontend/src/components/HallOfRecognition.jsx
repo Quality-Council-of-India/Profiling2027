@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { analyticsApi } from "../api/endpoints.js";
 import { Card, Spinner, ErrorBanner, EmptyState } from "./ui.jsx";
+import { SearchIcon, AnchorIcon, ShieldIcon, StarIcon } from "./icons.jsx";
 import { ACCENT } from "../utils/constants.js";
 
 /**
@@ -22,7 +23,6 @@ export default function HallOfRecognition() {
   if (weeks.length === 0) {
     return (
       <EmptyState
-        icon="🏆"
         title="No closed weeks yet"
         message="Hall of Recognition populates once the first week closes."
       />
@@ -35,10 +35,18 @@ export default function HallOfRecognition() {
         <thead>
           <tr className="bg-nav-deep">
             <th className="text-left px-4 py-2.5 text-xs font-medium text-white uppercase tracking-wide">Week</th>
-            <th className="text-left px-3 py-2.5 text-xs font-medium text-white uppercase tracking-wide">🎨 Top Profiler</th>
-            <th className="text-left px-3 py-2.5 text-xs font-medium text-white uppercase tracking-wide">🧭 Top Group Anchor</th>
-            <th className="text-left px-3 py-2.5 text-xs font-medium text-white uppercase tracking-wide">🛡️ Top CASU Anchor</th>
-            <th className="text-left px-3 py-2.5 text-xs font-medium text-white uppercase tracking-wide">⭐ Overall Star Performer</th>
+            <th className="text-left px-3 py-2.5 text-xs font-medium text-white uppercase tracking-wide">
+              <span className="inline-flex items-center gap-1.5"><SearchIcon className="text-white/70" /> Top Profiler</span>
+            </th>
+            <th className="text-left px-3 py-2.5 text-xs font-medium text-white uppercase tracking-wide">
+              <span className="inline-flex items-center gap-1.5"><AnchorIcon className="text-white/70" /> Top Group Anchor</span>
+            </th>
+            <th className="text-left px-3 py-2.5 text-xs font-medium text-white uppercase tracking-wide">
+              <span className="inline-flex items-center gap-1.5"><ShieldIcon className="text-white/70" /> Top CASU Anchor</span>
+            </th>
+            <th className="text-left px-3 py-2.5 text-xs font-medium text-white uppercase tracking-wide">
+              <span className="inline-flex items-center gap-1.5"><StarIcon className="text-white/70" /> Overall Star Performer</span>
+            </th>
           </tr>
         </thead>
         <tbody>

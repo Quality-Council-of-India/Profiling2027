@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { adminApi } from "../api/endpoints.js";
 import { Card, Spinner, ErrorBanner, Badge } from "./ui.jsx";
 import { ROLE_LABELS, ROLE_COLORS } from "../utils/constants.js";
+import { compressImage } from "../utils/imageCompression.js";
 
 /** CSV import + per-user active/inactive toggle — handles mid-project
  * roster changes (someone quits) without touching historical data; see
@@ -79,6 +80,7 @@ export default function RosterManager() {
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-slate-200 sticky top-0 bg-white">
+                <th className="text-left px-2 py-1.5 font-medium text-slate-500 uppercase">Photo</th>
                 <th className="text-left px-2 py-1.5 font-medium text-slate-500 uppercase">Name</th>
                 <th className="text-left px-2 py-1.5 font-medium text-slate-500 uppercase">Role</th>
                 <th className="text-left px-2 py-1.5 font-medium text-slate-500 uppercase">Field</th>
@@ -88,6 +90,7 @@ export default function RosterManager() {
             <tbody>
               {usersQuery.data.map((u, i) => (
                 <tr key={u.id} className={`border-b border-slate-50 ${!u.is_active ? "opacity-50" : ""} ${i % 2 === 0 ? "bg-slate-50/60" : ""}`}>
+                  <td className="px-2 py-1.5"><PhotoCell user={u} /></td>
                   <td className="px-2 py-1.5 font-medium text-slate-800">{u.name}</td>
                   <td className="px-2 py-1.5"><Badge text={ROLE_LABELS[u.role]} color={ROLE_COLORS[u.role]} /></td>
                   <td className="px-2 py-1.5 text-slate-600">{u.field || "—"}</td>
@@ -114,5 +117,70 @@ export default function RosterManager() {
         </div>
       )}
     </Card>
+  );
+}
+
+/** Avatar thumbnail that doubles as an upload button — click it to pick a
+ * photo, compressed client-side before it's sent to the server (see
+ * PATCH /api/admin/users/:id/photo, stored as a base64 data: URI). */
+function PhotoCell({ user }) {
+  const queryClient = useQueryClient();
+  const fileInputRef = useRef(null);
+  const [error, setError] = useState("");
+
+  const uploadMutation = useMutation({
+    mutationFn: (blob) => adminApi.uploadUserPhoto(user.id, blob),
+    onSuccess: () => {
+      setError("");
+      queryClient.invalidateQueries({ queryKey: ["adminUsers"] });
+      queryClient.invalidateQueries({ queryKey: ["hallOfRecognition"] });
+    },
+    onError: (err) => setError(err.response?.data?.error || "Upload failed"),
+  });
+
+  async function handleFileChange(e) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      const blob = await compressImage(file);
+      uploadMutation.mutate(blob);
+    } catch {
+      setError("Couldn't process that image");
+    }
+  }
+
+  return (
+    <div className="relative inline-block" title={error || "Click to upload a photo"}>
+      <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleFileChange} />
+      <button
+        onClick={() => fileInputRef.current?.click()}
+        disabled={uploadMutation.isPending}
+        className="group relative w-8 h-8 rounded-full overflow-hidden ring-1 ring-slate-200 hover:ring-accent transition-standard disabled:opacity-50"
+      >
+        {user.photo_url ? (
+          <img src={user.photo_url} alt={user.name} className="w-full h-full object-cover" />
+        ) : (
+          <div className="w-full h-full bg-nav/10 text-nav text-[11px] font-display font-bold flex items-center justify-center">
+            {user.name?.charAt(0).toUpperCase() || "?"}
+          </div>
+        )}
+        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 flex items-center justify-center transition-standard">
+          <svg
+            className="w-3.5 h-3.5 text-white opacity-0 group-hover:opacity-100 transition-standard"
+            viewBox="0 0 20 20"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M3 6.5A1.5 1.5 0 014.5 5h2l1-1.5h5L13.5 5h2A1.5 1.5 0 0117 6.5v7A1.5 1.5 0 0115.5 15h-11A1.5 1.5 0 013 13.5v-7z" />
+            <circle cx="10" cy="10" r="2.5" />
+          </svg>
+        </div>
+      </button>
+      {error && <p className="absolute left-0 top-full mt-0.5 w-24 text-[10px] text-red-600">{error}</p>}
+    </div>
   );
 }

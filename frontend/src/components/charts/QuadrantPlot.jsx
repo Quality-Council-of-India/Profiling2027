@@ -1,5 +1,12 @@
 import { ROLE_COLORS, ROLE_LABELS } from "../../utils/constants.js";
 
+const QUADRANTS = [
+  { key: "star", label: "Star Performers", accent: "#22C55E", test: (p) => p.performance >= 12.5 && p.sentiment >= 0 },
+  { key: "wellLiked", label: "Well-Liked Underperformers", accent: "#3B82F6", test: (p) => p.performance < 12.5 && p.sentiment >= 0 },
+  { key: "atRisk", label: "At-Risk", accent: "#EF4444", test: (p) => p.performance < 12.5 && p.sentiment < 0 },
+  { key: "toxic", label: "Toxic High-Performers", accent: "#F97316", test: (p) => p.performance >= 12.5 && p.sentiment < 0 },
+];
+
 // points: [{ id, name, role, field, performance (0-25), sentiment (-1..1) }]
 export default function QuadrantPlot({ points, height = 280 }) {
   return (
@@ -49,6 +56,37 @@ export default function QuadrantPlot({ points, height = 280 }) {
               <span className="text-xs text-slate-500">{ROLE_LABELS[k]}</span>
             </div>
           ))}
+      </div>
+
+      {/* Named breakdown — hover tooltips alone don't tell you who's where at a glance. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+        {QUADRANTS.map((q) => {
+          const members = points.filter(q.test).sort((a, b) => b.performance - a.performance);
+          return (
+            <div key={q.key} className="border border-slate-200 rounded-lg p-3">
+              <div className="flex items-center gap-1.5 mb-2">
+                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: q.accent }} />
+                <span className="text-xs font-semibold text-slate-700">{q.label}</span>
+                <span className="text-xs text-slate-400">({members.length})</span>
+              </div>
+              {members.length === 0 ? (
+                <p className="text-xs text-slate-400">No one here.</p>
+              ) : (
+                <div className="flex flex-wrap gap-1.5">
+                  {members.map((m) => (
+                    <span
+                      key={m.id}
+                      title={`${m.name} — performance ${m.performance.toFixed(1)}/25, sentiment ${m.sentiment.toFixed(2)}`}
+                      className="px-2 py-0.5 rounded-md text-[11px] bg-slate-50 border border-slate-100 text-slate-700"
+                    >
+                      {m.name}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
