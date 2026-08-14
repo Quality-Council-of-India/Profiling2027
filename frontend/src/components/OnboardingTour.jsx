@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { getNavItems } from "../utils/navItems.js";
 
 const PAD = 6; // spotlight breathing room around the target element
@@ -56,7 +56,11 @@ function markOnboardingSeen(userId) {
 export default function OnboardingTour({ user, onClose }) {
   const [stepIndex, setStepIndex] = useState(0);
   const [rect, setRect] = useState(null);
-  const steps = buildSteps(user);
+  // Memoized so `step` keeps a stable reference across re-renders (only
+  // `measure`'s own setRect call should re-render this component) — without
+  // this, a fresh `steps` array every render made `measure`'s dependency
+  // "change" every time, re-firing the effect below in an infinite loop.
+  const steps = useMemo(() => buildSteps(user), [user.id]);
   const step = steps[stepIndex];
 
   const measure = useCallback(() => {
