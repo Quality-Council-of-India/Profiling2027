@@ -11,7 +11,7 @@ import bcrypt from "bcryptjs";
 import { PrismaClient } from "@prisma/client";
 import { regeneratePeerMappings } from "../src/services/peerMapping.js";
 import { computeScoresForWeek } from "../src/services/scoreEngine.js";
-import { PARAMS, STRENGTH_TAGS, WEAKNESS_TAGS } from "../src/utils/constants.js";
+import { STRENGTH_TAGS, WEAKNESS_TAGS, MAX_TAGS_PER_CATEGORY } from "../src/utils/constants.js";
 
 const prisma = new PrismaClient();
 
@@ -40,15 +40,26 @@ function rand(seed) {
 
 function ratingFor(userId, week, paramIndex, offset = 0) {
   const seed = userId * 1000 + week * 31 + paramIndex * 7 + offset;
-  return 2 + Math.floor(rand(seed) * 4); // 2..5, skews positive like real feedback
+  return 3 + Math.floor(rand(seed) * 5); // 3..7, skews positive like real feedback
 }
 
 function pickTags(userId, week, tagList, offset) {
-  const count = 2 + Math.floor(rand(userId * 97 + week * 13 + offset) * 2); // 2-3 tags
+  const count = 2 + Math.floor(rand(userId * 97 + week * 13 + offset) * (MAX_TAGS_PER_CATEGORY - 1)); // 2..MAX_TAGS_PER_CATEGORY
   const shuffled = [...tagList].sort(
     (a, b) => rand(userId + week + tagList.indexOf(a) + offset) - rand(userId + week + tagList.indexOf(b) + offset)
   );
   return shuffled.slice(0, count);
+}
+
+// Week 1 has nothing to compare against, so trajectory is always
+// not_applicable there (mirrors the live form); weeks 2+ skew toward
+// "stayed the same" like real week-over-week feedback tends to.
+function trajectoryFor(userId, week, offset) {
+  if (week <= 1) return "not_applicable";
+  const r = rand(userId * 331 + week * 17 + offset);
+  if (r < 0.3) return "improved";
+  if (r < 0.75) return "stayed_same";
+  return "declined";
 }
 
 async function main() {
@@ -136,16 +147,17 @@ async function main() {
             evaluator_id: u.id,
             evaluatee_id: u.id,
             eval_type: "self",
-            sincerity: ratingFor(u.id, week.week_number, 0, 20),
+            ownership_discipline: ratingFor(u.id, week.week_number, 0, 20),
             team_spirit: ratingFor(u.id, week.week_number, 1, 20),
-            knowledge: ratingFor(u.id, week.week_number, 2, 20),
-            quantity: ratingFor(u.id, week.week_number, 3, 20),
-            quality: ratingFor(u.id, week.week_number, 4, 20),
-            problem_solving: rand(u.id + week.week_number + 20) > 0.15 ? "satisfied" : "not_satisfied",
+            communication_clarity: ratingFor(u.id, week.week_number, 2, 20),
+            domain_knowledge: ratingFor(u.id, week.week_number, 3, 20),
+            timeliness_throughput: ratingFor(u.id, week.week_number, 4, 20),
+            work_quality: ratingFor(u.id, week.week_number, 5, 20),
+            problem_solving_initiative: ratingFor(u.id, week.week_number, 6, 20),
+            trajectory: trajectoryFor(u.id, week.week_number, 20),
             strengths_tags: pickTags(u.id, week.week_number, STRENGTH_TAGS, 20),
             weakness_tags: pickTags(u.id, week.week_number, WEAKNESS_TAGS, 30),
-            strength_comment: "Consistently reliable and easy to collaborate with.",
-            weakness_comment: "Could tighten up turnaround time on edge cases.",
+            improvement_suggestion: "Could tighten up turnaround time on edge cases.",
           },
         });
       }
@@ -169,16 +181,17 @@ async function main() {
           evaluator_id: m.evaluator_id,
           evaluatee_id: m.evaluatee_id,
           eval_type: "peer",
-          sincerity: ratingFor(m.evaluatee_id, week.week_number, 0, m.evaluator_id),
+          ownership_discipline: ratingFor(m.evaluatee_id, week.week_number, 0, m.evaluator_id),
           team_spirit: ratingFor(m.evaluatee_id, week.week_number, 1, m.evaluator_id),
-          knowledge: ratingFor(m.evaluatee_id, week.week_number, 2, m.evaluator_id),
-          quantity: ratingFor(m.evaluatee_id, week.week_number, 3, m.evaluator_id),
-          quality: ratingFor(m.evaluatee_id, week.week_number, 4, m.evaluator_id),
-          problem_solving: rand(m.evaluatee_id + week.week_number + m.evaluator_id) > 0.2 ? "satisfied" : "not_satisfied",
+          communication_clarity: ratingFor(m.evaluatee_id, week.week_number, 2, m.evaluator_id),
+          domain_knowledge: ratingFor(m.evaluatee_id, week.week_number, 3, m.evaluator_id),
+          timeliness_throughput: ratingFor(m.evaluatee_id, week.week_number, 4, m.evaluator_id),
+          work_quality: ratingFor(m.evaluatee_id, week.week_number, 5, m.evaluator_id),
+          problem_solving_initiative: ratingFor(m.evaluatee_id, week.week_number, 6, m.evaluator_id),
+          trajectory: trajectoryFor(m.evaluatee_id, week.week_number, m.evaluator_id),
           strengths_tags: pickTags(m.evaluatee_id, week.week_number, STRENGTH_TAGS, m.evaluator_id),
           weakness_tags: pickTags(m.evaluatee_id, week.week_number, WEAKNESS_TAGS, m.evaluator_id + 5),
-          strength_comment: "Very responsive and grasps facts quickly.",
-          weakness_comment: "Could be more proactive in flagging blockers early.",
+          improvement_suggestion: "Could be more proactive in flagging blockers early.",
         },
       });
     }

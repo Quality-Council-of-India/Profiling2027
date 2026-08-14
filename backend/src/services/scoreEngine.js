@@ -11,8 +11,7 @@
 
 import { Prisma } from "@prisma/client";
 import { prisma } from "../utils/prisma.js";
-
-const PARAMS = ["sincerity", "team_spirit", "knowledge", "quantity", "quality"];
+import { PARAMS } from "../utils/constants.js";
 
 function round2(n) {
   return Math.round(n * 100) / 100;
@@ -40,25 +39,17 @@ function computeRow({ weekId, userId, selfEval, peerEvals, expectedPeerCount }) 
 
   const sapaFactor = totalSelf > 0 && totalPeer > 0 ? round2(totalSelf / totalPeer) : null;
 
-  return {
-    week_id: weekId,
-    user_id: userId,
-    sincerity_self: selfScores.sincerity,
-    sincerity_peer: peerScores.sincerity,
-    team_spirit_self: selfScores.team_spirit,
-    team_spirit_peer: peerScores.team_spirit,
-    knowledge_self: selfScores.knowledge,
-    knowledge_peer: peerScores.knowledge,
-    quantity_self: selfScores.quantity,
-    quantity_peer: peerScores.quantity,
-    quality_self: selfScores.quality,
-    quality_peer: peerScores.quality,
-    total_self: totalSelf,
-    total_peer: totalPeer,
-    peer_count: peerCount,
-    expected_peer_count: expectedPeerCount,
-    sapa_factor: sapaFactor,
-  };
+  const row = { week_id: weekId, user_id: userId };
+  for (const p of PARAMS) {
+    row[`${p}_self`] = selfScores[p];
+    row[`${p}_peer`] = peerScores[p];
+  }
+  row.total_self = totalSelf;
+  row.total_peer = totalPeer;
+  row.peer_count = peerCount;
+  row.expected_peer_count = expectedPeerCount;
+  row.sapa_factor = sapaFactor;
+  return row;
 }
 
 /** Computes and upserts the computed_scores row for one user in one week. */
@@ -93,50 +84,36 @@ export async function computeScoresForUserWeek(weekId, userId) {
 async function upsertComputedScoresBatch(rows) {
   if (rows.length === 0) return;
 
-  const valueRows = rows.map(
-    (r) => Prisma.sql`(
-      ${r.week_id}, ${r.user_id},
-      ${r.sincerity_self}, ${r.sincerity_peer},
-      ${r.team_spirit_self}, ${r.team_spirit_peer},
-      ${r.knowledge_self}, ${r.knowledge_peer},
-      ${r.quantity_self}, ${r.quantity_peer},
-      ${r.quality_self}, ${r.quality_peer},
-      ${r.total_self}, ${r.total_peer},
-      ${r.peer_count}, ${r.expected_peer_count},
-      ${r.sapa_factor}, now()
-    )`
+  // Column names are drawn from the internal PARAMS constant, never from
+  // request input, so interpolating them directly (rather than as bound
+  // params, which Postgres doesn't allow for identifiers) is safe.
+  const scoreColumns = PARAMS.flatMap((p) => [`${p}_self`, `${p}_peer`]);
+  const allColumns = ["week_id", "user_id", ...scoreColumns, "total_self", "total_peer", "peer_count", "expected_peer_count", "sapa_factor", "computed_at"];
+
+  const valueRows = rows.map((r) => {
+    const values = [
+      r.week_id,
+      r.user_id,
+      ...scoreColumns.map((c) => r[c]),
+      r.total_self,
+      r.total_peer,
+      r.peer_count,
+      r.expected_peer_count,
+      r.sapa_factor,
+    ];
+    return Prisma.sql`(${Prisma.join(values)}, now())`;
+  });
+
+  const updateSet = Prisma.join(
+    [...scoreColumns, "total_self", "total_peer", "peer_count", "expected_peer_count", "sapa_factor", "computed_at"].map(
+      (c) => Prisma.raw(`"${c}" = EXCLUDED."${c}"`)
+    )
   );
 
   await prisma.$executeRaw`
-    INSERT INTO "computed_scores" (
-      week_id, user_id,
-      sincerity_self, sincerity_peer,
-      team_spirit_self, team_spirit_peer,
-      knowledge_self, knowledge_peer,
-      quantity_self, quantity_peer,
-      quality_self, quality_peer,
-      total_self, total_peer,
-      peer_count, expected_peer_count,
-      sapa_factor, computed_at
-    )
+    INSERT INTO "computed_scores" (${Prisma.join(allColumns.map((c) => Prisma.raw(`"${c}"`)))})
     VALUES ${Prisma.join(valueRows)}
-    ON CONFLICT (week_id, user_id) DO UPDATE SET
-      sincerity_self = EXCLUDED.sincerity_self,
-      sincerity_peer = EXCLUDED.sincerity_peer,
-      team_spirit_self = EXCLUDED.team_spirit_self,
-      team_spirit_peer = EXCLUDED.team_spirit_peer,
-      knowledge_self = EXCLUDED.knowledge_self,
-      knowledge_peer = EXCLUDED.knowledge_peer,
-      quantity_self = EXCLUDED.quantity_self,
-      quantity_peer = EXCLUDED.quantity_peer,
-      quality_self = EXCLUDED.quality_self,
-      quality_peer = EXCLUDED.quality_peer,
-      total_self = EXCLUDED.total_self,
-      total_peer = EXCLUDED.total_peer,
-      peer_count = EXCLUDED.peer_count,
-      expected_peer_count = EXCLUDED.expected_peer_count,
-      sapa_factor = EXCLUDED.sapa_factor,
-      computed_at = EXCLUDED.computed_at
+    ON CONFLICT (week_id, user_id) DO UPDATE SET ${updateSet}
   `;
 }
 

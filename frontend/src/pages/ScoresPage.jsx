@@ -4,7 +4,7 @@ import { scoresApi, weeksApi } from "../api/endpoints.js";
 import { Card, StatCard, Spinner, ErrorBanner, RefreshButton } from "../components/ui.jsx";
 import RadarComparison from "../components/charts/RadarComparison.jsx";
 import SAPAGauge from "../components/charts/SAPAGauge.jsx";
-import { PARAM_LABELS, ACCENT, NAV } from "../utils/constants.js";
+import { PARAM_FIELDS, TRAJECTORY_LABELS, ACCENT, NAV } from "../utils/constants.js";
 
 /**
  * My Scores — the ongoing week's score card only (open week if one exists,
@@ -67,26 +67,23 @@ export default function ScoresPage({ userId, userLabel }) {
         </Card>
       ) : (
         <>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-            {PARAM_LABELS.map((label, i) => {
-              const key = ["sincerity", "team_spirit", "knowledge", "quantity", "quality"][i];
-              return (
-                <Card key={label} interactive className="p-3 text-center">
-                  <p className="text-xs text-slate-500 mb-1">{label}</p>
-                  <div className="flex justify-center gap-3">
-                    <div>
-                      <p className="text-lg font-bold" style={{ color: ACCENT }}>{Number(computed[`${key}_self`])}</p>
-                      <p className="text-xs text-slate-400">Self</p>
-                    </div>
-                    <div className="w-px bg-slate-200" />
-                    <div>
-                      <p className="text-lg font-bold" style={{ color: NAV }}>{Number(computed[`${key}_peer`])}</p>
-                      <p className="text-xs text-slate-400">Peer</p>
-                    </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+            {PARAM_FIELDS.map(({ key, label }) => (
+              <Card key={label} interactive className="p-3 text-center">
+                <p className="text-xs text-slate-500 mb-1">{label}</p>
+                <div className="flex justify-center gap-3">
+                  <div>
+                    <p className="text-lg font-bold" style={{ color: ACCENT }}>{Number(computed[`${key}_self`])}</p>
+                    <p className="text-xs text-slate-400">Self</p>
                   </div>
-                </Card>
-              );
-            })}
+                  <div className="w-px bg-slate-200" />
+                  <div>
+                    <p className="text-lg font-bold" style={{ color: NAV }}>{Number(computed[`${key}_peer`])}</p>
+                    <p className="text-xs text-slate-400">Peer</p>
+                  </div>
+                </div>
+              </Card>
+            ))}
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -101,7 +98,7 @@ export default function ScoresPage({ userId, userLabel }) {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <StatCard label="Total Self" value={totalSelf.toFixed(1)} sub="/25" />
+            <StatCard label="Total Self" value={totalSelf.toFixed(1)} sub="/49" />
             <StatCard label="Total Peer" value={totalPeer.toFixed(1)} sub={`${computed.peer_count} of ${computed.expected_peer_count} peers responded`} />
           </div>
 
@@ -112,50 +109,72 @@ export default function ScoresPage({ userId, userLabel }) {
             ) : subjective.peer.responseCount === 0 ? (
               <p className="text-sm text-slate-400">No peer responses received for this week.</p>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <p className="text-xs font-medium text-green-700 uppercase tracking-wide mb-2">Strengths</p>
-                  <div className="space-y-1.5">
-                    {subjective.peer.strengthComments.length ? (
-                      subjective.peer.strengthComments.map((r, i) => (
-                        <p key={i} className="text-xs text-slate-600 bg-green-50 rounded-md px-3 py-2 border border-green-100">"{r}"</p>
-                      ))
-                    ) : (
-                      <p className="text-xs text-slate-400">No open-ended strength remarks this week.</p>
+              <>
+                {(subjective.peer.trajectory.improved > 0 || subjective.peer.trajectory.stayed_same > 0 || subjective.peer.trajectory.declined > 0) && (
+                  <div className="flex flex-wrap gap-2 mb-4 pb-4 border-b border-slate-100">
+                    <span className="text-xs text-slate-500 mr-1">Compared to last week:</span>
+                    {subjective.peer.trajectory.improved > 0 && (
+                      <span className="text-[11px] px-2 py-1 rounded-full bg-green-100 text-green-800">
+                        {TRAJECTORY_LABELS.improved} × {subjective.peer.trajectory.improved}
+                      </span>
+                    )}
+                    {subjective.peer.trajectory.stayed_same > 0 && (
+                      <span className="text-[11px] px-2 py-1 rounded-full bg-slate-100 text-slate-700">
+                        {TRAJECTORY_LABELS.stayed_same} × {subjective.peer.trajectory.stayed_same}
+                      </span>
+                    )}
+                    {subjective.peer.trajectory.declined > 0 && (
+                      <span className="text-[11px] px-2 py-1 rounded-full bg-red-100 text-red-800">
+                        {TRAJECTORY_LABELS.declined} × {subjective.peer.trajectory.declined}
+                      </span>
                     )}
                   </div>
-                  {subjective.peer.strengthsFrequency.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 mt-2">
-                      {subjective.peer.strengthsFrequency.map((f) => (
-                        <span key={f.tag} className="text-[11px] px-2 py-1 rounded-full bg-green-100 text-green-800">
-                          {f.tag} ({f.count})
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-red-700 uppercase tracking-wide mb-2">Areas of Improvement</p>
-                  <div className="space-y-1.5">
-                    {subjective.peer.weaknessComments.length ? (
-                      subjective.peer.weaknessComments.map((r, i) => (
-                        <p key={i} className="text-xs text-slate-600 bg-red-50 rounded-md px-3 py-2 border border-red-100">"{r}"</p>
-                      ))
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-xs font-medium text-green-700 uppercase tracking-wide mb-2">Strengths</p>
+                    {subjective.peer.strengthsFrequency.length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {subjective.peer.strengthsFrequency.map((f) => (
+                          <span key={f.tag} className="text-[11px] px-2 py-1 rounded-full bg-green-100 text-green-800">
+                            {f.tag} ({f.count})
+                          </span>
+                        ))}
+                      </div>
                     ) : (
-                      <p className="text-xs text-slate-400">No open-ended improvement remarks this week.</p>
+                      <p className="text-xs text-slate-400">No strength tags selected this week.</p>
                     )}
                   </div>
-                  {subjective.peer.weaknessFrequency.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 mt-2">
-                      {subjective.peer.weaknessFrequency.map((f) => (
-                        <span key={f.tag} className="text-[11px] px-2 py-1 rounded-full bg-red-100 text-red-800">
-                          {f.tag} ({f.count})
-                        </span>
-                      ))}
-                    </div>
-                  )}
+                  <div>
+                    <p className="text-xs font-medium text-red-700 uppercase tracking-wide mb-2">Areas of Improvement</p>
+                    {subjective.peer.weaknessFrequency.length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {subjective.peer.weaknessFrequency.map((f) => (
+                          <span key={f.tag} className="text-[11px] px-2 py-1 rounded-full bg-red-100 text-red-800">
+                            {f.tag} ({f.count})
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-slate-400">No improvement tags selected this week.</p>
+                    )}
+                  </div>
                 </div>
-              </div>
+
+                <div className="mt-4">
+                  <p className="text-xs font-medium text-slate-600 uppercase tracking-wide mb-2">Suggested Actions to Improve</p>
+                  <div className="space-y-1.5">
+                    {subjective.peer.improvementSuggestions.length ? (
+                      subjective.peer.improvementSuggestions.map((r, i) => (
+                        <p key={i} className="text-xs text-slate-600 bg-slate-50 rounded-md px-3 py-2 border border-slate-100">"{r}"</p>
+                      ))
+                    ) : (
+                      <p className="text-xs text-slate-400">No suggestions submitted this week.</p>
+                    )}
+                  </div>
+                </div>
+              </>
             )}
           </Card>
         </>

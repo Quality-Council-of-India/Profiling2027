@@ -1,7 +1,7 @@
 import { PARAM_LABELS } from "../../utils/constants.js";
 
 function heatColor(v) {
-  const t = Math.max(0, Math.min(1, (v - 2.5) / 2.5));
+  const t = Math.max(0, Math.min(1, (v - 3.5) / 3.5));
   const r = Math.round(220 - t * 190);
   const g = Math.round(220 - t * 60);
   const b = Math.round(220 - t * 150);

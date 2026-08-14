@@ -1,13 +1,15 @@
 import { ROLE_COLORS, ROLE_LABELS } from "../../utils/constants.js";
 
+const PERFORMANCE_MIDPOINT = 24.5; // half of the 49-point max total peer score
+
 const QUADRANTS = [
-  { key: "star", label: "Star Performers", accent: "#22C55E", test: (p) => p.performance >= 12.5 && p.sentiment >= 0 },
-  { key: "wellLiked", label: "Well-Liked Underperformers", accent: "#3B82F6", test: (p) => p.performance < 12.5 && p.sentiment >= 0 },
-  { key: "atRisk", label: "At-Risk", accent: "#EF4444", test: (p) => p.performance < 12.5 && p.sentiment < 0 },
-  { key: "toxic", label: "Toxic High-Performers", accent: "#F97316", test: (p) => p.performance >= 12.5 && p.sentiment < 0 },
+  { key: "star", label: "Star Performers", accent: "#22C55E", test: (p) => p.performance >= PERFORMANCE_MIDPOINT && p.sentiment >= 0 },
+  { key: "wellLiked", label: "Well-Liked Underperformers", accent: "#3B82F6", test: (p) => p.performance < PERFORMANCE_MIDPOINT && p.sentiment >= 0 },
+  { key: "atRisk", label: "At-Risk", accent: "#EF4444", test: (p) => p.performance < PERFORMANCE_MIDPOINT && p.sentiment < 0 },
+  { key: "toxic", label: "Toxic High-Performers", accent: "#F97316", test: (p) => p.performance >= PERFORMANCE_MIDPOINT && p.sentiment < 0 },
 ];
 
-// points: [{ id, name, role, field, performance (0-25), sentiment (-1..1) }]
+// points: [{ id, name, role, field, performance (0-49), sentiment (-1..1) }]
 export default function QuadrantPlot({ points, height = 280 }) {
   return (
     <div>
@@ -29,14 +31,14 @@ export default function QuadrantPlot({ points, height = 280 }) {
           </div>
         </div>
         {points.map((p) => {
-          const x = Math.max(2, Math.min(98, (p.performance / 25) * 100));
+          const x = Math.max(2, Math.min(98, (p.performance / 49) * 100));
           const y = Math.max(2, Math.min(98, ((p.sentiment + 1) / 2) * 100));
           return (
             <div
               key={p.id}
               className="absolute w-3 h-3 rounded-full border-2 border-white shadow-sm"
               style={{ left: `${x}%`, bottom: `${y}%`, background: ROLE_COLORS[p.role] }}
-              title={`${p.name} — performance ${p.performance.toFixed(1)}/25, sentiment ${p.sentiment.toFixed(2)}`}
+              title={`${p.name} — performance ${p.performance.toFixed(1)}/49, sentiment ${p.sentiment.toFixed(2)}`}
             />
           );
         })}
@@ -76,7 +78,7 @@ export default function QuadrantPlot({ points, height = 280 }) {
                   {members.map((m) => (
                     <span
                       key={m.id}
-                      title={`${m.name} — performance ${m.performance.toFixed(1)}/25, sentiment ${m.sentiment.toFixed(2)}`}
+                      title={`${m.name} — performance ${m.performance.toFixed(1)}/49, sentiment ${m.sentiment.toFixed(2)}`}
                       className="px-2 py-0.5 rounded-md text-[11px] bg-slate-50 border border-slate-100 text-slate-700"
                     >
                       {m.name}

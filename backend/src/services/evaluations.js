@@ -1,4 +1,5 @@
 import { prisma } from "../utils/prisma.js";
+import { TRAJECTORY_LABELS } from "../utils/constants.js";
 
 function tagFrequency(evals, field) {
   const freq = {};
@@ -24,12 +25,10 @@ export async function getSubjectiveSummary(weekId, userId) {
     prisma.evaluation.findMany({
       where: { week_id: weekId, evaluatee_id: userId, eval_type: "peer" },
       select: {
-        problem_solving: true,
-        problem_reason: true,
+        trajectory: true,
         strengths_tags: true,
         weakness_tags: true,
-        strength_comment: true,
-        weakness_comment: true,
+        improvement_suggestion: true,
       },
     }),
   ]);
@@ -37,33 +36,29 @@ export async function getSubjectiveSummary(weekId, userId) {
   return {
     self: selfEval
       ? {
-          problem_solving: selfEval.problem_solving,
-          problem_reason: selfEval.problem_reason,
+          trajectory: selfEval.trajectory,
           strengths_tags: selfEval.strengths_tags,
           weakness_tags: selfEval.weakness_tags,
-          strength_comment: selfEval.strength_comment,
-          weakness_comment: selfEval.weakness_comment,
+          improvement_suggestion: selfEval.improvement_suggestion,
         }
       : null,
     peer: {
       responseCount: peerEvals.length,
-      problemSolving: {
-        satisfied: peerEvals.filter((e) => e.problem_solving === "satisfied").length,
-        not_satisfied: peerEvals.filter((e) => e.problem_solving === "not_satisfied").length,
+      trajectory: {
+        improved: peerEvals.filter((e) => e.trajectory === "improved").length,
+        stayed_same: peerEvals.filter((e) => e.trajectory === "stayed_same").length,
+        declined: peerEvals.filter((e) => e.trajectory === "declined").length,
+        not_applicable: peerEvals.filter((e) => e.trajectory === "not_applicable").length,
       },
       strengthsFrequency: tagFrequency(peerEvals, "strengths_tags"),
       weaknessFrequency: tagFrequency(peerEvals, "weakness_tags"),
-      strengthComments: peerEvals.map((e) => e.strength_comment).filter(Boolean),
-      weaknessComments: peerEvals.map((e) => e.weakness_comment).filter(Boolean),
-      problemReasons: peerEvals.map((e) => e.problem_reason).filter(Boolean),
+      improvementSuggestions: peerEvals.map((e) => e.improvement_suggestion).filter(Boolean),
     },
   };
 }
 
-function formatProblemSolving(value) {
-  if (value === "satisfied") return "Satisfied";
-  if (value === "not_satisfied") return "Not Satisfied";
-  return "";
+function formatTrajectory(value) {
+  return TRAJECTORY_LABELS[value] || "";
 }
 
 /** "Tag (count)" formatting shared by the weekly and combined sheet exports. */
@@ -87,10 +82,8 @@ export async function getSubjectiveSummaryBatch(weekId, userIds) {
       where: { week_id: weekId, eval_type: "self", evaluatee_id: { in: userIds } },
       select: {
         evaluatee_id: true,
-        problem_solving: true,
-        problem_reason: true,
-        strength_comment: true,
-        weakness_comment: true,
+        trajectory: true,
+        improvement_suggestion: true,
         strengths_tags: true,
         weakness_tags: true,
       },
@@ -99,10 +92,8 @@ export async function getSubjectiveSummaryBatch(weekId, userIds) {
       where: { week_id: weekId, eval_type: "peer", evaluatee_id: { in: userIds } },
       select: {
         evaluatee_id: true,
-        problem_solving: true,
-        problem_reason: true,
-        strength_comment: true,
-        weakness_comment: true,
+        trajectory: true,
+        improvement_suggestion: true,
         strengths_tags: true,
         weakness_tags: true,
       },
@@ -120,32 +111,38 @@ export async function getSubjectiveSummaryBatch(weekId, userIds) {
   for (const userId of userIds) {
     const self = selfByUser.get(userId);
     const peers = peersByUser.get(userId) || [];
-    const satisfied = peers.filter((p) => p.problem_solving === "satisfied").length;
-    const notSatisfied = peers.filter((p) => p.problem_solving === "not_satisfied").length;
+    const peerImprovedCount = peers.filter((p) => p.trajectory === "improved").length;
+    const peerStayedSameCount = peers.filter((p) => p.trajectory === "stayed_same").length;
+    const peerDeclinedCount = peers.filter((p) => p.trajectory === "declined").length;
+    const peerNotApplicableCount = peers.filter((p) => p.trajectory === "not_applicable").length;
     const peerStrengthsFrequency = tagFrequency(peers, "strengths_tags");
     const peerWeaknessFrequency = tagFrequency(peers, "weakness_tags");
     const selfStrengthsTagsRaw = self?.strengths_tags || [];
     const selfWeaknessTagsRaw = self?.weakness_tags || [];
 
     result.set(userId, {
-      selfProblemSolving: self ? formatProblemSolving(self.problem_solving) : "",
-      selfProblemReason: self?.problem_solving === "not_satisfied" ? self.problem_reason || "" : "",
-      selfStrength: self?.strength_comment || "",
-      selfWeakness: self?.weakness_comment || "",
+      selfTrajectory: self ? formatTrajectory(self.trajectory) : "",
+      selfTrajectoryRaw: self?.trajectory || null,
+      selfSuggestion: self?.improvement_suggestion || "",
       selfStrengthsTags: formatTagFrequency(tagFrequency(self ? [self] : [], "strengths_tags")),
       selfWeaknessTags: formatTagFrequency(tagFrequency(self ? [self] : [], "weakness_tags")),
       selfStrengthsTagsRaw,
       selfWeaknessTagsRaw,
-      peerProblemSolving: peers.length ? `Satisfied: ${satisfied} | Not Satisfied: ${notSatisfied}` : "",
-      peerSatisfiedCount: satisfied,
-      peerNotSatisfiedCount: notSatisfied,
-      peerProblemReason: peers
-        .filter((p) => p.problem_solving === "not_satisfied")
-        .map((p) => p.problem_reason)
-        .filter(Boolean)
-        .join("\n"),
-      peerStrength: peers.map((p) => p.strength_comment).filter(Boolean).join("\n"),
-      peerWeakness: peers.map((p) => p.weakness_comment).filter(Boolean).join("\n"),
+      peerTrajectory: peers.length
+        ? [
+            peerImprovedCount ? `Improved: ${peerImprovedCount}` : null,
+            peerStayedSameCount ? `Stayed the Same: ${peerStayedSameCount}` : null,
+            peerDeclinedCount ? `Declined: ${peerDeclinedCount}` : null,
+            peerNotApplicableCount ? `Not Applicable: ${peerNotApplicableCount}` : null,
+          ]
+            .filter(Boolean)
+            .join(" | ")
+        : "",
+      peerImprovedCount,
+      peerStayedSameCount,
+      peerDeclinedCount,
+      peerNotApplicableCount,
+      peerSuggestions: peers.map((p) => p.improvement_suggestion).filter(Boolean).join("\n"),
       peerStrengthsTags: formatTagFrequency(peerStrengthsFrequency),
       peerWeaknessTags: formatTagFrequency(peerWeaknessFrequency),
       peerStrengthsFrequency,

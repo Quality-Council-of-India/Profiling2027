@@ -2,20 +2,13 @@
 import { prisma } from "../utils/prisma.js";
 import { roleFilterForScope, analyticsScope } from "./access.js";
 import { ROLES } from "../utils/roles.js";
-
-const PEER_PARAM_COLUMNS = {
-  Sincerity: "sincerity_peer",
-  "Team Spirit": "team_spirit_peer",
-  Knowledge: "knowledge_peer",
-  Quantity: "quantity_peer",
-  Quality: "quality_peer",
-};
+import { PARAM_FIELDS } from "../utils/constants.js";
 
 function clamp(n, lo, hi) {
   return Math.max(lo, Math.min(hi, n));
 }
 
-/** §4.6.01 Field-Wise Heatmap: 10 fields x 5 parameters, avg peer scores. */
+/** §4.6.01 Field-Wise Heatmap: 10 fields x 7 parameters, avg peer scores. */
 export async function getFieldHeatmap(projectId, weekId, scope) {
   const users = await prisma.user.findMany({
     where: {
@@ -31,24 +24,22 @@ export async function getFieldHeatmap(projectId, weekId, scope) {
   for (const u of users) {
     const score = u.computedScores[0];
     if (!score) continue;
-    byField[u.field] ??= { count: 0, sums: { Sincerity: 0, "Team Spirit": 0, Knowledge: 0, Quantity: 0, Quality: 0 } };
+    byField[u.field] ??= { count: 0, sums: Object.fromEntries(PARAM_FIELDS.map((p) => [p.label, 0])) };
     byField[u.field].count += 1;
-    byField[u.field].sums.Sincerity += Number(score.sincerity_peer);
-    byField[u.field].sums["Team Spirit"] += Number(score.team_spirit_peer);
-    byField[u.field].sums.Knowledge += Number(score.knowledge_peer);
-    byField[u.field].sums.Quantity += Number(score.quantity_peer);
-    byField[u.field].sums.Quality += Number(score.quality_peer);
+    for (const p of PARAM_FIELDS) {
+      byField[u.field].sums[p.label] += Number(score[`${p.key}_peer`]);
+    }
   }
 
   return Object.entries(byField).map(([field, { count, sums }]) => {
     const row = { field };
     let total = 0;
-    for (const param of Object.keys(PEER_PARAM_COLUMNS)) {
-      const avg = count > 0 ? sums[param] / count : 0;
-      row[param] = Math.round(avg * 100) / 100;
+    for (const p of PARAM_FIELDS) {
+      const avg = count > 0 ? sums[p.label] / count : 0;
+      row[p.label] = Math.round(avg * 100) / 100;
       total += avg;
     }
-    row.avg = Math.round((total / 5) * 100) / 100;
+    row.avg = Math.round((total / PARAM_FIELDS.length) * 100) / 100;
     return row;
   });
 }
@@ -101,9 +92,10 @@ export async function getSapaDistribution(projectId, weekId, scope) {
 /**
  * §4.6.02 Quadrant Analysis: X = avg peer score, Y = sentiment of qualitative
  * feedback received. Sentiment is a lightweight heuristic (no NLP model
- * available in this stack): blends the Problem-Solving satisfied/not-satisfied
- * ratio with the strength-vs-weakness tag balance, both from peer submissions
- * for the given week. Replace with a real sentiment model if/when available.
+ * available in this stack): blends the week-over-week Trajectory answers
+ * (Improved/Stayed the Same/Declined) with the strength-vs-weakness tag
+ * balance, both from peer submissions for the given week. Replace with a
+ * real sentiment model if/when available.
  */
 export async function getQuadrantData(projectId, weekId, scope) {
   const users = await prisma.user.findMany({
@@ -112,7 +104,7 @@ export async function getQuadrantData(projectId, weekId, scope) {
       computedScores: { where: { week_id: weekId } },
       evaluationsReceived: {
         where: { week_id: weekId, eval_type: "peer" },
-        select: { problem_solving: true, strengths_tags: true, weakness_tags: true },
+        select: { trajectory: true, strengths_tags: true, weakness_tags: true },
       },
     },
   });
@@ -122,24 +114,28 @@ export async function getQuadrantData(projectId, weekId, scope) {
       const score = u.computedScores[0];
       if (!score) return null;
       const peerEvals = u.evaluationsReceived;
-      const satisfied = peerEvals.filter((e) => e.problem_solving === "satisfied").length;
-      const notSatisfied = peerEvals.length - satisfied;
+      const improved = peerEvals.filter((e) => e.trajectory === "improved").length;
+      const declined = peerEvals.filter((e) => e.trajectory === "declined").length;
+      // "not_applicable" (first-time evaluations, or Week 1) carries no
+      // directional signal, so it's excluded from the denominator rather
+      // than counted as neutral.
+      const scoredTrajectoryCount = peerEvals.filter((e) => e.trajectory !== "not_applicable").length;
       const strengthCount = peerEvals.reduce((a, e) => a + e.strengths_tags.length, 0);
       const weaknessCount = peerEvals.reduce((a, e) => a + e.weakness_tags.length, 0);
 
-      const satisfactionSignal = peerEvals.length ? (satisfied - notSatisfied) / peerEvals.length : 0;
+      const trajectorySignal = scoredTrajectoryCount ? (improved - declined) / scoredTrajectoryCount : 0;
       const tagSignal =
         strengthCount + weaknessCount > 0
           ? (strengthCount - weaknessCount) / (strengthCount + weaknessCount)
           : 0;
-      const sentiment = clamp(satisfactionSignal * 0.6 + tagSignal * 0.4, -1, 1);
+      const sentiment = clamp(trajectorySignal * 0.5 + tagSignal * 0.5, -1, 1);
 
       return {
         id: u.id,
         name: u.name,
         role: u.role,
         field: u.field,
-        performance: Number(score.total_peer), // X axis, out of 25
+        performance: Number(score.total_peer), // X axis, out of 49
         sentiment: Math.round(sentiment * 100) / 100, // Y axis, -1..1
       };
     })
@@ -159,13 +155,15 @@ export async function getQuadrantData(projectId, weekId, scope) {
  * Anchors get their field's named list; leads/Admin get the named list at
  * their existing analytics scope (excl_casu / full).
  */
-export async function getRankings(projectId, requester, weekIds) {
-  const users = await prisma.user.findMany({
-    where: { project_id: projectId, is_active: true, role: { not: ROLES.ADMIN } },
-    include: { computedScores: { where: { week_id: { in: weekIds } } } },
-  });
+/** Sorts a pool by totalPeer descending and assigns rank/of — shared by getRankings and getFieldMemberStandings. */
+function rankByTotalPeer(pool) {
+  const ranked = pool.filter((u) => u.totalPeer !== null).sort((a, b) => b.totalPeer - a.totalPeer);
+  return ranked.map((u, i) => ({ ...u, rank: i + 1, of: ranked.length }));
+}
 
-  const withAvg = users.map((u) => {
+/** Per-user average totalPeer/totalSelf across the given weeks, for a set of users. */
+function averageScoresByUser(users, weekIds) {
+  return users.map((u) => {
     const scores = u.computedScores;
     const totalPeer = scores.length
       ? scores.reduce((a, s) => a + Number(s.total_peer), 0) / scores.length
@@ -183,11 +181,16 @@ export async function getRankings(projectId, requester, weekIds) {
       weeksCounted: scores.length,
     };
   });
+}
 
-  function rank(pool) {
-    const ranked = pool.filter((u) => u.totalPeer !== null).sort((a, b) => b.totalPeer - a.totalPeer);
-    return ranked.map((u, i) => ({ ...u, rank: i + 1, of: ranked.length }));
-  }
+export async function getRankings(projectId, requester, weekIds) {
+  const users = await prisma.user.findMany({
+    where: { project_id: projectId, is_active: true, role: { not: ROLES.ADMIN } },
+    include: { computedScores: { where: { week_id: { in: weekIds } } } },
+  });
+
+  const withAvg = averageScoresByUser(users, weekIds);
+  const rank = rankByTotalPeer;
 
   let field = null;
   if (requester.field) {
@@ -314,6 +317,28 @@ export async function getFieldStandings(projectId, weekIds, scope) {
     .sort((a, b) => b.avgTotalPeer - a.avgTotalPeer);
 
   return standings.map((s, i) => ({ ...s, rank: i + 1 }));
+}
+
+/**
+ * Field-Wise Standing, drilled into ONE field — the individual ranked list
+ * of every user in that field, for the same roles that see getFieldStandings
+ * (Admin/CASU Lead/Project Lead, who have no personal field of their own).
+ * Same averaging rule as getRankings: one or more week IDs, averaged per
+ * person first.
+ */
+export async function getFieldMemberStandings(projectId, weekIds, field, scope) {
+  const users = await prisma.user.findMany({
+    where: {
+      project_id: projectId,
+      is_active: true,
+      role: { not: ROLES.ADMIN },
+      field,
+      ...roleFilterForScope(scope),
+    },
+    include: { computedScores: { where: { week_id: { in: weekIds } } } },
+  });
+
+  return rankByTotalPeer(averageScoresByUser(users, weekIds));
 }
 
 const HALL_OF_RECOGNITION_ROLES = [ROLES.PROFILER, ROLES.GROUP_ANCHOR, ROLES.CASU_ANCHOR];

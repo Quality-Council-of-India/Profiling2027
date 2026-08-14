@@ -2,6 +2,7 @@
 import ExcelJS from "exceljs";
 import { prisma } from "../utils/prisma.js";
 import { getSubjectiveSummaryBatch } from "./evaluations.js";
+import { PARAM_FIELDS, TRAJECTORY_LABELS } from "../utils/constants.js";
 
 const HEADER_FILL = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1F3864" } };
 const HEADER_FONT = { color: { argb: "FFFFFFFF" }, bold: true };
@@ -18,46 +19,33 @@ const COLUMNS = [
   { header: "Name", key: "name", width: 24 },
   { header: "Role", key: "role", width: 16 },
   { header: "Field", key: "field", width: 22 },
-  { header: "Sincerity (Self)", key: "sincerity_self", width: 14 },
-  { header: "Sincerity (Peer)", key: "sincerity_peer", width: 14 },
-  { header: "Team Spirit (Self)", key: "team_spirit_self", width: 14 },
-  { header: "Team Spirit (Peer)", key: "team_spirit_peer", width: 14 },
-  { header: "Knowledge (Self)", key: "knowledge_self", width: 14 },
-  { header: "Knowledge (Peer)", key: "knowledge_peer", width: 14 },
-  { header: "Quantity (Self)", key: "quantity_self", width: 14 },
-  { header: "Quantity (Peer)", key: "quantity_peer", width: 14 },
-  { header: "Quality (Self)", key: "quality_self", width: 14 },
-  { header: "Quality (Peer)", key: "quality_peer", width: 14 },
+  ...PARAM_FIELDS.flatMap((p) => [
+    { header: `${p.label} (Self)`, key: `${p.key}_self`, width: 14 },
+    { header: `${p.label} (Peer)`, key: `${p.key}_peer`, width: 14 },
+  ]),
   { header: "Total (Self)", key: "total_self", width: 12 },
   { header: "Total (Peer)", key: "total_peer", width: 12 },
   { header: "Peer Responses", key: "peer_count", width: 12 },
   { header: "Expected Peers", key: "expected_peer_count", width: 12 },
   { header: "SAPA Factor", key: "sapa_factor", width: 12 },
-  { header: "Problem Solving (Self)", key: "self_problem_solving", width: 16 },
-  { header: "Problem Solving (Peer)", key: "peer_problem_solving", width: 22 },
-  { header: "Problem Reason (Self)", key: "self_problem_reason", width: 30 },
-  { header: "Problem Reason (Peer)", key: "peer_problem_reason", width: 36 },
+  { header: "Trajectory (Self)", key: "self_trajectory", width: 16 },
+  { header: "Trajectory (Peer)", key: "peer_trajectory", width: 30 },
   { header: "Strengths Tags (Self)", key: "self_strengths_tags", width: 30 },
   { header: "Strengths Tags (Peer)", key: "peer_strengths_tags", width: 40 },
-  { header: "Strength (Self)", key: "self_strength", width: 34 },
-  { header: "Strength (Peer)", key: "peer_strength", width: 40 },
   { header: "Weakness Tags (Self)", key: "self_weakness_tags", width: 30 },
   { header: "Weakness Tags (Peer)", key: "peer_weakness_tags", width: 40 },
-  { header: "Weakness (Self)", key: "self_weakness", width: 34 },
-  { header: "Weakness (Peer)", key: "peer_weakness", width: 40 },
+  { header: "Improvement Suggestion (Self)", key: "self_suggestion", width: 34 },
+  { header: "Improvement Suggestion (Peer)", key: "peer_suggestion", width: 40 },
 ];
 
 const WRAPPING_KEYS = [
-  "self_problem_reason",
-  "peer_problem_reason",
+  "peer_trajectory",
   "self_strengths_tags",
   "peer_strengths_tags",
-  "self_strength",
-  "peer_strength",
   "self_weakness_tags",
   "peer_weakness_tags",
-  "self_weakness",
-  "peer_weakness",
+  "self_suggestion",
+  "peer_suggestion",
 ];
 
 function applyWrap(row) {
@@ -83,37 +71,29 @@ export async function buildWeekScoreWorkbook(projectId, weekId) {
 
   for (const s of scores) {
     const subj = subjective.get(s.user_id);
+    const paramValues = {};
+    for (const p of PARAM_FIELDS) {
+      paramValues[`${p.key}_self`] = Number(s[`${p.key}_self`]);
+      paramValues[`${p.key}_peer`] = Number(s[`${p.key}_peer`]);
+    }
     const row = sheet.addRow({
       name: s.user.name,
       role: s.user.role,
       field: s.user.field || "—",
-      sincerity_self: Number(s.sincerity_self),
-      sincerity_peer: Number(s.sincerity_peer),
-      team_spirit_self: Number(s.team_spirit_self),
-      team_spirit_peer: Number(s.team_spirit_peer),
-      knowledge_self: Number(s.knowledge_self),
-      knowledge_peer: Number(s.knowledge_peer),
-      quantity_self: Number(s.quantity_self),
-      quantity_peer: Number(s.quantity_peer),
-      quality_self: Number(s.quality_self),
-      quality_peer: Number(s.quality_peer),
+      ...paramValues,
       total_self: Number(s.total_self),
       total_peer: Number(s.total_peer),
       peer_count: s.peer_count,
       expected_peer_count: s.expected_peer_count,
       sapa_factor: s.sapa_factor === null ? "" : Number(s.sapa_factor),
-      self_problem_solving: subj?.selfProblemSolving || "",
-      peer_problem_solving: subj?.peerProblemSolving || "",
-      self_problem_reason: subj?.selfProblemReason || "",
-      peer_problem_reason: subj?.peerProblemReason || "",
+      self_trajectory: subj?.selfTrajectory || "",
+      peer_trajectory: subj?.peerTrajectory || "",
       self_strengths_tags: subj?.selfStrengthsTags || "",
       peer_strengths_tags: subj?.peerStrengthsTags || "",
-      self_strength: subj?.selfStrength || "",
-      peer_strength: subj?.peerStrength || "",
       self_weakness_tags: subj?.selfWeaknessTags || "",
       peer_weakness_tags: subj?.peerWeaknessTags || "",
-      self_weakness: subj?.selfWeakness || "",
-      peer_weakness: subj?.peerWeakness || "",
+      self_suggestion: subj?.selfSuggestion || "",
+      peer_suggestion: subj?.peerSuggestions || "",
     });
     applyWrap(row);
   }
@@ -160,17 +140,14 @@ export async function buildCombinedScoreWorkbook(projectId) {
     const col = (field) => scored.map((s) => Number(s[field]));
     const sapaValues = scored.map((s) => s.sapa_factor).filter((v) => v !== null).map(Number);
 
-    let selfSatisfied = 0;
-    let selfNotSatisfied = 0;
-    let peerSatisfied = 0;
-    let peerNotSatisfied = 0;
-    const selfProblemReasonBlocks = [];
-    const peerProblemReasonBlocks = [];
-    const selfStrengthBlocks = [];
-    const peerStrengthBlocks = [];
-    const selfWeaknessBlocks = [];
-    const peerWeaknessBlocks = [];
-    // Tags are compact by nature (unlike free-text comments), so — unlike
+    const selfTrajectoryTally = { improved: 0, stayed_same: 0, declined: 0, not_applicable: 0 };
+    let peerImproved = 0;
+    let peerStayedSame = 0;
+    let peerDeclined = 0;
+    let peerNotApplicable = 0;
+    const selfSuggestionBlocks = [];
+    const peerSuggestionBlocks = [];
+    // Tags are compact by nature (unlike free-text suggestions), so — unlike
     // the per-week "-> WEEK N" blocks above — these sum frequencies across
     // every week into one cumulative count per tag rather than repeating a
     // growing list of per-week blocks.
@@ -182,18 +159,15 @@ export async function buildCombinedScoreWorkbook(projectId) {
     for (const s of scored) {
       const subj = subjectiveByWeek.get(s.week_id)?.get(u.id);
       if (!subj) continue;
-      if (subj.selfProblemSolving === "Satisfied") selfSatisfied++;
-      else if (subj.selfProblemSolving === "Not Satisfied") selfNotSatisfied++;
-      peerSatisfied += subj.peerSatisfiedCount;
-      peerNotSatisfied += subj.peerNotSatisfiedCount;
+      if (subj.selfTrajectoryRaw) selfTrajectoryTally[subj.selfTrajectoryRaw]++;
+      peerImproved += subj.peerImprovedCount;
+      peerStayedSame += subj.peerStayedSameCount;
+      peerDeclined += subj.peerDeclinedCount;
+      peerNotApplicable += subj.peerNotApplicableCount;
 
       const label = `-> WEEK ${s.week.week_number}`;
-      selfProblemReasonBlocks.push(`${label}\n\n${subj.selfProblemReason}`);
-      peerProblemReasonBlocks.push(`${label}\n\n${subj.peerProblemReason}`);
-      selfStrengthBlocks.push(`${label}\n\n${subj.selfStrength}`);
-      peerStrengthBlocks.push(`${label}\n\n${subj.peerStrength}`);
-      selfWeaknessBlocks.push(`${label}\n\n${subj.selfWeakness}`);
-      peerWeaknessBlocks.push(`${label}\n\n${subj.peerWeakness}`);
+      selfSuggestionBlocks.push(`${label}\n\n${subj.selfSuggestion}`);
+      peerSuggestionBlocks.push(`${label}\n\n${subj.peerSuggestions}`);
 
       addRawTags(selfStrengthsFreq, subj.selfStrengthsTagsRaw);
       addFrequencyEntries(peerStrengthsFreq, subj.peerStrengthsFrequency);
@@ -201,39 +175,43 @@ export async function buildCombinedScoreWorkbook(projectId) {
       addFrequencyEntries(peerWeaknessFreq, subj.peerWeaknessFrequency);
     }
 
+    const paramAverages = {};
+    for (const p of PARAM_FIELDS) {
+      paramAverages[`${p.key}_self`] = round2(avg(col(`${p.key}_self`)));
+      paramAverages[`${p.key}_peer`] = round2(avg(col(`${p.key}_peer`)));
+    }
+
     const row = sheet.addRow({
       name: u.name,
       role: u.role,
       field: u.field || "—",
-      sincerity_self: round2(avg(col("sincerity_self"))),
-      sincerity_peer: round2(avg(col("sincerity_peer"))),
-      team_spirit_self: round2(avg(col("team_spirit_self"))),
-      team_spirit_peer: round2(avg(col("team_spirit_peer"))),
-      knowledge_self: round2(avg(col("knowledge_self"))),
-      knowledge_peer: round2(avg(col("knowledge_peer"))),
-      quantity_self: round2(avg(col("quantity_self"))),
-      quantity_peer: round2(avg(col("quantity_peer"))),
-      quality_self: round2(avg(col("quality_self"))),
-      quality_peer: round2(avg(col("quality_peer"))),
+      ...paramAverages,
       total_self: round2(avg(col("total_self"))),
       total_peer: round2(avg(col("total_peer"))),
       peer_count: Math.round(avg(col("peer_count"))),
       expected_peer_count: Math.round(avg(col("expected_peer_count"))),
       sapa_factor: sapaValues.length ? round2(avg(sapaValues)) : "",
-      self_problem_solving:
-        selfSatisfied + selfNotSatisfied > 0 ? `Satisfied: ${selfSatisfied} | Not Satisfied: ${selfNotSatisfied}` : "",
-      peer_problem_solving:
-        peerSatisfied + peerNotSatisfied > 0 ? `Satisfied: ${peerSatisfied} | Not Satisfied: ${peerNotSatisfied}` : "",
-      self_problem_reason: selfProblemReasonBlocks.join("\n"),
-      peer_problem_reason: peerProblemReasonBlocks.join("\n"),
+      self_trajectory: [
+        selfTrajectoryTally.improved ? `Improved: ${selfTrajectoryTally.improved}` : null,
+        selfTrajectoryTally.stayed_same ? `Stayed the Same: ${selfTrajectoryTally.stayed_same}` : null,
+        selfTrajectoryTally.declined ? `Declined: ${selfTrajectoryTally.declined}` : null,
+      ]
+        .filter(Boolean)
+        .join(" | "),
+      peer_trajectory: [
+        peerImproved ? `Improved: ${peerImproved}` : null,
+        peerStayedSame ? `Stayed the Same: ${peerStayedSame}` : null,
+        peerDeclined ? `Declined: ${peerDeclined}` : null,
+        peerNotApplicable ? `Not Applicable: ${peerNotApplicable}` : null,
+      ]
+        .filter(Boolean)
+        .join(" | "),
       self_strengths_tags: formatFrequencyMap(selfStrengthsFreq),
       peer_strengths_tags: formatFrequencyMap(peerStrengthsFreq),
-      self_strength: selfStrengthBlocks.join("\n"),
-      peer_strength: peerStrengthBlocks.join("\n"),
       self_weakness_tags: formatFrequencyMap(selfWeaknessFreq),
       peer_weakness_tags: formatFrequencyMap(peerWeaknessFreq),
-      self_weakness: selfWeaknessBlocks.join("\n"),
-      peer_weakness: peerWeaknessBlocks.join("\n"),
+      self_suggestion: selfSuggestionBlocks.join("\n"),
+      peer_suggestion: peerSuggestionBlocks.join("\n"),
       weeks: scored.length,
     });
     applyWrap(row);
@@ -262,7 +240,7 @@ function formatFrequencyMap(freqMap) {
     .join(", ");
 }
 
-const RAW_EVAL_WRAP_KEYS = ["strengths_tags", "weakness_tags", "strength_comment", "weakness_comment", "problem_reason"];
+const RAW_EVAL_WRAP_KEYS = ["strengths_tags", "weakness_tags", "improvement_suggestion"];
 
 const RAW_EVAL_COLUMNS_PEER = [
   { header: "ID", key: "id", width: 8 },
@@ -273,18 +251,12 @@ const RAW_EVAL_COLUMNS_PEER = [
   { header: "Evaluatee Name", key: "evaluatee_name", width: 22 },
   { header: "Evaluatee Role", key: "evaluatee_role", width: 16 },
   { header: "Evaluatee Field", key: "evaluatee_field", width: 20 },
-  { header: "Sincerity", key: "sincerity", width: 10 },
-  { header: "Team Spirit", key: "team_spirit", width: 10 },
-  { header: "Knowledge", key: "knowledge", width: 10 },
-  { header: "Quantity", key: "quantity", width: 10 },
-  { header: "Quality", key: "quality", width: 10 },
+  ...PARAM_FIELDS.map((p) => ({ header: p.label, key: p.key, width: 10 })),
   { header: "Total (this submission)", key: "total", width: 18 },
-  { header: "Problem Solving", key: "problem_solving", width: 16 },
-  { header: "Problem Reason", key: "problem_reason", width: 30 },
+  { header: "Trajectory", key: "trajectory", width: 18 },
   { header: "Strengths Tags", key: "strengths_tags", width: 34 },
   { header: "Weakness Tags", key: "weakness_tags", width: 34 },
-  { header: "Strength Comment", key: "strength_comment", width: 34 },
-  { header: "Weakness Comment", key: "weakness_comment", width: 34 },
+  { header: "Improvement Suggestion", key: "improvement_suggestion", width: 40 },
   { header: "Submitted At", key: "submitted_at", width: 20 },
 ];
 
@@ -334,20 +306,14 @@ export async function buildEvaluationsExportWorkbook(projectId, table, weekId) {
       evaluator_name: r.evaluator?.name || "—",
       evaluator_role: r.evaluator?.role || "—",
       evaluator_field: r.evaluator?.field || "—",
-      sincerity: r.sincerity,
-      team_spirit: r.team_spirit,
-      knowledge: r.knowledge,
-      quantity: r.quantity,
-      quality: r.quality,
-      total: r.sincerity + r.team_spirit + r.knowledge + r.quantity + r.quality,
-      problem_solving: r.problem_solving === "satisfied" ? "Satisfied" : "Not Satisfied",
-      problem_reason: r.problem_reason || "",
+      total: PARAM_FIELDS.reduce((sum, p) => sum + r[p.key], 0),
+      trajectory: TRAJECTORY_LABELS[r.trajectory] || "",
       strengths_tags: (r.strengths_tags || []).join(", "),
       weakness_tags: (r.weakness_tags || []).join(", "),
-      strength_comment: r.strength_comment || "",
-      weakness_comment: r.weakness_comment || "",
+      improvement_suggestion: r.improvement_suggestion || "",
       submitted_at: r.submitted_at,
     };
+    for (const p of PARAM_FIELDS) data[p.key] = r[p.key];
     if (!isSelf) {
       data.evaluatee_name = r.evaluatee?.name || "—";
       data.evaluatee_role = r.evaluatee?.role || "—";

@@ -36,9 +36,11 @@ enum EvalType {
   peer
 }
 
-enum ProblemSolving {
-  satisfied
-  not_satisfied
+enum Trajectory {
+  improved
+  stayed_same
+  declined
+  not_applicable
 }
 
 enum TicketCategory {
@@ -146,24 +148,24 @@ model Week {
 
 // 3.1.5 evaluations — one row per form submission (self or single peer eval)
 model Evaluation {
-  id               Int            @id @default(autoincrement())
-  week_id          Int
-  evaluator_id     Int
-  evaluatee_id     Int
-  eval_type        EvalType
-  sincerity        Int            @db.SmallInt
-  team_spirit      Int            @db.SmallInt
-  knowledge        Int            @db.SmallInt
-  quantity         Int            @db.SmallInt
-  quality          Int            @db.SmallInt
-  problem_solving  ProblemSolving
-  problem_reason   String?
-  strengths_tags   String[]
-  weakness_tags    String[]
-  strength_comment String?
-  weakness_comment String?
-  submitted_at     DateTime       @default(now())
-  locked           Boolean        @default(true)
+  id                          Int        @id @default(autoincrement())
+  week_id                     Int
+  evaluator_id                Int
+  evaluatee_id                Int
+  eval_type                   EvalType
+  ownership_discipline        Int        @db.SmallInt
+  team_spirit                 Int        @db.SmallInt
+  communication_clarity       Int        @db.SmallInt
+  domain_knowledge            Int        @db.SmallInt
+  timeliness_throughput       Int        @db.SmallInt
+  work_quality                Int        @db.SmallInt
+  problem_solving_initiative  Int        @db.SmallInt
+  strengths_tags              String[]
+  weakness_tags               String[]
+  improvement_suggestion      String?
+  trajectory                  Trajectory
+  submitted_at                DateTime   @default(now())
+  locked                      Boolean    @default(true)
 
   week      Week @relation(fields: [week_id], references: [id], onDelete: Cascade)
   evaluator User @relation("EvalEvaluator", fields: [evaluator_id], references: [id], onDelete: Cascade)
@@ -180,25 +182,29 @@ model Evaluation {
 
 // 3.1.6 computed_scores — materialised weekly scores, replaces 'Scores for Week XX' tabs
 model ComputedScore {
-  id                   Int      @id @default(autoincrement())
-  week_id              Int
-  user_id              Int
-  sincerity_self       Decimal  @default(0) @db.Decimal(3, 2)
-  sincerity_peer       Decimal  @default(0) @db.Decimal(3, 2)
-  team_spirit_self     Decimal  @default(0) @db.Decimal(3, 2)
-  team_spirit_peer     Decimal  @default(0) @db.Decimal(3, 2)
-  knowledge_self       Decimal  @default(0) @db.Decimal(3, 2)
-  knowledge_peer       Decimal  @default(0) @db.Decimal(3, 2)
-  quantity_self        Decimal  @default(0) @db.Decimal(3, 2)
-  quantity_peer        Decimal  @default(0) @db.Decimal(3, 2)
-  quality_self         Decimal  @default(0) @db.Decimal(3, 2)
-  quality_peer         Decimal  @default(0) @db.Decimal(3, 2)
-  total_self           Decimal  @default(0) @db.Decimal(4, 2)
-  total_peer           Decimal  @default(0) @db.Decimal(5, 2)
-  peer_count           Int      @default(0)
-  expected_peer_count  Int      @default(0)
-  sapa_factor          Decimal? @db.Decimal(4, 3)
-  computed_at          DateTime @default(now())
+  id                                Int      @id @default(autoincrement())
+  week_id                           Int
+  user_id                           Int
+  ownership_discipline_self         Decimal  @default(0) @db.Decimal(3, 2)
+  ownership_discipline_peer         Decimal  @default(0) @db.Decimal(3, 2)
+  team_spirit_self                  Decimal  @default(0) @db.Decimal(3, 2)
+  team_spirit_peer                  Decimal  @default(0) @db.Decimal(3, 2)
+  communication_clarity_self        Decimal  @default(0) @db.Decimal(3, 2)
+  communication_clarity_peer        Decimal  @default(0) @db.Decimal(3, 2)
+  domain_knowledge_self             Decimal  @default(0) @db.Decimal(3, 2)
+  domain_knowledge_peer             Decimal  @default(0) @db.Decimal(3, 2)
+  timeliness_throughput_self        Decimal  @default(0) @db.Decimal(3, 2)
+  timeliness_throughput_peer        Decimal  @default(0) @db.Decimal(3, 2)
+  work_quality_self                 Decimal  @default(0) @db.Decimal(3, 2)
+  work_quality_peer                 Decimal  @default(0) @db.Decimal(3, 2)
+  problem_solving_initiative_self   Decimal  @default(0) @db.Decimal(3, 2)
+  problem_solving_initiative_peer   Decimal  @default(0) @db.Decimal(3, 2)
+  total_self                        Decimal  @default(0) @db.Decimal(4, 2)
+  total_peer                        Decimal  @default(0) @db.Decimal(5, 2)
+  peer_count                        Int      @default(0)
+  expected_peer_count               Int      @default(0)
+  sapa_factor                       Decimal? @db.Decimal(4, 3)
+  computed_at                       DateTime @default(now())
 
   week Week @relation(fields: [week_id], references: [id], onDelete: Cascade)
   user User @relation(fields: [user_id], references: [id], onDelete: Cascade)

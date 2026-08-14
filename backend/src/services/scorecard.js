@@ -15,6 +15,7 @@ import {
 } from "docx";
 import { prisma } from "../utils/prisma.js";
 import { getSubjectiveSummary } from "./evaluations.js";
+import { PARAM_FIELDS } from "../utils/constants.js";
 
 const ROLE_LABELS = {
   admin: "Admin (QCI Core Team)",
@@ -24,8 +25,6 @@ const ROLE_LABELS = {
   casu_anchor: "CASU Anchor",
   profiler: "Profiler",
 };
-
-const PARAM_LABELS = ["Sincerity", "Team Spirit", "Knowledge", "Quantity", "Quality"];
 
 const IMPROVE_THRESHOLD = 0.5;
 
@@ -88,8 +87,6 @@ export async function buildScorecardDocx(projectId, user, weekId) {
   const topStrengths = subjective.peer.strengthsFrequency.slice(0, 3);
   const topWeaknesses = subjective.peer.weaknessFrequency.slice(0, 3);
 
-  const paramKeys = ["sincerity", "team_spirit", "knowledge", "quantity", "quality"];
-
   const doc = new Document({
     sections: [
       {
@@ -115,8 +112,8 @@ export async function buildScorecardDocx(projectId, user, weekId) {
             width: { size: 100, type: WidthType.PERCENTAGE },
             rows: [
               new TableRow({ children: [cell("Metric", { header: true, width: 50 }), cell("Value", { header: true, width: 50 })] }),
-              new TableRow({ children: [cell("Total Self Score"), cell(`${Number(current.total_self).toFixed(1)} / 25`)] }),
-              new TableRow({ children: [cell("Total Peer Score"), cell(`${Number(current.total_peer).toFixed(1)} / 25`)] }),
+              new TableRow({ children: [cell("Total Self Score"), cell(`${Number(current.total_self).toFixed(1)} / 49`)] }),
+              new TableRow({ children: [cell("Total Peer Score"), cell(`${Number(current.total_peer).toFixed(1)} / 49`)] }),
               new TableRow({
                 children: [
                   cell("SAPA Factor"),
@@ -138,11 +135,11 @@ export async function buildScorecardDocx(projectId, user, weekId) {
                   cell("Peer", { header: true, width: 30 }),
                 ],
               }),
-              ...paramKeys.map(
-                (key, i) =>
+              ...PARAM_FIELDS.map(
+                ({ key, label }) =>
                   new TableRow({
                     children: [
-                      cell(PARAM_LABELS[i]),
+                      cell(label),
                       cell(Number(current[`${key}_self`]).toFixed(1)),
                       cell(Number(current[`${key}_peer`]).toFixed(1)),
                     ],
@@ -159,14 +156,14 @@ export async function buildScorecardDocx(projectId, user, weekId) {
               new TableRow({
                 children: [
                   cell("Previous Week's Total Peer Score"),
-                  cell(previous ? `${Number(previous.total_peer).toFixed(1)} / 25` : "— (no prior week)"),
+                  cell(previous ? `${Number(previous.total_peer).toFixed(1)} / 49` : "— (no prior week)"),
                 ],
               }),
               new TableRow({ children: [cell("Trend"), cell(`${trend.label} (${trend.detail})`)] }),
               new TableRow({
                 children: [
                   cell("Cumulative Average Total Peer Score (to date)"),
-                  cell(cumulativeAvg !== null ? `${cumulativeAvg.toFixed(2)} / 25 across ${history.length} scored week(s)` : "—"),
+                  cell(cumulativeAvg !== null ? `${cumulativeAvg.toFixed(2)} / 49 across ${history.length} scored week(s)` : "—"),
                 ],
               }),
             ],
