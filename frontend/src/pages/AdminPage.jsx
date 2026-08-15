@@ -32,6 +32,14 @@ export default function AdminPage() {
     mutationFn: adminApi.closeWeek,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["weeks"] }),
   });
+  const [unlockAllMessage, setUnlockAllMessage] = useState("");
+  const unlockAllMutation = useMutation({
+    mutationFn: adminApi.unlockAllForWeek,
+    onSuccess: (data, weekId) => {
+      queryClient.invalidateQueries({ queryKey: ["rawData"] });
+      setUnlockAllMessage(`${data.unlockedCount} evaluation(s) unlocked for ${weeks.find((w) => w.id === weekId)?.label || "this week"}.`);
+    },
+  });
 
   async function handleExport(path, filename) {
     setExportError("");
@@ -140,11 +148,35 @@ export default function AdminPage() {
                     {w.status === "open" && (
                       <button onClick={() => closeMutation.mutate(w.id)} className="text-xs font-medium text-red-600 hover:text-red-700 transition-standard">Close</button>
                     )}
+                    {w.status === "closed" && (
+                      <button
+                        onClick={() => openMutation.mutate(w.id)}
+                        title="Reopens this week — anyone whose evaluation is still locked stays locked until you unlock them individually in Raw Data Browser."
+                        className="text-xs font-medium text-nav hover:text-accent transition-standard"
+                      >
+                        Reopen
+                      </button>
+                    )}
+                    {(w.status === "closed" || w.status === "open") && (
+                      <button
+                        onClick={() => {
+                          if (window.confirm(`Unlock every submitted evaluation for ${w.label}? Everyone will be able to resubmit, not just specific people.`)) {
+                            unlockAllMutation.mutate(w.id);
+                          }
+                        }}
+                        disabled={unlockAllMutation.isPending}
+                        title="For a whole-team redo (e.g. turnout was too low) — unlocks everyone at once instead of one row at a time in Raw Data Browser."
+                        className="text-xs font-medium text-slate-500 hover:text-accent disabled:opacity-50 transition-standard"
+                      >
+                        Unlock All
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
             </div>
           )}
+          {unlockAllMessage && <p className="text-xs text-slate-500 mt-3">{unlockAllMessage}</p>}
         </Card>
 
         <RosterManager />

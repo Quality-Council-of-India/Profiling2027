@@ -16,6 +16,7 @@ import {
   exportRawTable,
   impersonateRole,
   unlockEvaluation,
+  unlockAllForWeek,
   uploadUserPhoto,
 } from "../controllers/admin.controller.js";
 
@@ -43,6 +44,7 @@ const router = Router();
 router.post("/weeks", authenticate, requireRole(ROLES.ADMIN), createWeek);
 router.post("/weeks/:id/open", authenticate, requireRole(ROLES.ADMIN), openWeek);
 router.post("/weeks/:id/close", authenticate, requireRole(ROLES.ADMIN), closeWeek);
+router.post("/weeks/:id/unlock-all", authenticate, requireRole(ROLES.ADMIN), unlockAllForWeek);
 router.post(
   "/roster/import",
   authenticate,
