@@ -292,3 +292,22 @@ export async function unlockEvaluation(req, res) {
   });
   res.json({ evaluation: updated });
 }
+
+/**
+ * Bulk-unlocks every evaluation for a week — for the "whole team needs to
+ * resubmit" case (e.g. turnout was too low), as opposed to unlocking one
+ * person's row at a time via the Raw Data Browser for individual corrections.
+ * Doesn't change the week's open/closed status itself — pair with
+ * openWeek if the week had already closed.
+ */
+export async function unlockAllForWeek(req, res) {
+  const weekId = Number(req.params.id);
+  const week = await prisma.week.findFirst({ where: { id: weekId, project_id: req.user.project_id } });
+  if (!week) return res.status(404).json({ error: "Week not found" });
+
+  const { count } = await prisma.evaluation.updateMany({
+    where: { week_id: weekId, locked: true },
+    data: { locked: false },
+  });
+  res.json({ unlockedCount: count });
+}
