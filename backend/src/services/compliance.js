@@ -87,9 +87,17 @@ export async function buildComplianceMatrix(projectId, weekId) {
 }
 
 /** Emails every non-compliant user their specific pending items. Returns count sent. */
-export async function sendComplianceReminders(projectId, weekId, weekLabel) {
+export async function sendComplianceReminders(projectId, weekId, weekLabel, weekEndDate) {
   const { rows } = await buildComplianceMatrix(projectId, weekId);
   const nonCompliant = rows.filter((r) => !r.isCompliant);
+
+  // Week windows vary (3-4 days, and don't always start on the same day of
+  // the week) — daysLeft is computed from this week's own end_date rather
+  // than assumed, so the reminder is accurate regardless of how long this
+  // particular window is or when it started.
+  const daysLeft = weekEndDate
+    ? Math.max(0, Math.ceil((new Date(weekEndDate).getTime() - Date.now()) / (24 * 60 * 60 * 1000)))
+    : null;
 
   let sent = 0;
   for (const r of nonCompliant) {
@@ -100,7 +108,8 @@ export async function sendComplianceReminders(projectId, weekId, weekLabel) {
         html: reminderEmailBody(
           { name: r.name },
           weekLabel,
-          { selfPending: !r.selfDone, peerNames: r.pendingPeers }
+          { selfPending: !r.selfDone, peerNames: r.pendingPeers },
+          daysLeft
         ),
       });
       sent++;

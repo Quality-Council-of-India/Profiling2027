@@ -15,7 +15,7 @@ async function runReminderSweep() {
     if (!dayTwoReached) continue;
 
     try {
-      const result = await sendComplianceReminders(week.project_id, week.id, week.label);
+      const result = await sendComplianceReminders(week.project_id, week.id, week.label, week.end_date);
       if (result.remindersSent > 0) {
         console.log(
           `[reminderCron] ${week.label}: sent ${result.remindersSent} reminder(s) to ${result.nonCompliantCount} non-compliant user(s)`
