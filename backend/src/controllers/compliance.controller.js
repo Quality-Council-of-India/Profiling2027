@@ -26,6 +26,6 @@ export async function remindNonCompliant(req, res) {
   });
   if (!week) return res.status(404).json({ error: "Week not found" });
 
-  const result = await sendComplianceReminders(req.user.project_id, weekId, week.label);
+  const result = await sendComplianceReminders(req.user.project_id, weekId, week.label, week.end_date);
   res.json(result);
 }

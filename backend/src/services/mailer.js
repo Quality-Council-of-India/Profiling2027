@@ -37,17 +37,24 @@ export async function sendMail({ to, subject, html, text }) {
   });
 }
 
-export function reminderEmailBody(user, weekLabel, pending) {
+export function reminderEmailBody(user, weekLabel, pending, daysLeft = null) {
   const items = [];
   if (pending.selfPending) items.push("<li>Your own Self-Evaluation</li>");
   for (const peer of pending.peerNames) {
     items.push(`<li>Peer-Evaluation for <strong>${peer}</strong></li>`);
   }
+  const count = items.length;
+  const deadlineLine =
+    daysLeft === null
+      ? "Please log in and complete these before the window closes."
+      : daysLeft <= 0
+      ? "<strong>The window closes today</strong> — please log in and complete these as soon as possible."
+      : `You have <strong>${daysLeft} day${daysLeft === 1 ? "" : "s"} left</strong> to complete ${count === 1 ? "this" : "these"} before the window closes.`;
   return `
     <p>Hi ${user.name},</p>
-    <p>You still have pending submissions for <strong>${weekLabel}</strong> on the Profiling 2027 Feedback Portal:</p>
+    <p>You still have <strong>${count} pending submission${count === 1 ? "" : "s"}</strong> for <strong>${weekLabel}</strong> on the Profiling 2027 Feedback Portal:</p>
     <ul>${items.join("")}</ul>
-    <p>Please log in and complete these before the window closes.</p>
+    <p>${deadlineLine}</p>
     <p>— Core Team</p>
   `;
 }
