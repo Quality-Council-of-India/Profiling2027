@@ -216,7 +216,7 @@ export async function buildScorecardDocx(projectId, user, weekId) {
               metricRow(
                 "Total Peer Score",
                 `${Number(current.total_peer).toFixed(1)} / 49`,
-                "The average of how your peers rated your performance this week — the figure most reports and rankings use.",
+                "The average of how your peers rated your performance this week.",
                 TONE.neutral
               ),
               metricRow("SAPA Factor", sapa === null ? "—" : sapa.toFixed(2), `${sapaInfo.label} — ${sapaInfo.detail}`, sapaInfo.tone),
