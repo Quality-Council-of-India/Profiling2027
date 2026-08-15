@@ -55,6 +55,6 @@ export function reminderEmailBody(user, weekLabel, pending, daysLeft = null) {
     <p>You still have <strong>${count} pending submission${count === 1 ? "" : "s"}</strong> for <strong>${weekLabel}</strong> on the Profiling 2027 Feedback Portal:</p>
     <ul>${items.join("")}</ul>
     <p>${deadlineLine}</p>
-    <p>— Core Team</p>
+    <p>Thanks.</p>
   `;
 }
