@@ -89,7 +89,7 @@ export async function openWeek(req, res) {
       <p>Hi ${u.name},</p>
       <p><strong>${updated.label}</strong> is now open on the Profiling 2027 Feedback Portal. Please log in and submit
       your Self-Evaluation and Peer Evaluations before the window closes.</p>
-      <p>— Core Team</p>
+      <p>Thanks.</p>
     `,
   });
 
@@ -117,7 +117,7 @@ export async function closeWeek(req, res) {
       <p>Hi ${u.name},</p>
       <p><strong>${updated.label}</strong> has closed on the Profiling 2027 Feedback Portal. Your scores for this
       week are now final — check "My Scores" or "Analytics" to see them.</p>
-      <p>— Core Team</p>
+      <p>Thanks.</p>
     `,
   });
 
