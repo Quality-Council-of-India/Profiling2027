@@ -86,6 +86,7 @@ export async function buildScorecardDocx(projectId, user, weekId) {
   const subjective = await getSubjectiveSummary(weekId, user.id);
   const topStrengths = subjective.peer.strengthsFrequency.slice(0, 3);
   const topWeaknesses = subjective.peer.weaknessFrequency.slice(0, 3);
+  const focusSuggestions = subjective.peer.improvementSuggestions;
 
   const doc = new Document({
     sections: [
@@ -184,6 +185,13 @@ export async function buildScorecardDocx(projectId, user, weekId) {
           ...(topWeaknesses.length
             ? topWeaknesses.map((t) => new Paragraph({ text: `• ${t.tag} (mentioned ${t.count}x)`, spacing: { after: 40 } }))
             : [new Paragraph({ text: "No peer feedback received yet this week.", spacing: { after: 40 } })]),
+          new Paragraph({
+            children: [new TextRun({ text: "What Peers Suggest You Focus On", bold: true, size: 20 })],
+            spacing: { before: 100, after: 60 },
+          }),
+          ...(focusSuggestions.length
+            ? focusSuggestions.map((s) => new Paragraph({ text: `• ${s}`, spacing: { after: 40 } }))
+            : [new Paragraph({ text: "No suggestions submitted this week.", spacing: { after: 40 } })]),
 
           new Paragraph({
             children: [new TextRun({ text: "— Core Team, Profiling 2027", italics: true, color: "888888", size: 18 })],
