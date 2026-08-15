@@ -5,13 +5,17 @@ let transporter = null;
 function getTransporter() {
   if (transporter) return transporter;
 
-  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
-    // No SMTP credentials configured (e.g. local dev). Fall back to a
-    // console-logging transport so the rest of the app keeps working.
+  // EMAIL_DRY_RUN lets Admin test the live portal (opening/closing weeks,
+  // roster changes, tickets) against production data without emailing the
+  // real roster — same no-op fallback as "no credentials configured", just
+  // reachable without removing/re-adding all 5 SMTP variables each time.
+  const dryRun = process.env.EMAIL_DRY_RUN === "true";
+
+  if (dryRun || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
     transporter = {
       sendMail: async (opts) => {
-        console.log(`[mailer:noop] Would send email to ${opts.to}: "${opts.subject}"`);
-        return { messageId: "noop" };
+        console.log(`[mailer:${dryRun ? "dry-run" : "noop"}] Would send email to ${opts.to}: "${opts.subject}"`);
+        return { messageId: dryRun ? "dry-run" : "noop" };
       },
     };
     return transporter;
