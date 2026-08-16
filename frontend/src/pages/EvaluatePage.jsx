@@ -42,6 +42,17 @@ export default function EvaluatePage() {
   const week = pendingQuery.data?.week;
   const peerOptions = useMemo(() => pending?.peers || [], [pending]);
   const pendingPeerOptions = useMemo(() => peerOptions.filter((p) => !p.done), [peerOptions]);
+
+  // A "?peer=" link (e.g. the Dashboard's "Unlocked for correction" button)
+  // can point at someone who's already done — that peer is filtered out of
+  // the dropdown by default, so without this the URL pre-selects them in
+  // state but the <select> shows nothing until "Show completed" is ticked.
+  useEffect(() => {
+    const peerId = searchParams.get("peer");
+    if (!peerId || peerOptions.length === 0) return;
+    const target = peerOptions.find((p) => String(p.id) === String(peerId));
+    if (target?.done) setShowCompletedPeers(true);
+  }, [searchParams, peerOptions]);
   // Auto-detects who still needs evaluating — the dropdown only offers
   // not-yet-done peers by default, so there's no need to hunt through
   // already-submitted names. "Show completed" is an escape hatch for
