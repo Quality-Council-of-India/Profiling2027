@@ -41,6 +41,36 @@ export async function sendMail({ to, subject, html, text }) {
   });
 }
 
+let realTransporter = null;
+
+/**
+ * Always sends through the real SMTP transport, ignoring EMAIL_DRY_RUN —
+ * used ONLY by the Admin's "Send Test Email" self-check (see
+ * admin.controller.js sendTestEmail, which hardcodes the recipient to the
+ * calling Admin's own address). Safe to bypass dry-run here specifically
+ * because it can never reach the real roster, only the Admin testing it.
+ */
+export async function sendTestMail({ to, subject, html }) {
+  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+    throw new Error("SMTP credentials are not configured yet");
+  }
+  if (!realTransporter) {
+    realTransporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT || 465),
+      secure: process.env.SMTP_SECURE !== "false",
+      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+    });
+  }
+  return realTransporter.sendMail({
+    from: process.env.SMTP_FROM || "Profiling 2027 Feedback Portal <no-reply@qcin.org>",
+    to,
+    subject,
+    html,
+    text: html.replace(/<[^>]+>/g, ""),
+  });
+}
+
 /**
  * End-of-day (~19:30 IST) digest for Admins/Project Leads/CASU Leads —
  * who in their scope still has pending submissions for the open week.

@@ -140,6 +140,10 @@ model Week {
   start_date  DateTime   @db.Date
   end_date    DateTime   @db.Date
   status      WeekStatus @default(upcoming)
+  // Set the first time this week is closed and never cleared — lets the
+  // app tell "opened for the first time" apart from "reopened for a
+  // correction" (status alone can't, since both look like "open").
+  closed_at   DateTime?
 
   project     Project        @relation(fields: [project_id], references: [id], onDelete: Cascade)
   evaluations Evaluation[]

@@ -11,6 +11,7 @@ import { signAuthToken } from "../utils/jwt.js";
 import { publicUser, sendPasswordResetEmail } from "./auth.controller.js";
 import { ALL_ROLES, ROLES } from "../utils/roles.js";
 import { notify, getActiveNonAdminIds, getAdminIds } from "../services/notifications.js";
+import { sendTestMail } from "../services/mailer.js";
 
 const EXPORTABLE_TABLES = ["self_evaluations", "peer_evaluations"];
 const setPasswordSchema = z.object({ password: z.string().min(8) });
@@ -116,7 +117,7 @@ export async function closeWeek(req, res) {
   });
   if (!week) return res.status(404).json({ error: "Week not found" });
 
-  const updated = await prisma.week.update({ where: { id: weekId }, data: { status: "closed" } });
+  const updated = await prisma.week.update({ where: { id: weekId }, data: { status: "closed", closed_at: new Date() } });
   // Final recompute on close so every professional (even non-responders) has a row.
   await computeScoresForWeek(weekId, req.user.project_id);
 
@@ -310,6 +311,7 @@ export async function unlockEvaluation(req, res) {
   const evaluationId = Number(req.params.id);
   const evaluation = await prisma.evaluation.findFirst({
     where: { id: evaluationId, week: { project_id: req.user.project_id } },
+    include: { week: true, evaluatee: { select: { name: true } } },
   });
   if (!evaluation) return res.status(404).json({ error: "Evaluation not found" });
 
@@ -317,6 +319,22 @@ export async function unlockEvaluation(req, res) {
     where: { id: evaluationId },
     data: { locked: false },
   });
+
+  const what =
+    evaluation.eval_type === "self" ? "Self-Evaluation" : `Peer-Evaluation for ${evaluation.evaluatee.name}`;
+  await notify(req.user.project_id, [evaluation.evaluator_id], {
+    type: "evaluation_unlocked",
+    title: `Your ${what} for ${evaluation.week.label} has been unlocked`,
+    body: "An Admin unlocked this submission — you can resubmit once to make a correction.",
+    link: "/evaluate",
+    emailHtml: (u) => `
+      <p>Hi ${u.name},</p>
+      <p>An Admin has unlocked your <strong>${what}</strong> for <strong>${evaluation.week.label}</strong> so you can
+      submit a correction. Log in and resubmit — it will lock again once received.</p>
+      <p>Thanks.</p>
+    `,
+  });
+
   res.json({ evaluation: updated });
 }
 
@@ -337,4 +355,29 @@ export async function unlockAllForWeek(req, res) {
     data: { locked: false },
   });
   res.json({ unlockedCount: count });
+}
+
+/**
+ * Sends one real email to the calling Admin's own address, bypassing
+ * EMAIL_DRY_RUN, so formatting can be checked live without risking a send
+ * to the real roster — the recipient is always req.user.email, never a
+ * client-supplied address.
+ */
+export async function sendTestEmail(req, res) {
+  try {
+    await sendTestMail({
+      to: req.user.email,
+      subject: "[Test] Profiling 2027 Feedback Portal — formatting check",
+      html: `
+        <p>Hi ${req.user.name},</p>
+        <p>This is a <strong>test email</strong> from the Profiling 2027 Feedback Portal — sent only to your own
+        address to verify formatting and delivery, regardless of the current EMAIL_DRY_RUN setting.</p>
+        <p>If this looks right, real emails to the team will render the same way.</p>
+        <p>Thanks.</p>
+      `,
+    });
+    res.json({ sentTo: req.user.email });
+  } catch (err) {
+    res.status(500).json({ error: err.message || "Failed to send test email" });
+  }
 }

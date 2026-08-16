@@ -94,9 +94,11 @@ export default function ScoresPage({ userId, userLabel }) {
               <h2 className="text-sm font-semibold text-slate-800 mb-2">Self vs Peer — {currentWeek.label}</h2>
               <RadarComparison computed={computed} height={260} />
             </Card>
-            <Card className="p-4 flex flex-col justify-center">
+            <Card className="p-4 flex flex-col">
               <p className="text-xs uppercase tracking-wide text-slate-500 mb-2">SAPA Factor</p>
-              <SAPAGauge sapa={sapa} />
+              <div className="flex-1 flex flex-col justify-center">
+                <SAPAGauge sapa={sapa} />
+              </div>
             </Card>
           </div>
 

@@ -1,16 +1,13 @@
 import { PARAM_LABELS } from "../../utils/constants.js";
 
-// Sequential scale across the FULL 1-7 rating range (pale azure at 1, navy
-// at 7) — previously this floored at 3.5 and returned flat grey for
-// everything below it, so a 2.0 and a 3.4 were visually indistinguishable.
+// Diverging red-yellow-green scale across the FULL 1-7 rating range —
+// previously this was a sequential scale that floored at 3.5 and returned
+// flat grey for everything below it, so a 2.0 and a 3.4 were visually
+// indistinguishable. Hue sweeps red (1) -> yellow (4) -> green (7).
 function heatColor(v) {
   const t = Math.max(0, Math.min(1, (Number(v) - 1) / 6));
-  const from = [224, 236, 249]; // pale azure — very low scores
-  const to = [31, 56, 100]; // NAV #1F3864 — top scores
-  const r = Math.round(from[0] + (to[0] - from[0]) * t);
-  const g = Math.round(from[1] + (to[1] - from[1]) * t);
-  const b = Math.round(from[2] + (to[2] - from[2]) * t);
-  return { bg: `rgb(${r},${g},${b})`, text: t > 0.55 ? "white" : "#1F3864" };
+  const hue = t * 120;
+  return { bg: `hsl(${hue}, 72%, 45%)`, text: "white" };
 }
 
 // rows: [{ field, Sincerity, "Team Spirit", Knowledge, Quantity, Quality, avg }]

@@ -66,6 +66,7 @@ export const adminApi = {
   openWeek: (weekId) => api.post(`/admin/weeks/${weekId}/open`).then((r) => r.data),
   closeWeek: (weekId) => api.post(`/admin/weeks/${weekId}/close`).then((r) => r.data),
   unlockAllForWeek: (weekId) => api.post(`/admin/weeks/${weekId}/unlock-all`).then((r) => r.data),
+  sendTestEmail: () => api.post("/admin/test-email").then((r) => r.data),
   importRoster: (file) => {
     const form = new FormData();
     form.append("roster", file);
