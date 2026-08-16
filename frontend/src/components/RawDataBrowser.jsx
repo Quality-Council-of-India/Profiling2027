@@ -27,16 +27,28 @@ const WEEK_FILTERABLE = ["self_evaluations", "peer_evaluations", "computed_score
  * through the purpose-built actions (roster import, week open/close,
  * evaluation submission) so score recomputation etc. stay correct.
  */
+const LOCKED_FILTERABLE = ["self_evaluations", "peer_evaluations"];
+const SEARCH_FILTERABLE = ["self_evaluations", "peer_evaluations"];
+
 export default function RawDataBrowser() {
   const queryClient = useQueryClient();
   const [table, setTable] = useState("peer_evaluations");
   const [page, setPage] = useState(1);
   const [weekId, setWeekId] = useState("");
+  const [search, setSearch] = useState("");
+  const [locked, setLocked] = useState("");
 
   const weeksQuery = useQuery({ queryKey: ["weeks"], queryFn: weeksApi.list });
   const dataQuery = useQuery({
-    queryKey: ["rawData", table, page, weekId],
-    queryFn: () => adminApi.rawTable(table, { page, pageSize: 25, weekId: weekId || undefined }),
+    queryKey: ["rawData", table, page, weekId, search, locked],
+    queryFn: () =>
+      adminApi.rawTable(table, {
+        page,
+        pageSize: 25,
+        weekId: weekId || undefined,
+        search: search || undefined,
+        locked: locked || undefined,
+      }),
   });
 
   const unlockMutation = useMutation({
@@ -44,12 +56,20 @@ export default function RawDataBrowser() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["rawData"] }),
   });
 
+  function handleUnlock(id, evaluatorName) {
+    if (window.confirm(`Unlock this submission${evaluatorName ? ` from ${evaluatorName}` : ""} so they can resubmit once?`)) {
+      unlockMutation.mutate(id);
+    }
+  }
+
   const [exportError, setExportError] = useState("");
   const [isExporting, setIsExporting] = useState(false);
 
   function selectTable(t) {
     setTable(t);
     setPage(1);
+    setSearch("");
+    setLocked("");
   }
 
   async function handleExport() {
@@ -73,7 +93,27 @@ export default function RawDataBrowser() {
     <Card className="p-5">
       <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
         <h2 className="text-sm font-semibold text-slate-800">Raw Data Browser</h2>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {SEARCH_FILTERABLE.includes(table) && (
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+              placeholder="Search by name…"
+              className="px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs w-36"
+            />
+          )}
+          {LOCKED_FILTERABLE.includes(table) && (
+            <select
+              value={locked}
+              onChange={(e) => { setLocked(e.target.value); setPage(1); }}
+              className="px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs"
+            >
+              <option value="">Locked + unlocked</option>
+              <option value="true">Locked only</option>
+              <option value="false">Unlocked only</option>
+            </select>
+          )}
           {WEEK_FILTERABLE.includes(table) && (
             <select
               value={weekId}
@@ -128,7 +168,7 @@ export default function RawDataBrowser() {
           <TableBody
             table={table}
             rows={dataQuery.data.rows}
-            onUnlock={(id) => unlockMutation.mutate(id)}
+            onUnlock={handleUnlock}
             unlockingId={unlockMutation.isPending ? unlockMutation.variables : null}
           />
           <div className="flex items-center justify-between mt-3 text-xs text-slate-500">
@@ -221,7 +261,7 @@ function TableBody({ table, rows, onUnlock, unlockingId }) {
                   }`}
                 >
                   {isLockable && c === "locked" ? (
-                    <LockCell locked={r.locked} onUnlock={() => onUnlock(r.id)} isUnlocking={unlockingId === r.id} />
+                    <LockCell locked={r.locked} onUnlock={() => onUnlock(r.id, r.evaluator?.name)} isUnlocking={unlockingId === r.id} />
                   ) : (
                     renderCell(table, c, r)
                   )}

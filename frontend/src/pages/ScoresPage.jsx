@@ -19,7 +19,10 @@ export default function ScoresPage({ userId, userLabel }) {
 
   const weeksQuery = useQuery({ queryKey: ["weeks"], queryFn: weeksApi.list });
   const weeks = weeksQuery.data || [];
-  const currentWeek = [...weeks].reverse().find((w) => w.status !== "upcoming");
+  // Prefer the currently open week over just the highest week_number — an
+  // older week reopened for corrections should take over here, not stay
+  // shadowed by a newer week that's merely still closed.
+  const currentWeek = weeks.find((w) => w.status === "open") || [...weeks].reverse().find((w) => w.status === "closed");
 
   const detailQuery = useQuery({
     queryKey: ["score", targetId, currentWeek?.id],
@@ -91,7 +94,7 @@ export default function ScoresPage({ userId, userLabel }) {
               <h2 className="text-sm font-semibold text-slate-800 mb-2">Self vs Peer — {currentWeek.label}</h2>
               <RadarComparison computed={computed} height={260} />
             </Card>
-            <Card className="p-4">
+            <Card className="p-4 flex flex-col justify-center">
               <p className="text-xs uppercase tracking-wide text-slate-500 mb-2">SAPA Factor</p>
               <SAPAGauge sapa={sapa} />
             </Card>

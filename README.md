@@ -194,7 +194,7 @@ All `/api/*` routes except `/api/auth/*` require `Authorization: Bearer <JWT>`.
 | PATCH | `/api/admin/users/:id/password` | admin only — sets a brand-new password directly; existing password hashes are never readable by anyone, including Admin |
 | POST | `/api/admin/users/:id/send-reset` | admin only — sends the same reset-link email a user would get from "Forgot password?", on their behalf |
 | GET | `/api/admin/data`, `/api/admin/data/:table` | admin only — view-only browser into every table (`projects`, `users`, `peer_mappings`, `weeks`, `self_evaluations`, `peer_evaluations`, `computed_scores`) |
-| POST | `/api/admin/impersonate/:role` | admin only — "View portal as…"; signs a token for the first active user of that role, so Admin can preview Evaluate/My Scores/etc. as a real professional would see them |
+| POST | `/api/admin/impersonate-user/:id` | admin only — "View portal as…"; signs a token for the specific active user picked from the roster, so Admin can preview Evaluate/My Scores/etc. as that real professional would see them |
 | PATCH | `/api/admin/evaluations/:id/unlock` | admin only — lets one locked evaluation take exactly one corrective resubmission before re-locking |
 
 ## Deployment

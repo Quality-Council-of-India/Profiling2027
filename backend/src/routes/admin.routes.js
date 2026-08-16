@@ -14,7 +14,7 @@ import {
   listRawTables,
   getRawTable,
   exportRawTable,
-  impersonateRole,
+  impersonateUser,
   unlockEvaluation,
   unlockAllForWeek,
   uploadUserPhoto,
@@ -66,7 +66,7 @@ router.post("/users/:id/send-reset", authenticate, requireRole(ROLES.ADMIN), sen
 router.get("/data", authenticate, requireRole(ROLES.ADMIN), listRawTables);
 router.get("/data/:table", authenticate, requireRole(ROLES.ADMIN), getRawTable);
 router.get("/data/:table/export", authenticate, requireRole(ROLES.ADMIN), exportRawTable);
-router.post("/impersonate/:role", authenticate, requireRole(ROLES.ADMIN), impersonateRole);
+router.post("/impersonate-user/:id", authenticate, requireRole(ROLES.ADMIN), impersonateUser);
 router.patch("/evaluations/:id/unlock", authenticate, requireRole(ROLES.ADMIN), unlockEvaluation);
 
 export default router;

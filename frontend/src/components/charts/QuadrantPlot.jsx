@@ -6,7 +6,7 @@ const QUADRANTS = [
   { key: "star", label: "Star Performers", accent: "#22C55E", test: (p) => p.performance >= PERFORMANCE_MIDPOINT && p.sentiment >= 0 },
   { key: "wellLiked", label: "Well-Liked Underperformers", accent: "#3B82F6", test: (p) => p.performance < PERFORMANCE_MIDPOINT && p.sentiment >= 0 },
   { key: "atRisk", label: "At-Risk", accent: "#EF4444", test: (p) => p.performance < PERFORMANCE_MIDPOINT && p.sentiment < 0 },
-  { key: "toxic", label: "Toxic High-Performers", accent: "#F97316", test: (p) => p.performance >= PERFORMANCE_MIDPOINT && p.sentiment < 0 },
+  { key: "toxic", label: "High Performers, Low Sentiment", accent: "#F97316", test: (p) => p.performance >= PERFORMANCE_MIDPOINT && p.sentiment < 0 },
 ];
 
 // points: [{ id, name, role, field, performance (0-49), sentiment (-1..1) }]
@@ -27,7 +27,7 @@ export default function QuadrantPlot({ points, height = 280 }) {
             <span className="text-xs text-red-400 font-medium opacity-60">At-Risk</span>
           </div>
           <div className="w-1/2 bg-orange-50/50 flex items-center justify-center">
-            <span className="text-xs text-orange-400 font-medium opacity-60">Toxic High-Performers</span>
+            <span className="text-xs text-orange-400 font-medium opacity-60 text-center px-2">High Performers,<br />Low Sentiment</span>
           </div>
         </div>
         {points.map((p) => {

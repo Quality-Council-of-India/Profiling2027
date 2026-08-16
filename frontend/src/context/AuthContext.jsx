@@ -38,9 +38,9 @@ export function AuthProvider({ children }) {
     setUser(null);
   }
 
-  /** Admin "view portal as <role>" — swaps the active token, stashing the Admin's own for return. */
-  async function impersonateRole(role) {
-    const { token, user: targetUser } = await adminApi.impersonateRole(role);
+  /** Admin "view portal as <person>" — swaps the active token, stashing the Admin's own for return. */
+  async function impersonateUser(userId) {
+    const { token, user: targetUser } = await adminApi.impersonateUser(userId);
     if (!impersonating) {
       const currentToken = localStorage.getItem(TOKEN_KEY);
       if (currentToken) localStorage.setItem(ADMIN_TOKEN_KEY, currentToken);
@@ -64,7 +64,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, loading, impersonating, login, logout, impersonateRole, returnToAdmin }}
+      value={{ user, loading, impersonating, login, logout, impersonateUser, returnToAdmin }}
     >
       {children}
     </AuthContext.Provider>

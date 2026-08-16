@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../context/AuthContext.jsx";
 import { weeksApi, adminApi, downloadExport } from "../api/endpoints.js";
-import { Card, Spinner, ErrorBanner, EmptyState, RefreshButton } from "../components/ui.jsx";
+import { Card, Spinner, ErrorBanner, EmptyState, RefreshButton, Modal } from "../components/ui.jsx";
 import { ROLE_LABELS } from "../utils/constants.js";
 import RosterManager from "../components/RosterManager.jsx";
 import PasswordManager from "../components/PasswordManager.jsx";
@@ -14,11 +14,14 @@ const PREVIEWABLE_ROLES = ["profiler", "group_anchor", "casu_anchor", "casu_lead
 export default function AdminPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const { impersonateRole } = useAuth();
+  const { impersonateUser } = useAuth();
   const weeksQuery = useQuery({ queryKey: ["weeks"], queryFn: weeksApi.list });
+  const usersQuery = useQuery({ queryKey: ["adminUsers"], queryFn: adminApi.listUsers });
   const [exportError, setExportError] = useState("");
   const [previewError, setPreviewError] = useState("");
-  const [previewingRole, setPreviewingRole] = useState(null);
+  const [pickerRole, setPickerRole] = useState(null);
+  const [switchingUserId, setSwitchingUserId] = useState(null);
+  const [showGuide, setShowGuide] = useState(false);
 
   const createWeekMutation = useMutation({
     mutationFn: adminApi.createWeek,
@@ -50,16 +53,39 @@ export default function AdminPage() {
     }
   }
 
-  async function handlePreview(role) {
+  async function handlePreview(user) {
     setPreviewError("");
-    setPreviewingRole(role);
+    setSwitchingUserId(user.id);
     try {
-      await impersonateRole(role);
+      await impersonateUser(user.id);
       navigate("/dashboard");
     } catch (err) {
-      setPreviewError(err.response?.data?.error || `Couldn't preview as ${ROLE_LABELS[role]}`);
+      setPreviewError(err.response?.data?.error || `Couldn't preview as ${user.name}`);
     } finally {
-      setPreviewingRole(null);
+      setSwitchingUserId(null);
+      setPickerRole(null);
+    }
+  }
+
+  function handleOpenWeek(week) {
+    if (window.confirm(`Open ${week.label}? Every active professional will be emailed that it's open for submissions.`)) {
+      openMutation.mutate(week.id);
+    }
+  }
+
+  function handleCloseWeek(week) {
+    if (window.confirm(`Close ${week.label}? Scores will be computed and finalized, and every active professional will be emailed that it's closed.`)) {
+      closeMutation.mutate(week.id);
+    }
+  }
+
+  function handleReopenWeek(week) {
+    if (
+      window.confirm(
+        `Reopen ${week.label}? Anyone whose evaluation is still locked stays locked until you unlock them individually (or use Unlock All). If another week is currently open, both will show as "open" — see the guide below.`
+      )
+    ) {
+      openMutation.mutate(week.id);
     }
   }
 
@@ -70,6 +96,7 @@ export default function AdminPage() {
   }
 
   const weeks = weeksQuery.data || [];
+  const pickerUsers = (usersQuery.data || []).filter((u) => u.role === pickerRole && u.is_active);
 
   return (
     <div className="space-y-6">
@@ -82,7 +109,7 @@ export default function AdminPage() {
         <h2 className="text-sm font-semibold text-slate-800 mb-1">View Portal As…</h2>
         <p className="text-xs text-slate-500 mb-3">
           Preview the portal exactly as a real professional would see it — useful for testing changes to the
-          questionnaire or scoring without needing a second account. Picks the first active user of that role.
+          questionnaire or scoring without needing a second account. Pick the exact person to preview.
         </p>
         {previewError && (
           <div className="mb-3">
@@ -93,28 +120,80 @@ export default function AdminPage() {
           {PREVIEWABLE_ROLES.map((role) => (
             <button
               key={role}
-              onClick={() => handlePreview(role)}
-              disabled={previewingRole !== null}
-              className="px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-medium text-slate-600 hover:bg-slate-50 hover:border-slate-400 disabled:opacity-50 transition-standard"
+              onClick={() => setPickerRole(role)}
+              className="px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-medium text-slate-600 hover:bg-slate-50 hover:border-slate-400 transition-standard"
             >
-              {previewingRole === role ? "Switching…" : `View as ${ROLE_LABELS[role]}`}
+              View as {ROLE_LABELS[role]}
             </button>
           ))}
         </div>
       </Card>
 
+      {pickerRole && (
+        <Modal title={`View as ${ROLE_LABELS[pickerRole]}`} onClose={() => setPickerRole(null)} widthClass="max-w-md">
+          {usersQuery.isLoading ? (
+            <Spinner />
+          ) : pickerUsers.length === 0 ? (
+            <p className="text-sm text-slate-400">No active {ROLE_LABELS[pickerRole]} exists yet.</p>
+          ) : (
+            <div className="space-y-1">
+              {pickerUsers.map((u) => (
+                <button
+                  key={u.id}
+                  onClick={() => handlePreview(u)}
+                  disabled={switchingUserId !== null}
+                  className="w-full flex items-center justify-between px-3 py-2 rounded-lg border border-slate-200 text-left text-sm hover:bg-slate-50 hover:border-slate-300 disabled:opacity-50 transition-standard"
+                >
+                  <span className="font-medium text-slate-800">{u.name}</span>
+                  <span className="text-xs text-slate-400">
+                    {switchingUserId === u.id ? "Switching…" : u.field || "—"}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </Modal>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card className="p-5">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-semibold text-slate-800">Week Management</h2>
-            <button
-              onClick={() => createWeekMutation.mutate()}
-              disabled={createWeekMutation.isPending}
-              className="px-3 py-1.5 rounded-lg border border-dashed border-slate-300 text-xs text-slate-500 hover:bg-slate-50 hover:border-slate-400 disabled:opacity-50 transition-standard"
-            >
-              {createWeekMutation.isPending ? "Adding…" : "+ Add Week"}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowGuide((v) => !v)}
+                className="text-xs font-medium text-nav hover:text-accent transition-standard"
+              >
+                {showGuide ? "Hide guide" : "Correcting an older week?"}
+              </button>
+              <button
+                onClick={() => createWeekMutation.mutate()}
+                disabled={createWeekMutation.isPending}
+                className="px-3 py-1.5 rounded-lg border border-dashed border-slate-300 text-xs text-slate-500 hover:bg-slate-50 hover:border-slate-400 disabled:opacity-50 transition-standard"
+              >
+                {createWeekMutation.isPending ? "Adding…" : "+ Add Week"}
+              </button>
+            </div>
           </div>
+          {showGuide && (
+            <div className="mb-4 text-xs text-slate-600 bg-blue-50 border border-blue-100 rounded-lg p-3 space-y-1.5">
+              <p className="font-semibold text-slate-700">Only one week should be open at a time.</p>
+              <p>
+                The Evaluate page and Dashboard only surface a single open week at a time, so if you need to reopen an
+                older week (e.g. Week 01) while a newer one (e.g. Week 02) is already open:
+              </p>
+              <ol className="list-decimal list-inside space-y-0.5 pl-1">
+                <li>Temporarily <strong>Close</strong> the newer week (Week 02) — this is safe, it just locks it and computes scores, and doesn't erase anything.</li>
+                <li><strong>Reopen</strong> the older week (Week 01) and make the needed corrections (unlock specific rows in Raw Data Browser, or Unlock All).</li>
+                <li><strong>Close</strong> Week 01 again, then <strong>Reopen</strong> Week 02 to resume where you left off.</li>
+              </ol>
+              <p className="text-slate-500">
+                Note: closing a week (even temporarily) makes its Performance Scorecard downloadable to everyone and emails
+                everyone that it's "closed" — that's expected, not a bug, since scores are genuinely computed and correct
+                at that point.
+              </p>
+            </div>
+          )}
           {createWeekMutation.isError && (
             <div className="mb-3">
               <ErrorBanner message={createWeekMutation.error?.response?.data?.error || "Failed to create week"} />
@@ -143,14 +222,14 @@ export default function AdminPage() {
                       {w.status}
                     </span>
                     {w.status === "upcoming" && (
-                      <button onClick={() => openMutation.mutate(w.id)} className="text-xs font-medium text-nav hover:text-accent transition-standard">Open</button>
+                      <button onClick={() => handleOpenWeek(w)} className="text-xs font-medium text-nav hover:text-accent transition-standard">Open</button>
                     )}
                     {w.status === "open" && (
-                      <button onClick={() => closeMutation.mutate(w.id)} className="text-xs font-medium text-red-600 hover:text-red-700 transition-standard">Close</button>
+                      <button onClick={() => handleCloseWeek(w)} className="text-xs font-medium text-red-600 hover:text-red-700 transition-standard">Close</button>
                     )}
                     {w.status === "closed" && (
                       <button
-                        onClick={() => openMutation.mutate(w.id)}
+                        onClick={() => handleReopenWeek(w)}
                         title="Reopens this week — anyone whose evaluation is still locked stays locked until you unlock them individually in Raw Data Browser."
                         className="text-xs font-medium text-nav hover:text-accent transition-standard"
                       >

@@ -66,10 +66,11 @@ export async function getSapaDistribution(projectId, weekId, scope) {
       const bucket = score ? sapaBucket(score.sapa_factor) : null;
       if (!bucket) continue;
       const key = groupKeyFn(u);
-      groups[key] ??= { over: 0, aligned: 0, under: 0, sapaSum: 0, sapaCount: 0 };
+      groups[key] ??= { over: 0, aligned: 0, under: 0, sapaSum: 0, sapaCount: 0, members: { over: [], aligned: [], under: [] } };
       groups[key][bucket] += 1;
       groups[key].sapaSum += Number(score.sapa_factor);
       groups[key].sapaCount += 1;
+      groups[key].members[bucket].push({ id: u.id, name: u.name, sapa: Math.round(Number(score.sapa_factor) * 100) / 100 });
     }
     return Object.entries(groups).map(([key, g]) => {
       const total = g.over + g.aligned + g.under;
@@ -79,6 +80,7 @@ export async function getSapaDistribution(projectId, weekId, scope) {
         aligned: total ? Math.round((g.aligned / total) * 100) : 0,
         under: total ? Math.round((g.under / total) * 100) : 0,
         avg: g.sapaCount ? Math.round((g.sapaSum / g.sapaCount) * 1000) / 1000 : null,
+        members: g.members,
       };
     });
   }

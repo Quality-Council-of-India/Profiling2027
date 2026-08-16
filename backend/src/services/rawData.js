@@ -36,6 +36,8 @@ async function paged(model, where, orderBy, page, pageSize, skip, take) {
 export async function queryTable(table, projectId, query) {
   const { page, pageSize, skip, take } = pagination(query);
   const weekId = query.weekId ? Number(query.weekId) : undefined;
+  const search = query.search ? String(query.search).trim() : undefined;
+  const locked = query.locked === "true" ? true : query.locked === "false" ? false : undefined;
 
   switch (table) {
     case "projects":
@@ -90,6 +92,15 @@ export async function queryTable(table, projectId, query) {
         week: { project_id: projectId },
         eval_type: evalType,
         ...(weekId ? { week_id: weekId } : {}),
+        ...(locked !== undefined ? { locked } : {}),
+        ...(search
+          ? {
+              OR: [
+                { evaluator: { name: { contains: search, mode: "insensitive" } } },
+                { evaluatee: { name: { contains: search, mode: "insensitive" } } },
+              ],
+            }
+          : {}),
       };
       const result = await paged(
         prisma.evaluation,

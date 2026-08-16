@@ -21,7 +21,7 @@ export default function FieldStandingCard({ title, standings, weekIds }) {
 
   return (
     <Card className="p-5">
-      <div className="flex items-center justify-between gap-2 mb-3">
+      <div className="flex items-center justify-between gap-2 mb-1">
         <h2 className="text-sm font-semibold text-slate-800">{title}</h2>
         <select
           value={selectedField}
@@ -34,6 +34,7 @@ export default function FieldStandingCard({ title, standings, weekIds }) {
           ))}
         </select>
       </div>
+      <p className="text-xs text-slate-400 mb-3">Ranked by avg Total Peer Score</p>
 
       {selectedField ? (
         membersQuery.isLoading ? (
