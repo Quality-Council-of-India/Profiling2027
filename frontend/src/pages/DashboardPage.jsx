@@ -103,6 +103,12 @@ function ProfessionalSummary({ user, weeks, openWeek }) {
   // still keyed to the latest CLOSED week — an open week's scores aren't final.
   const latestScoredWeek = weeks.find((w) => w.status === "open") || [...weeks].reverse().find((w) => w.status === "closed");
   const latestClosedWeek = [...weeks].reverse().find((w) => w.status === "closed");
+  // A week that's open AND has a closed_at is being REOPENED for a
+  // correction (as opposed to opened for the first time) — the Scorecard
+  // is hidden entirely while that's in progress, since whatever it would
+  // currently offer isn't the final corrected report yet. It reappears
+  // automatically once that week closes again.
+  const reopenedWeek = weeks.find((w) => w.status === "open" && w.closed_at);
   const [scorecardError, setScorecardError] = useState("");
   const [downloadingScorecard, setDownloadingScorecard] = useState(false);
 
@@ -150,7 +156,7 @@ function ProfessionalSummary({ user, weeks, openWeek }) {
         />
       </div>
 
-      {latestClosedWeek && (
+      {latestClosedWeek && !reopenedWeek && (
         <Card className="p-4 flex items-center justify-between flex-wrap gap-3">
           <div>
             <p className="text-sm font-medium text-slate-800">Your Performance Scorecard</p>

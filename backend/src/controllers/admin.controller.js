@@ -117,7 +117,7 @@ export async function closeWeek(req, res) {
   });
   if (!week) return res.status(404).json({ error: "Week not found" });
 
-  const updated = await prisma.week.update({ where: { id: weekId }, data: { status: "closed" } });
+  const updated = await prisma.week.update({ where: { id: weekId }, data: { status: "closed", closed_at: new Date() } });
   // Final recompute on close so every professional (even non-responders) has a row.
   await computeScoresForWeek(weekId, req.user.project_id);
 
