@@ -15,9 +15,9 @@ const submitSchema = z.object({
   timeliness_throughput: z.number().int().min(1).max(7),
   work_quality: z.number().int().min(1).max(7),
   problem_solving_initiative: z.number().int().min(1).max(7),
-  strengths_tags: z.array(z.string()).max(MAX_TAGS_PER_CATEGORY).default([]),
-  weakness_tags: z.array(z.string()).max(MAX_TAGS_PER_CATEGORY).default([]),
-  improvement_suggestion: z.string().optional().nullable(),
+  strengths_tags: z.array(z.string()).min(1, "Select at least one Strength").max(MAX_TAGS_PER_CATEGORY),
+  weakness_tags: z.array(z.string()).min(1, "Select at least one Area of Improvement").max(MAX_TAGS_PER_CATEGORY),
+  improvement_suggestion: z.string().trim().min(1, "The improvement suggestion is required"),
   trajectory: z.enum(["improved", "stayed_same", "declined", "not_applicable"]),
 });
 
@@ -84,7 +84,7 @@ export async function submitEvaluation(req, res, next) {
         problem_solving_initiative: body.problem_solving_initiative,
         strengths_tags: body.strengths_tags,
         weakness_tags: body.weakness_tags,
-        improvement_suggestion: body.improvement_suggestion || null,
+        improvement_suggestion: body.improvement_suggestion,
         trajectory: body.trajectory,
         locked: true,
       },
@@ -98,7 +98,7 @@ export async function submitEvaluation(req, res, next) {
         problem_solving_initiative: body.problem_solving_initiative,
         strengths_tags: body.strengths_tags,
         weakness_tags: body.weakness_tags,
-        improvement_suggestion: body.improvement_suggestion || null,
+        improvement_suggestion: body.improvement_suggestion,
         trajectory: body.trajectory,
         submitted_at: new Date(),
         locked: true,
@@ -111,7 +111,8 @@ export async function submitEvaluation(req, res, next) {
     res.status(201).json({ evaluation, computed });
   } catch (err) {
     if (err.name === "ZodError") {
-      return res.status(400).json({ error: "Invalid evaluation payload", details: err.issues });
+      const message = err.issues?.[0]?.message || "Invalid evaluation payload";
+      return res.status(400).json({ error: message, details: err.issues });
     }
     next(err);
   }

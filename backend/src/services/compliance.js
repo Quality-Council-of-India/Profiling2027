@@ -1,5 +1,13 @@
 import { prisma } from "../utils/prisma.js";
-import { sendMail, reminderEmailBody } from "./mailer.js";
+import { sendMail, reminderEmailBody, digestEmailBody } from "./mailer.js";
+
+const DIGEST_ROLE_LABELS = {
+  profiler: "Profiler",
+  group_anchor: "Group Anchor",
+  casu_anchor: "CASU Anchor",
+  casu_lead: "CASU Lead",
+  project_lead: "Project Lead",
+};
 
 /**
  * Builds the full compliance matrix for a week — §4.4 / replaces the
@@ -118,4 +126,64 @@ export async function sendComplianceReminders(projectId, weekId, weekLabel, week
     }
   }
   return { remindersSent: sent, nonCompliantCount: nonCompliant.length };
+}
+
+/**
+ * End-of-day (~19:30 IST) visibility digest for Admins/Project Leads/CASU
+ * Leads — who in their scope still has pending submissions for the open
+ * week. Each group only sees their own remit:
+ *   Admin         -> everyone
+ *   Project Lead  -> Profilers, Group Anchors, and Project Leads (incl. themselves)
+ *   CASU Lead     -> CASU Anchors and CASU Leads (incl. themselves)
+ */
+export async function sendEndOfDayDigest(projectId, weekId, weekLabel) {
+  const { rows } = await buildComplianceMatrix(projectId, weekId);
+  const nonCompliant = rows.filter((r) => !r.isCompliant);
+
+  const [admins, projectLeads, casuLeads] = await Promise.all([
+    prisma.user.findMany({ where: { project_id: projectId, role: "admin", is_active: true } }),
+    prisma.user.findMany({ where: { project_id: projectId, role: "project_lead", is_active: true } }),
+    prisma.user.findMany({ where: { project_id: projectId, role: "casu_lead", is_active: true } }),
+  ]);
+
+  const scopes = [
+    { recipients: admins, allowedRoles: null, scopeLabel: null },
+    {
+      recipients: projectLeads,
+      allowedRoles: ["profiler", "group_anchor", "project_lead"],
+      scopeLabel: "Profilers, Group Anchors & Project Leads",
+    },
+    {
+      recipients: casuLeads,
+      allowedRoles: ["casu_anchor", "casu_lead"],
+      scopeLabel: "CASU Anchors & CASU Leads",
+    },
+  ];
+
+  let sent = 0;
+  for (const { recipients, allowedRoles, scopeLabel } of scopes) {
+    if (recipients.length === 0) continue;
+    const scopedRows = (allowedRoles ? nonCompliant.filter((r) => allowedRoles.includes(r.role)) : nonCompliant).map(
+      (r) => ({
+        name: r.name,
+        roleLabel: DIGEST_ROLE_LABELS[r.role] || r.role,
+        selfPending: !r.selfDone,
+        pendingPeers: r.pendingPeers,
+      })
+    );
+
+    for (const recipient of recipients) {
+      try {
+        await sendMail({
+          to: recipient.email,
+          subject: `End-of-day update: ${scopedRows.length} pending submission${scopedRows.length === 1 ? "" : "s"} — ${weekLabel}`,
+          html: digestEmailBody(recipient.name, weekLabel, scopedRows, scopeLabel),
+        });
+        sent++;
+      } catch (err) {
+        console.error(`Failed to send EOD digest to ${recipient.email}:`, err.message);
+      }
+    }
+  }
+  return { digestsSent: sent };
 }

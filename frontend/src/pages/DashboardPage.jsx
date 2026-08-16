@@ -96,7 +96,12 @@ function QuickLink({ to, Icon, title, desc }) {
 
 function ProfessionalSummary({ user, weeks, openWeek }) {
   const pendingQuery = useQuery({ queryKey: ["pending"], queryFn: evaluationsApi.pending, retry: false });
-  const latestScoredWeek = [...weeks].reverse().find((w) => w.status !== "upcoming");
+  // Prefer the currently open week over just the highest week_number — so
+  // the Radar/stat cards below follow whichever week is actually open, even
+  // if it's an older week reopened for corrections while a newer one is
+  // still (temporarily) closed. The Scorecard download is deliberately
+  // still keyed to the latest CLOSED week — an open week's scores aren't final.
+  const latestScoredWeek = weeks.find((w) => w.status === "open") || [...weeks].reverse().find((w) => w.status === "closed");
   const latestClosedWeek = [...weeks].reverse().find((w) => w.status === "closed");
   const [scorecardError, setScorecardError] = useState("");
   const [downloadingScorecard, setDownloadingScorecard] = useState(false);

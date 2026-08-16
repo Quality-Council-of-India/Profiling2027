@@ -10,30 +10,29 @@ import { streamWorkbook } from "./export.controller.js";
 import { signAuthToken } from "../utils/jwt.js";
 import { publicUser, sendPasswordResetEmail } from "./auth.controller.js";
 import { ALL_ROLES, ROLES } from "../utils/roles.js";
-import { notify, getActiveNonAdminIds } from "../services/notifications.js";
+import { notify, getActiveNonAdminIds, getAdminIds } from "../services/notifications.js";
 
 const EXPORTABLE_TABLES = ["self_evaluations", "peer_evaluations"];
 const setPasswordSchema = z.object({ password: z.string().min(8) });
 
 /**
- * "View portal as <role>" — lets Admin preview/test the app the way a real
- * professional sees it (Evaluate, My Scores, etc. are meaningless for an
- * Admin's own account, since Admins never submit or receive evaluations).
- * Picks the first active user of that role in the project and signs them a
- * token; the `impersonated_by` claim keeps a trace of who initiated it.
+ * "View portal as <person>" — lets Admin preview/test the app exactly as a
+ * specific real professional sees it (Evaluate, My Scores, etc. are
+ * meaningless for an Admin's own account, since Admins never submit or
+ * receive evaluations). The Admin picks the exact person from the roster
+ * (see listUsers) rather than always previewing the first active user of a
+ * role — different people can have very different pending items (e.g. zero
+ * peers mapped, or already fully submitted). Signs them a token; the
+ * `impersonated_by` claim keeps a trace of who initiated it.
  */
-export async function impersonateRole(req, res) {
-  const { role } = req.params;
-  if (role === ROLES.ADMIN || !ALL_ROLES.includes(role)) {
-    return res.status(400).json({ error: `Cannot preview as "${role}"` });
-  }
-
+export async function impersonateUser(req, res) {
+  const userId = Number(req.params.id);
   const target = await prisma.user.findFirst({
-    where: { project_id: req.user.project_id, role, is_active: true },
-    orderBy: { name: "asc" },
+    where: { id: userId, project_id: req.user.project_id, is_active: true },
   });
-  if (!target) {
-    return res.status(404).json({ error: `No active user with role "${role}" exists yet` });
+  if (!target) return res.status(404).json({ error: "User not found or inactive" });
+  if (target.role === ROLES.ADMIN || !ALL_ROLES.includes(target.role)) {
+    return res.status(400).json({ error: "Cannot preview as another Admin" });
   }
 
   const token = signAuthToken(target, { impersonated_by: req.user.id });
@@ -93,6 +92,20 @@ export async function openWeek(req, res) {
     `,
   });
 
+  const adminIds = await getAdminIds(req.user.project_id);
+  await notify(req.user.project_id, adminIds, {
+    type: "week_opened_admin_summary",
+    title: `${updated.label} opened — all professionals notified`,
+    body: `${recipientIds.length} active professional(s) have been emailed to submit their Self- and Peer-Evaluations.`,
+    link: "/admin",
+    emailHtml: (u) => `
+      <p>Hi ${u.name},</p>
+      <p><strong>${updated.label}</strong> was just opened. All ${recipientIds.length} active professional(s) have
+      been notified by email that it's open and to submit their Self- and Peer-Evaluations.</p>
+      <p>Thanks.</p>
+    `,
+  });
+
   res.json({ week: updated });
 }
 
@@ -117,6 +130,20 @@ export async function closeWeek(req, res) {
       <p>Hi ${u.name},</p>
       <p><strong>${updated.label}</strong> has closed on the Profiling 2027 Feedback Portal. Your scores for this
       week are now final — check "My Scores" or "Analytics" to see them.</p>
+      <p>Thanks.</p>
+    `,
+  });
+
+  const adminIds = await getAdminIds(req.user.project_id);
+  await notify(req.user.project_id, adminIds, {
+    type: "week_closed_admin_summary",
+    title: `${updated.label} closed — all professionals notified`,
+    body: `${recipientIds.length} active professional(s) have been emailed that their scores are now final.`,
+    link: "/admin",
+    emailHtml: (u) => `
+      <p>Hi ${u.name},</p>
+      <p><strong>${updated.label}</strong> was just closed. All ${recipientIds.length} active professional(s) have
+      been notified by email that their scores for this week are now final.</p>
       <p>Thanks.</p>
     `,
   });

@@ -82,10 +82,29 @@ export default function EvaluatePage() {
     setTrajectory("");
   }
 
+  // Every question on this form is mandatory — the 7 ratings always carry a
+  // default value so they can never be truly blank, but these subjective
+  // questions can, so submission is blocked with a pop-up naming exactly
+  // what's still missing rather than letting a partial answer through.
+  function getMissingFields() {
+    const missing = [];
+    if (selectedStrengths.length === 0) missing.push("At least one Strength tag");
+    if (selectedWeaknesses.length === 0) missing.push("At least one Area of Improvement tag");
+    if (!improvementSuggestion.trim()) missing.push("The improvement suggestion");
+    if (needsTrajectory && !trajectory) missing.push("The trajectory question (compared to last week)");
+    return missing;
+  }
+
   function handleSubmit() {
     if (!week) return;
     const evaluateeId = evalType === "self" ? user.id : Number(selectedPeerId);
     if (evalType === "peer" && !evaluateeId) return;
+
+    const missing = getMissingFields();
+    if (missing.length > 0) {
+      window.alert(`Please complete the following before submitting:\n\n${missing.map((m) => `• ${m}`).join("\n")}`);
+      return;
+    }
 
     submitMutation.mutate({
       week_id: week.id,
@@ -259,10 +278,10 @@ export default function EvaluatePage() {
           <p className="text-sm font-medium text-slate-700 mb-2">
             Strengths{" "}
             <span className="text-xs text-slate-400">
-              (select up to {MAX_TAGS_PER_CATEGORY}) · {selectedStrengths.length}/{MAX_TAGS_PER_CATEGORY} selected
+              (select 1-{MAX_TAGS_PER_CATEGORY}) · {selectedStrengths.length}/{MAX_TAGS_PER_CATEGORY} selected
             </span>
           </p>
-          <p className="text-xs text-slate-400 mb-2">Choose the most distinguishing strengths.</p>
+          <p className="text-xs text-slate-400 mb-2">Choose the most distinguishing strengths. Required — select at least one.</p>
           <div className="flex flex-wrap gap-1.5">
             {STRENGTH_TAGS.map((tag) => {
               const selected = selectedStrengths.includes(tag);
@@ -291,10 +310,10 @@ export default function EvaluatePage() {
           <p className="text-sm font-medium text-slate-700 mb-2">
             Areas of Improvement{" "}
             <span className="text-xs text-slate-400">
-              (select up to {MAX_TAGS_PER_CATEGORY}) · {selectedWeaknesses.length}/{MAX_TAGS_PER_CATEGORY} selected
+              (select 1-{MAX_TAGS_PER_CATEGORY}) · {selectedWeaknesses.length}/{MAX_TAGS_PER_CATEGORY} selected
             </span>
           </p>
-          <p className="text-xs text-slate-400 mb-2">Choose the most pressing improvement areas.</p>
+          <p className="text-xs text-slate-400 mb-2">Choose the most pressing improvement areas. Required — select at least one.</p>
           <div className="flex flex-wrap gap-1.5">
             {WEAKNESS_TAGS.map((tag) => {
               const selected = selectedWeaknesses.includes(tag);
@@ -323,7 +342,7 @@ export default function EvaluatePage() {
           <p className="text-sm font-medium text-slate-700 mb-2">
             What is the single most impactful action {evalType === "self" ? "you" : "this person"} could take to improve?
           </p>
-          <p className="text-xs text-slate-400 mb-2">Optional. One concrete, specific suggestion.</p>
+          <p className="text-xs text-slate-400 mb-2">Required. One concrete, specific suggestion.</p>
           <textarea
             rows={2}
             value={improvementSuggestion}
@@ -364,9 +383,7 @@ export default function EvaluatePage() {
 
       <button
         onClick={handleSubmit}
-        disabled={
-          submitMutation.isPending || (evalType === "peer" && !selectedPeerId) || (needsTrajectory && !trajectory)
-        }
+        disabled={submitMutation.isPending || (evalType === "peer" && !selectedPeerId)}
         className="px-6 py-2.5 rounded-lg text-white font-medium text-sm disabled:opacity-50 transition-standard hover:shadow-md flex items-center gap-2"
         style={{ background: ACCENT }}
       >

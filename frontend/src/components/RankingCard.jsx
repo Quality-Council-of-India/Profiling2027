@@ -14,7 +14,8 @@ export default function RankingCard({ title, myRank, total, list, meId, emptyLab
   if (!myRank && !list?.length) {
     return (
       <Card className="p-5">
-        <h2 className="text-sm font-semibold text-slate-800 mb-3">{title}</h2>
+        <h2 className="text-sm font-semibold text-slate-800 mb-1">{title}</h2>
+        <p className="text-xs text-slate-400 mb-3">Ranked by Total Peer Score</p>
         <p className="text-sm text-slate-400">{emptyLabel || "Not enough data yet for this range."}</p>
       </Card>
     );
@@ -24,7 +25,8 @@ export default function RankingCard({ title, myRank, total, list, meId, emptyLab
 
   return (
     <Card className="p-5">
-      <h2 className="text-sm font-semibold text-slate-800 mb-3">{title}</h2>
+      <h2 className="text-sm font-semibold text-slate-800 mb-1">{title}</h2>
+      <p className="text-xs text-slate-400 mb-3">Ranked by Total Peer Score</p>
       {myRank && (
         <>
           <div className="flex items-baseline gap-2 mb-1">

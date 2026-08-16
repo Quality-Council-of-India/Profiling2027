@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { useAuth } from "../context/AuthContext.jsx";
 import { weeksApi, scoresApi, analyticsApi } from "../api/endpoints.js";
 import { Card, StatCard, Spinner, ErrorBanner, EmptyState, RefreshButton } from "../components/ui.jsx";
@@ -10,9 +11,21 @@ import PeerScoreTrendChart from "../components/charts/PeerScoreTrendChart.jsx";
 import HeatmapGrid from "../components/charts/HeatmapGrid.jsx";
 import QuadrantPlot from "../components/charts/QuadrantPlot.jsx";
 import SAPAGauge from "../components/charts/SAPAGauge.jsx";
-import { PARAM_FIELDS, ACCENT, NAV } from "../utils/constants.js";
+import { PARAM_FIELDS, ACCENT, NAV, ROLE_LABELS } from "../utils/constants.js";
 
 const AGGREGATE_ROLES = ["project_lead", "casu_lead", "admin"];
+
+// Short forms for the x-axis ticks of the Per-Parameter Breakdown bar chart —
+// the full labels (e.g. "Work Quality & Attention to Detail") get clipped.
+const SHORT_PARAM_LABELS = {
+  ownership_discipline: "Ownership",
+  team_spirit: "Team Spirit",
+  communication_clarity: "Communication",
+  domain_knowledge: "Domain Knowledge",
+  timeliness_throughput: "Timeliness",
+  work_quality: "Work Quality",
+  problem_solving_initiative: "Problem Solving",
+};
 
 function averageRows(rows) {
   if (!rows.length) return null;
@@ -36,7 +49,11 @@ export default function AnalyticsPage() {
   const [selectedWeekIds, setSelectedWeekIds] = useState([]);
   useEffect(() => {
     if (weeks.length && selectedWeekIds.length === 0) {
-      const current = [...weeks].reverse().find((w) => w.status !== "upcoming");
+      // Prefer the currently open week — falling back to the most recently
+      // closed one otherwise. Just taking the highest week_number (the old
+      // logic) picks the wrong week whenever an OLDER week has been
+      // reopened for corrections while a NEWER one is still closed.
+      const current = weeks.find((w) => w.status === "open") || [...weeks].reverse().find((w) => w.status === "closed");
       if (current) setSelectedWeekIds([current.id]);
     }
   }, [weeks, selectedWeekIds]);
@@ -131,60 +148,67 @@ export default function AnalyticsPage() {
         <WeekSelector weeks={weeks} selectedIds={selectedWeekIds} onChange={setSelectedWeekIds} />
       </Card>
 
-      {/* ── Personal score summary for the selected range ── */}
-      {trendQuery.isLoading ? (
-        <Spinner />
-      ) : !summary ? (
-        <Card className="p-6 text-center text-sm text-slate-400">No scored data for this selection yet.</Card>
-      ) : (
+      {/* ── Personal score summary for the selected range ──
+          Admin never submits or receives evaluations, so there's no personal
+          score to show them here — this whole section is scoped to roles
+          that actually get scored (everyone else, including Project Lead
+          and CASU Lead, who ARE evaluated). */}
+      {user.role !== "admin" && (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <StatCard label="Total Self" value={summary.total_self.toFixed(1)} sub={`${rangeLabel} · /49`} tone="accent" />
-            <StatCard label="Total Peer" value={summary.total_peer.toFixed(1)} sub={`${summary.peer_count} of ${summary.expected_peer_count} peer responses`} tone="info" />
-            <Card className="p-4">
-              <p className="text-xs uppercase tracking-wide text-slate-500 mb-2">SAPA Factor</p>
-              <SAPAGauge sapa={summary.sapa_factor} />
+          {trendQuery.isLoading ? (
+            <Spinner />
+          ) : !summary ? (
+            <Card className="p-6 text-center text-sm text-slate-400">
+              No scored data for this selection yet — check back once evaluations start coming in for {rangeLabel}.
             </Card>
-          </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <StatCard label="Total Self" value={summary.total_self.toFixed(1)} sub={`${rangeLabel} · /49`} tone="accent" />
+                <StatCard label="Total Peer" value={summary.total_peer.toFixed(1)} sub={`${summary.peer_count} of ${summary.expected_peer_count} peer responses`} tone="info" />
+                <Card className="p-4 flex flex-col justify-center">
+                  <p className="text-xs uppercase tracking-wide text-slate-500 mb-2">SAPA Factor</p>
+                  <SAPAGauge sapa={summary.sapa_factor} />
+                </Card>
+              </div>
 
-          <Card interactive className="p-5">
-            <h2 className="text-sm font-semibold text-slate-800 mb-1">Total Peer Score — Week on Week</h2>
-            <p className="text-xs text-slate-500 mb-3">
-              Your Total Peer Score each week, against your sub-field's average and the overall team's average for
-              that same week.
-            </p>
-            {peerTrendQuery.isLoading ? (
-              <Spinner />
-            ) : peerTrendQuery.isError ? (
-              <ErrorBanner message="Failed to load weekly trend" />
-            ) : peerTrendRows.length === 0 ? (
-              <p className="text-sm text-slate-400 text-center py-8">No weeks have opened yet.</p>
-            ) : (
-              <PeerScoreTrendChart trend={peerTrendRows} fieldLabel={user.field} />
-            )}
-          </Card>
+              <Card interactive className="p-5">
+                <h2 className="text-sm font-semibold text-slate-800 mb-1">Total Peer Score — Week on Week</h2>
+                <p className="text-xs text-slate-500 mb-3">
+                  Your Total Peer Score each week, against your sub-field's average and the overall team's average for
+                  that same week.
+                </p>
+                {peerTrendQuery.isLoading ? (
+                  <Spinner />
+                ) : peerTrendQuery.isError ? (
+                  <ErrorBanner message="Failed to load weekly trend" />
+                ) : peerTrendRows.length === 0 ? (
+                  <p className="text-sm text-slate-400 text-center py-8">No weeks have opened yet.</p>
+                ) : (
+                  <PeerScoreTrendChart trend={peerTrendRows} fieldLabel={user.field} />
+                )}
+              </Card>
 
-          <Card interactive className="p-5">
-            <h2 className="text-sm font-semibold text-slate-800 mb-3">Per-Parameter Breakdown — {rangeLabel}</h2>
-            <div className="space-y-3">
-              {PARAM_FIELDS.map(({ key, label }) => {
-                const self = summary[`${key}_self`];
-                const peer = summary[`${key}_peer`];
-                return (
-                  <div key={label}>
-                    <div className="flex justify-between text-xs text-slate-600 mb-1">
-                      <span>{label}</span>
-                      <span className="tabular-nums"><span style={{ color: ACCENT }}>{self.toFixed(1)}</span> self · <span style={{ color: NAV }}>{peer.toFixed(1)}</span> peer</span>
-                    </div>
-                    <div className="flex gap-1 h-1.5">
-                      <div className="flex-1 bg-slate-100 rounded-full overflow-hidden"><div className="h-full rounded-full" style={{ width: `${(self / 7) * 100}%`, background: ACCENT }} /></div>
-                      <div className="flex-1 bg-slate-100 rounded-full overflow-hidden"><div className="h-full rounded-full" style={{ width: `${(peer / 7) * 100}%`, background: NAV }} /></div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </Card>
+              <Card interactive className="p-5">
+                <h2 className="text-sm font-semibold text-slate-800 mb-3">Per-Parameter Breakdown — {rangeLabel}</h2>
+                <ResponsiveContainer width="100%" height={280}>
+                  <BarChart data={PARAM_FIELDS.map(({ key }) => ({
+                    param: SHORT_PARAM_LABELS[key] ?? key,
+                    Self: summary[`${key}_self`],
+                    Peer: summary[`${key}_peer`],
+                  }))}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis dataKey="param" tick={{ fontSize: 10.5 }} interval={0} angle={-20} textAnchor="end" height={55} />
+                    <YAxis domain={[0, 7]} tick={{ fontSize: 11 }} />
+                    <Tooltip contentStyle={{ fontSize: 12 }} formatter={(v) => Number(v).toFixed(1)} />
+                    <Legend iconSize={8} wrapperStyle={{ fontSize: 11 }} />
+                    <Bar dataKey="Self" fill={ACCENT} radius={[3, 3, 0, 0]} />
+                    <Bar dataKey="Peer" fill={NAV} radius={[3, 3, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </Card>
+            </>
+          )}
         </>
       )}
 
@@ -259,27 +283,66 @@ export default function AnalyticsPage() {
 }
 
 function SapaBars({ rows }) {
+  const [expandedKey, setExpandedKey] = useState(null);
   if (!rows.length) return <p className="text-sm text-slate-400">No SAPA data for this week yet.</p>;
   return (
     <div className="space-y-3">
-      {rows.map((r) => (
-        <div key={r.key}>
-          <div className="flex justify-between text-xs text-slate-600 mb-1">
-            <span className="capitalize">{r.key.replace(/_/g, " ")}</span>
-            <span>avg {r.avg ?? "—"}</span>
+      {rows.map((r) => {
+        const isOpen = expandedKey === r.key;
+        return (
+          <div key={r.key}>
+            <button
+              onClick={() => setExpandedKey(isOpen ? null : r.key)}
+              className="w-full text-left"
+            >
+              <div className="flex justify-between text-xs text-slate-600 mb-1">
+                <span className="capitalize">{ROLE_LABELS[r.key] || r.key.replace(/_/g, " ")}</span>
+                <span>avg {r.avg ?? "—"} {isOpen ? "▲" : "▼"}</span>
+              </div>
+              <div className="flex h-3 rounded-full overflow-hidden bg-slate-100">
+                <div style={{ width: `${r.over}%`, background: "#EF4444" }} title={`Over-raters ${r.over}%`} />
+                <div style={{ width: `${r.aligned}%`, background: "#22C55E" }} title={`Aligned ${r.aligned}%`} />
+                <div style={{ width: `${r.under}%`, background: "#3B82F6" }} title={`Under-raters ${r.under}%`} />
+              </div>
+            </button>
+            {isOpen && r.members && (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2">
+                <SapaMemberGroup label="Over-raters" color="#EF4444" members={r.members.over} />
+                <SapaMemberGroup label="Aligned" color="#22C55E" members={r.members.aligned} />
+                <SapaMemberGroup label="Under-raters" color="#3B82F6" members={r.members.under} />
+              </div>
+            )}
           </div>
-          <div className="flex h-3 rounded-full overflow-hidden bg-slate-100">
-            <div style={{ width: `${r.over}%`, background: "#EF4444" }} title={`Over-raters ${r.over}%`} />
-            <div style={{ width: `${r.aligned}%`, background: "#22C55E" }} title={`Aligned ${r.aligned}%`} />
-            <div style={{ width: `${r.under}%`, background: "#3B82F6" }} title={`Under-raters ${r.under}%`} />
-          </div>
-        </div>
-      ))}
+        );
+      })}
       <div className="flex gap-3 text-xs text-slate-500 pt-1">
         <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500 inline-block" /> Over-raters</span>
         <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500 inline-block" /> Aligned</span>
         <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500 inline-block" /> Under-raters</span>
       </div>
+    </div>
+  );
+}
+
+function SapaMemberGroup({ label, color, members }) {
+  return (
+    <div className="border border-slate-200 rounded-lg p-2">
+      <div className="flex items-center gap-1.5 mb-1.5">
+        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: color }} />
+        <span className="text-[11px] font-semibold text-slate-700">{label}</span>
+        <span className="text-[11px] text-slate-400">({members.length})</span>
+      </div>
+      {members.length === 0 ? (
+        <p className="text-[11px] text-slate-400">No one here.</p>
+      ) : (
+        <div className="flex flex-wrap gap-1">
+          {members.map((m) => (
+            <span key={m.id} title={`SAPA ${m.sapa.toFixed(2)}`} className="px-1.5 py-0.5 rounded text-[10px] bg-slate-50 border border-slate-100 text-slate-700">
+              {m.name}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -61,7 +61,7 @@ export const analyticsApi = {
 
 export const adminApi = {
   createWeek: () => api.post("/admin/weeks", {}).then((r) => r.data),
-  impersonateRole: (role) => api.post(`/admin/impersonate/${role}`).then((r) => r.data),
+  impersonateUser: (userId) => api.post(`/admin/impersonate-user/${userId}`).then((r) => r.data),
   unlockEvaluation: (id) => api.patch(`/admin/evaluations/${id}/unlock`).then((r) => r.data),
   openWeek: (weekId) => api.post(`/admin/weeks/${weekId}/open`).then((r) => r.data),
   closeWeek: (weekId) => api.post(`/admin/weeks/${weekId}/close`).then((r) => r.data),
@@ -87,9 +87,17 @@ export const adminApi = {
   },
   sendUserPasswordReset: (userId) => api.post(`/admin/users/${userId}/send-reset`).then((r) => r.data),
   rawTables: () => api.get("/admin/data").then((r) => r.data.tables),
-  rawTable: (table, { page = 1, pageSize = 50, weekId } = {}) =>
+  rawTable: (table, { page = 1, pageSize = 50, weekId, search, locked } = {}) =>
     api
-      .get(`/admin/data/${table}`, { params: { page, pageSize, ...(weekId ? { weekId } : {}) } })
+      .get(`/admin/data/${table}`, {
+        params: {
+          page,
+          pageSize,
+          ...(weekId ? { weekId } : {}),
+          ...(search ? { search } : {}),
+          ...(locked !== undefined && locked !== "" ? { locked } : {}),
+        },
+      })
       .then((r) => r.data),
 };
 

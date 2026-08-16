@@ -41,6 +41,47 @@ export async function sendMail({ to, subject, html, text }) {
   });
 }
 
+/**
+ * End-of-day (~19:30 IST) digest for Admins/Project Leads/CASU Leads —
+ * who in their scope still has pending submissions for the open week.
+ * `rows` is already scoped to the recipient (see compliance.js
+ * sendEndOfDayDigest): Admins get everyone, Project Leads get only
+ * Profiler/Group Anchor/Project Lead rows, CASU Leads get only
+ * CASU Anchor/CASU Lead rows.
+ */
+export function digestEmailBody(recipientName, weekLabel, rows, scopeLabel) {
+  const scopeSuffix = scopeLabel ? ` (${scopeLabel})` : "";
+
+  if (rows.length === 0) {
+    return `
+      <p>Hi ${recipientName},</p>
+      <p>End-of-day update for <strong>${weekLabel}</strong>${scopeSuffix}: everyone in your scope has completed
+      their submissions. Nothing pending right now.</p>
+      <p>Thanks.</p>
+    `;
+  }
+
+  const selfPendingCount = rows.filter((r) => r.selfPending).length;
+  const peerPendingCount = rows.reduce((a, r) => a + r.pendingPeers.length, 0);
+  const items = rows
+    .map((r) => {
+      const bits = [];
+      if (r.selfPending) bits.push("Self-Evaluation");
+      if (r.pendingPeers.length) bits.push(`Peer-Evaluation for ${r.pendingPeers.join(", ")}`);
+      return `<li><strong>${r.name}</strong> (${r.roleLabel}) — ${bits.join("; ")}</li>`;
+    })
+    .join("");
+
+  return `
+    <p>Hi ${recipientName},</p>
+    <p>End-of-day update for <strong>${weekLabel}</strong>${scopeSuffix}: <strong>${selfPendingCount} self-evaluation${
+    selfPendingCount === 1 ? "" : "s"
+  }</strong> and <strong>${peerPendingCount} peer-evaluation${peerPendingCount === 1 ? "" : "s"}</strong> still pending.</p>
+    <ul>${items}</ul>
+    <p>Thanks.</p>
+  `;
+}
+
 export function reminderEmailBody(user, weekLabel, pending, daysLeft = null) {
   const items = [];
   if (pending.selfPending) items.push("<li>Your own Self-Evaluation</li>");
