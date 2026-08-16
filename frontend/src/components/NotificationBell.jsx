@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { notificationsApi } from "../api/endpoints.js";
 import { BellIcon } from "./icons.jsx";
@@ -9,7 +9,41 @@ const TYPE_ICON = {
   ticket_resolved: "✅",
   week_opened: "🟢",
   week_closed: "🔒",
+  week_opened_admin_summary: "📨",
+  week_closed_admin_summary: "📨",
+  evaluation_unlocked: "🔓",
 };
+
+/**
+ * A short two-tone chime, synthesized on the fly so no audio asset needs to
+ * be bundled/hosted. Browsers suspend audio until the user has interacted
+ * with the page at least once (autoplay policy) — by the time the bell is
+ * polling in the background, that's already happened for any real session,
+ * so this fails silently rather than erroring if it hasn't.
+ */
+function playChime() {
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    const ctx = new Ctx();
+    [880, 1108].forEach((freq, i) => {
+      const oscillator = ctx.createOscillator();
+      const gain = ctx.createGain();
+      oscillator.type = "sine";
+      oscillator.frequency.value = freq;
+      const start = ctx.currentTime + i * 0.11;
+      gain.gain.setValueAtTime(0.001, start);
+      gain.gain.exponentialRampToValueAtTime(0.12, start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.28);
+      oscillator.connect(gain);
+      gain.connect(ctx.destination);
+      oscillator.start(start);
+      oscillator.stop(start + 0.3);
+    });
+    setTimeout(() => ctx.close(), 600);
+  } catch {
+    // Audio unavailable/blocked — the badge count still updates either way.
+  }
+}
 
 function timeAgo(dateStr) {
   const diffMs = Date.now() - new Date(dateStr).getTime();
@@ -33,6 +67,18 @@ export default function NotificationBell() {
     queryFn: notificationsApi.unreadCount,
     refetchInterval: 30000,
   });
+
+  // Chimes only when the unread count goes UP between polls (a genuinely
+  // new notification) — not on the first load, and not when it drops from
+  // marking things read.
+  const prevUnreadRef = useRef(null);
+  useEffect(() => {
+    if (countQuery.data === undefined) return;
+    if (prevUnreadRef.current !== null && countQuery.data > prevUnreadRef.current) {
+      playChime();
+    }
+    prevUnreadRef.current = countQuery.data;
+  }, [countQuery.data]);
 
   const listQuery = useQuery({
     queryKey: ["notifications"],
