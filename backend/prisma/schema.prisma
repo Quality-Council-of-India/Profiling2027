@@ -61,6 +61,9 @@ enum NotificationType {
   ticket_resolved
   week_opened
   week_closed
+  week_opened_admin_summary
+  week_closed_admin_summary
+  evaluation_unlocked
 }
 
 // 3.1.1 projects — one record per annual cycle (Padma 2027, Padma 2028, ...)
