@@ -28,8 +28,12 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <div className="w-11 h-11 rounded-xl flex items-center justify-center bg-nav/10 text-nav font-display font-bold text-lg flex-shrink-0">
-          {user.name.charAt(0).toUpperCase()}
+        <div className="w-11 h-11 rounded-xl overflow-hidden flex items-center justify-center bg-nav/10 text-nav font-display font-bold text-lg flex-shrink-0">
+          {user.photo_url ? (
+            <img src={user.photo_url} alt={user.name} className="w-full h-full object-cover" />
+          ) : (
+            user.name.charAt(0).toUpperCase()
+          )}
         </div>
         <div className="flex-1">
           <div className="flex items-center gap-2">
