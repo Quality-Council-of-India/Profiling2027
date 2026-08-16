@@ -1,10 +1,12 @@
 import { createContext, useContext, useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { authApi, usersApi, adminApi } from "../api/endpoints.js";
 import { TOKEN_KEY, ADMIN_TOKEN_KEY } from "../api/client.js";
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
+  const queryClient = useQueryClient();
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [impersonating, setImpersonating] = useState(!!localStorage.getItem(ADMIN_TOKEN_KEY));
@@ -27,6 +29,7 @@ export function AuthProvider({ children }) {
     localStorage.setItem(TOKEN_KEY, token);
     localStorage.removeItem(ADMIN_TOKEN_KEY);
     setImpersonating(false);
+    queryClient.clear();
     setUser(loggedInUser);
     return loggedInUser;
   }
@@ -35,10 +38,19 @@ export function AuthProvider({ children }) {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(ADMIN_TOKEN_KEY);
     setImpersonating(false);
+    queryClient.clear();
     setUser(null);
   }
 
-  /** Admin "view portal as <person>" — swaps the active token, stashing the Admin's own for return. */
+  /**
+   * Admin "view portal as <person>" — swaps the active token, stashing the
+   * Admin's own for return. Every per-user query (pending evaluations,
+   * scores, notifications, ...) is cached under identity-agnostic keys like
+   * ["pending"] rather than ["pending", userId], so without clearing the
+   * cache here, switching identity would keep showing the PREVIOUS person's
+   * (or the Admin's own) stale cached data until something else happened to
+   * invalidate those exact keys.
+   */
   async function impersonateUser(userId) {
     const { token, user: targetUser } = await adminApi.impersonateUser(userId);
     if (!impersonating) {
@@ -47,6 +59,7 @@ export function AuthProvider({ children }) {
     }
     localStorage.setItem(TOKEN_KEY, token);
     setImpersonating(true);
+    queryClient.clear();
     setUser(targetUser);
     return targetUser;
   }
@@ -57,6 +70,7 @@ export function AuthProvider({ children }) {
     localStorage.setItem(TOKEN_KEY, adminToken);
     localStorage.removeItem(ADMIN_TOKEN_KEY);
     setImpersonating(false);
+    queryClient.clear();
     const adminUser = await usersApi.me();
     setUser(adminUser);
     return adminUser;

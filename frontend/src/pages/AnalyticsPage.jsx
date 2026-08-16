@@ -167,7 +167,7 @@ export default function AnalyticsPage() {
                 <StatCard label="Total Self" value={summary.total_self.toFixed(1)} sub={`${rangeLabel} · /49`} tone="accent" />
                 <StatCard label="Total Peer" value={summary.total_peer.toFixed(1)} sub={`${summary.peer_count} of ${summary.expected_peer_count} peer responses`} tone="info" />
                 <Card className="p-4 flex flex-col">
-                  <p className="text-xs uppercase tracking-wide text-slate-500 mb-2">SAPA Factor</p>
+                  <h2 className="text-sm font-semibold text-slate-800 mb-2">SAPA Factor</h2>
                   <div className="flex-1 flex flex-col justify-center">
                     <SAPAGauge sapa={summary.sapa_factor} />
                   </div>
@@ -217,9 +217,13 @@ export default function AnalyticsPage() {
       {/* ── Standings ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {rankingsQuery.isLoading ? (
-          <Spinner />
+          <Card className="p-6 lg:col-span-2 flex items-center justify-center">
+            <Spinner />
+          </Card>
         ) : rankingsQuery.isError ? (
-          <ErrorBanner message="Failed to load rankings" />
+          <Card className="p-6 lg:col-span-2">
+            <ErrorBanner message="Failed to load rankings" />
+          </Card>
         ) : (
           <>
             {user.field ? (

@@ -95,7 +95,7 @@ export default function ScoresPage({ userId, userLabel }) {
               <RadarComparison computed={computed} height={260} />
             </Card>
             <Card className="p-4 flex flex-col">
-              <p className="text-xs uppercase tracking-wide text-slate-500 mb-2">SAPA Factor</p>
+              <h2 className="text-sm font-semibold text-slate-800 mb-2">SAPA Factor</h2>
               <div className="flex-1 flex flex-col justify-center">
                 <SAPAGauge sapa={sapa} />
               </div>

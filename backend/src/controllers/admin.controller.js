@@ -79,33 +79,36 @@ export async function openWeek(req, res) {
 
   const updated = await prisma.week.update({ where: { id: weekId }, data: { status: "open" } });
 
-  const recipientIds = await getActiveNonAdminIds(req.user.project_id);
-  await notify(req.user.project_id, recipientIds, {
-    type: "week_opened",
-    title: `${updated.label} is now open`,
-    body: "Submit your Self-Evaluation and Peer Evaluations before the window closes.",
-    link: "/dashboard",
-    emailHtml: (u) => `
-      <p>Hi ${u.name},</p>
-      <p><strong>${updated.label}</strong> is now open on the Profiling 2027 Feedback Portal. Please log in and submit
-      your Self-Evaluation and Peer Evaluations before the window closes.</p>
-      <p>Thanks.</p>
-    `,
-  });
-
-  const adminIds = await getAdminIds(req.user.project_id);
-  await notify(req.user.project_id, adminIds, {
-    type: "week_opened_admin_summary",
-    title: `${updated.label} opened — all professionals notified`,
-    body: `${recipientIds.length} active professional(s) have been emailed to submit their Self- and Peer-Evaluations.`,
-    link: "/admin",
-    emailHtml: (u) => `
-      <p>Hi ${u.name},</p>
-      <p><strong>${updated.label}</strong> was just opened. All ${recipientIds.length} active professional(s) have
-      been notified by email that it's open and to submit their Self- and Peer-Evaluations.</p>
-      <p>Thanks.</p>
-    `,
-  });
+  const [recipientIds, adminIds] = await Promise.all([
+    getActiveNonAdminIds(req.user.project_id),
+    getAdminIds(req.user.project_id),
+  ]);
+  await Promise.all([
+    notify(req.user.project_id, recipientIds, {
+      type: "week_opened",
+      title: `${updated.label} is now open`,
+      body: "Submit your Self-Evaluation and Peer Evaluations before the window closes.",
+      link: "/dashboard",
+      emailHtml: (u) => `
+        <p>Hi ${u.name},</p>
+        <p><strong>${updated.label}</strong> is now open on the Profiling 2027 Feedback Portal. Please log in and submit
+        your Self-Evaluation and Peer Evaluations before the window closes.</p>
+        <p>Thanks.</p>
+      `,
+    }),
+    notify(req.user.project_id, adminIds, {
+      type: "week_opened_admin_summary",
+      title: `${updated.label} opened — all professionals notified`,
+      body: `${recipientIds.length} active professional(s) have been emailed to submit their Self- and Peer-Evaluations.`,
+      link: "/admin",
+      emailHtml: (u) => `
+        <p>Hi ${u.name},</p>
+        <p><strong>${updated.label}</strong> was just opened. All ${recipientIds.length} active professional(s) have
+        been notified by email that it's open and to submit their Self- and Peer-Evaluations.</p>
+        <p>Thanks.</p>
+      `,
+    }),
+  ]);
 
   res.json({ week: updated });
 }
@@ -121,33 +124,36 @@ export async function closeWeek(req, res) {
   // Final recompute on close so every professional (even non-responders) has a row.
   await computeScoresForWeek(weekId, req.user.project_id);
 
-  const recipientIds = await getActiveNonAdminIds(req.user.project_id);
-  await notify(req.user.project_id, recipientIds, {
-    type: "week_closed",
-    title: `${updated.label} is now closed`,
-    body: "Your scores for this week are final — check My Scores or Analytics.",
-    link: "/scores",
-    emailHtml: (u) => `
-      <p>Hi ${u.name},</p>
-      <p><strong>${updated.label}</strong> has closed on the Profiling 2027 Feedback Portal. Your scores for this
-      week are now final — check "My Scores" or "Analytics" to see them.</p>
-      <p>Thanks.</p>
-    `,
-  });
-
-  const adminIds = await getAdminIds(req.user.project_id);
-  await notify(req.user.project_id, adminIds, {
-    type: "week_closed_admin_summary",
-    title: `${updated.label} closed — all professionals notified`,
-    body: `${recipientIds.length} active professional(s) have been emailed that their scores are now final.`,
-    link: "/admin",
-    emailHtml: (u) => `
-      <p>Hi ${u.name},</p>
-      <p><strong>${updated.label}</strong> was just closed. All ${recipientIds.length} active professional(s) have
-      been notified by email that their scores for this week are now final.</p>
-      <p>Thanks.</p>
-    `,
-  });
+  const [recipientIds, adminIds] = await Promise.all([
+    getActiveNonAdminIds(req.user.project_id),
+    getAdminIds(req.user.project_id),
+  ]);
+  await Promise.all([
+    notify(req.user.project_id, recipientIds, {
+      type: "week_closed",
+      title: `${updated.label} is now closed`,
+      body: "Your scores for this week are final — check My Scores or Analytics.",
+      link: "/scores",
+      emailHtml: (u) => `
+        <p>Hi ${u.name},</p>
+        <p><strong>${updated.label}</strong> has closed on the Profiling 2027 Feedback Portal. Your scores for this
+        week are now final — check "My Scores" or "Analytics" to see them.</p>
+        <p>Thanks.</p>
+      `,
+    }),
+    notify(req.user.project_id, adminIds, {
+      type: "week_closed_admin_summary",
+      title: `${updated.label} closed — all professionals notified`,
+      body: `${recipientIds.length} active professional(s) have been emailed that their scores are now final.`,
+      link: "/admin",
+      emailHtml: (u) => `
+        <p>Hi ${u.name},</p>
+        <p><strong>${updated.label}</strong> was just closed. All ${recipientIds.length} active professional(s) have
+        been notified by email that their scores for this week are now final.</p>
+        <p>Thanks.</p>
+      `,
+    }),
+  ]);
 
   res.json({ week: updated });
 }
