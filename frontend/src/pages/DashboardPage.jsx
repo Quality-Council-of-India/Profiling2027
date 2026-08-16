@@ -188,7 +188,11 @@ function ProfessionalSummary({ user, weeks, openWeek }) {
             <div className="space-y-2">
               <div
                 className={`flex items-center justify-between px-3 py-2.5 rounded-lg border transition-standard ${
-                  pending.selfDone ? "border-green-200 bg-green-50" : "border-orange-200 bg-orange-50 hover:border-orange-300"
+                  pending.selfDone && !pending.selfLocked
+                    ? "border-amber-200 bg-amber-50"
+                    : pending.selfDone
+                    ? "border-green-200 bg-green-50"
+                    : "border-orange-200 bg-orange-50 hover:border-orange-300"
                 }`}
               >
                 <div className="flex items-center gap-2">
@@ -201,7 +205,7 @@ function ProfessionalSummary({ user, weeks, openWeek }) {
                   </span>
                   <span className="text-sm font-medium text-slate-800">Self-Evaluation</span>
                 </div>
-                {!pending.selfDone && (
+                {!pending.selfDone ? (
                   <Link
                     to="/evaluate"
                     className="px-3 py-1 text-xs font-medium text-white rounded-md transition-standard hover:shadow-sm"
@@ -209,13 +213,26 @@ function ProfessionalSummary({ user, weeks, openWeek }) {
                   >
                     Fill Now
                   </Link>
+                ) : (
+                  !pending.selfLocked && (
+                    <Link
+                      to="/evaluate"
+                      className="px-3 py-1 text-xs font-medium rounded-md border border-amber-300 bg-amber-100 text-amber-800 hover:bg-amber-200 transition-standard whitespace-nowrap"
+                    >
+                      Unlocked for correction
+                    </Link>
+                  )
                 )}
               </div>
               {pending.peers.map((p) => (
                 <div
                   key={p.id}
                   className={`flex items-center justify-between px-3 py-2.5 rounded-lg border transition-standard ${
-                    p.done ? "border-green-200 bg-green-50" : "border-slate-200 bg-slate-50 hover:border-slate-300"
+                    p.done && !p.locked
+                      ? "border-amber-200 bg-amber-50"
+                      : p.done
+                      ? "border-green-200 bg-green-50"
+                      : "border-slate-200 bg-slate-50 hover:border-slate-300"
                   }`}
                 >
                   <div className="flex items-center gap-2">
@@ -228,13 +245,22 @@ function ProfessionalSummary({ user, weeks, openWeek }) {
                     </span>
                     <span className="text-sm text-slate-700">Peer Evaluation — {p.name}</span>
                   </div>
-                  {!p.done && (
+                  {!p.done ? (
                     <Link
                       to={`/evaluate?peer=${p.id}`}
                       className="px-3 py-1 text-xs font-medium rounded-md border border-slate-300 text-slate-600 hover:bg-white hover:border-slate-400 transition-standard"
                     >
                       Evaluate
                     </Link>
+                  ) : (
+                    !p.locked && (
+                      <Link
+                        to={`/evaluate?peer=${p.id}`}
+                        className="px-3 py-1 text-xs font-medium rounded-md border border-amber-300 bg-amber-100 text-amber-800 hover:bg-amber-200 transition-standard whitespace-nowrap"
+                      >
+                        Unlocked for correction
+                      </Link>
+                    )
                   )}
                 </div>
               ))}
