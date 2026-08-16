@@ -9,6 +9,12 @@ export default function SAPAGauge({ sapa }) {
   const pct = Math.max(0, Math.min(100, (v / 2) * 100)); // 0..2 mapped to 0..100%
   const color = v > 1.3 || v < 0.7 ? "#DC2626" : v > 1.1 || v < 0.9 ? "#D97706" : "#059669";
   const label = v > 1.1 ? "Over-rater" : v < 0.9 ? "Under-rater" : "Well-aligned";
+  const interpretation =
+    v > 1.1
+      ? "You're rating your own work higher than your peers rate you."
+      : v < 0.9
+      ? "You're rating your own work lower than your peers rate you."
+      : "Your self-rating closely matches how your peers rate you.";
 
   return (
     <div>
@@ -28,6 +34,7 @@ export default function SAPAGauge({ sapa }) {
         <span>1.0 (aligned)</span>
         <span>2.0</span>
       </div>
+      <p className="text-xs text-slate-500 mt-3">{interpretation}</p>
     </div>
   );
 }

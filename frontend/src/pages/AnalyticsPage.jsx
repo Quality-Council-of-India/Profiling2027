@@ -166,9 +166,11 @@ export default function AnalyticsPage() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <StatCard label="Total Self" value={summary.total_self.toFixed(1)} sub={`${rangeLabel} · /49`} tone="accent" />
                 <StatCard label="Total Peer" value={summary.total_peer.toFixed(1)} sub={`${summary.peer_count} of ${summary.expected_peer_count} peer responses`} tone="info" />
-                <Card className="p-4 flex flex-col justify-center">
+                <Card className="p-4 flex flex-col">
                   <p className="text-xs uppercase tracking-wide text-slate-500 mb-2">SAPA Factor</p>
-                  <SAPAGauge sapa={summary.sapa_factor} />
+                  <div className="flex-1 flex flex-col justify-center">
+                    <SAPAGauge sapa={summary.sapa_factor} />
+                  </div>
                 </Card>
               </div>
 

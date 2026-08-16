@@ -11,10 +11,19 @@ import RawDataBrowser from "../components/RawDataBrowser.jsx";
 
 const PREVIEWABLE_ROLES = ["profiler", "group_anchor", "casu_anchor", "casu_lead", "project_lead"];
 
+function ButtonSpinner() {
+  return (
+    <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+      <path className="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+    </svg>
+  );
+}
+
 export default function AdminPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const { impersonateUser } = useAuth();
+  const { user, impersonateUser } = useAuth();
   const weeksQuery = useQuery({ queryKey: ["weeks"], queryFn: weeksApi.list });
   const usersQuery = useQuery({ queryKey: ["adminUsers"], queryFn: adminApi.listUsers });
   const [exportError, setExportError] = useState("");
@@ -35,6 +44,7 @@ export default function AdminPage() {
     mutationFn: adminApi.closeWeek,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["weeks"] }),
   });
+  const testEmailMutation = useMutation({ mutationFn: adminApi.sendTestEmail });
   const [unlockAllMessage, setUnlockAllMessage] = useState("");
   const unlockAllMutation = useMutation({
     mutationFn: adminApi.unlockAllForWeek,
@@ -97,6 +107,10 @@ export default function AdminPage() {
 
   const weeks = weeksQuery.data || [];
   const pickerUsers = (usersQuery.data || []).filter((u) => u.role === pickerRole && u.is_active);
+  // Disables every week's action buttons while any one of them is in
+  // flight — these calls email the whole roster and recompute scores, so
+  // a second click before the first finishes could double-fire either.
+  const anyWeekActionPending = openMutation.isPending || closeMutation.isPending;
 
   return (
     <div className="space-y-6">
@@ -127,6 +141,29 @@ export default function AdminPage() {
             </button>
           ))}
         </div>
+      </Card>
+
+      <Card className="p-5">
+        <h2 className="text-sm font-semibold text-slate-800 mb-1">Email Formatting Check</h2>
+        <p className="text-xs text-slate-500 mb-3">
+          Sends one real test email to your own address ({user.email}) — bypasses EMAIL_DRY_RUN, so it works even
+          while dry-run is on, and it never reaches the real roster.
+        </p>
+        {testEmailMutation.isError && (
+          <div className="mb-3">
+            <ErrorBanner message={testEmailMutation.error?.response?.data?.error || "Failed to send test email"} />
+          </div>
+        )}
+        {testEmailMutation.isSuccess && (
+          <p className="text-xs text-green-700 mb-3">Sent to {testEmailMutation.data.sentTo} — check your inbox.</p>
+        )}
+        <button
+          onClick={() => testEmailMutation.mutate()}
+          disabled={testEmailMutation.isPending}
+          className="px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-medium text-slate-600 hover:bg-slate-50 hover:border-slate-400 disabled:opacity-50 transition-standard"
+        >
+          {testEmailMutation.isPending ? "Sending…" : `Send Test Email to ${user.email}`}
+        </button>
       </Card>
 
       {pickerRole && (
@@ -222,18 +259,34 @@ export default function AdminPage() {
                       {w.status}
                     </span>
                     {w.status === "upcoming" && (
-                      <button onClick={() => handleOpenWeek(w)} className="text-xs font-medium text-nav hover:text-accent transition-standard">Open</button>
+                      <button
+                        onClick={() => handleOpenWeek(w)}
+                        disabled={anyWeekActionPending}
+                        className="inline-flex items-center gap-1.5 text-xs font-medium text-nav hover:text-accent disabled:opacity-50 transition-standard"
+                      >
+                        {openMutation.isPending && openMutation.variables === w.id && <ButtonSpinner />}
+                        {openMutation.isPending && openMutation.variables === w.id ? "Opening…" : "Open"}
+                      </button>
                     )}
                     {w.status === "open" && (
-                      <button onClick={() => handleCloseWeek(w)} className="text-xs font-medium text-red-600 hover:text-red-700 transition-standard">Close</button>
+                      <button
+                        onClick={() => handleCloseWeek(w)}
+                        disabled={anyWeekActionPending}
+                        className="inline-flex items-center gap-1.5 text-xs font-medium text-red-600 hover:text-red-700 disabled:opacity-50 transition-standard"
+                      >
+                        {closeMutation.isPending && closeMutation.variables === w.id && <ButtonSpinner />}
+                        {closeMutation.isPending && closeMutation.variables === w.id ? "Closing…" : "Close"}
+                      </button>
                     )}
                     {w.status === "closed" && (
                       <button
                         onClick={() => handleReopenWeek(w)}
+                        disabled={anyWeekActionPending}
                         title="Reopens this week — anyone whose evaluation is still locked stays locked until you unlock them individually in Raw Data Browser."
-                        className="text-xs font-medium text-nav hover:text-accent transition-standard"
+                        className="inline-flex items-center gap-1.5 text-xs font-medium text-nav hover:text-accent disabled:opacity-50 transition-standard"
                       >
-                        Reopen
+                        {openMutation.isPending && openMutation.variables === w.id && <ButtonSpinner />}
+                        {openMutation.isPending && openMutation.variables === w.id ? "Reopening…" : "Reopen"}
                       </button>
                     )}
                     {(w.status === "closed" || w.status === "open") && (
@@ -245,9 +298,10 @@ export default function AdminPage() {
                         }}
                         disabled={unlockAllMutation.isPending}
                         title="For a whole-team redo (e.g. turnout was too low) — unlocks everyone at once instead of one row at a time in Raw Data Browser."
-                        className="text-xs font-medium text-slate-500 hover:text-accent disabled:opacity-50 transition-standard"
+                        className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-accent disabled:opacity-50 transition-standard"
                       >
-                        Unlock All
+                        {unlockAllMutation.isPending && unlockAllMutation.variables === w.id && <ButtonSpinner />}
+                        {unlockAllMutation.isPending && unlockAllMutation.variables === w.id ? "Unlocking…" : "Unlock All"}
                       </button>
                     )}
                   </div>

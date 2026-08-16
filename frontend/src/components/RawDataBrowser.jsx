@@ -217,7 +217,7 @@ function TableBody({ table, rows, onUnlock, unlockingId }) {
   }
 
   const isSelf = table === "self_evaluations";
-  const wrappingColumns = ["improvement_suggestion"];
+  const wrappingColumns = ["strengths_tags", "weakness_tags", "improvement_suggestion"];
   const isLockable = LOCKABLE_TABLES.includes(table);
 
   const columns = {
