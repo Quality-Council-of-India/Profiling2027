@@ -22,6 +22,33 @@ export default function PasswordManager() {
   const [openRowId, setOpenRowId] = useState(null);
   const [passwordDraft, setPasswordDraft] = useState("");
   const [rowMessage, setRowMessage] = useState({});
+  const [bulkMessage, setBulkMessage] = useState(null);
+
+  const sendAllMutation = useMutation({
+    mutationFn: adminApi.sendLoginCredentialsToAll,
+    onSuccess: (data) => {
+      setBulkMessage({
+        type: data.failed.length ? "error" : "success",
+        text:
+          `Sent to ${data.sent} of ${data.total} active user(s).` +
+          (data.failed.length ? ` Failed: ${data.failed.join(", ")}` : ""),
+      });
+    },
+    onError: (err) => {
+      setBulkMessage({ type: "error", text: err.response?.data?.error || "Failed to send credentials" });
+    },
+  });
+
+  function startSendAll() {
+    if (
+      window.confirm(
+        "Send login credentials to every active user? This resets each person's password to a new random one and emails it to them — anyone with a working password will need to use the new one."
+      )
+    ) {
+      setBulkMessage(null);
+      sendAllMutation.mutate();
+    }
+  }
 
   const setPasswordMutation = useMutation({
     mutationFn: ({ id, password }) => adminApi.setUserPassword(id, password),
@@ -66,13 +93,27 @@ export default function PasswordManager() {
 
   return (
     <Card className="p-5">
-      <h2 className="text-sm font-semibold text-slate-800 mb-1">Password Management</h2>
-      <p className="text-xs text-slate-500 mb-4">
+      <div className="flex items-start justify-between gap-4 mb-1">
+        <h2 className="text-sm font-semibold text-slate-800">Password Management</h2>
+        <button
+          onClick={startSendAll}
+          disabled={sendAllMutation.isPending}
+          className="px-3 py-1.5 rounded-md text-white text-[11px] font-medium bg-nav hover:bg-nav-deep disabled:opacity-50 transition-standard flex-shrink-0"
+        >
+          {sendAllMutation.isPending ? "Sending…" : "Send Login Credentials to All"}
+        </button>
+      </div>
+      <p className={`text-xs text-slate-500 ${bulkMessage ? "mb-1" : "mb-4"}`}>
         Existing passwords are one-way hashed and can never be viewed by anyone, including Admin — that's a
         deliberate security property, not a missing feature. What Admin <em>can</em> do: set a brand-new password
-        directly for someone, or send them the same reset-link email they'd get from "Forgot password?" on the
-        login page.
+        directly for someone, send them the same reset-link email they'd get from "Forgot password?" on the login
+        page, or — for go-live — email a fresh temporary password to everyone at once.
       </p>
+      {bulkMessage && (
+        <p className={`text-xs mb-4 ${bulkMessage.type === "success" ? "text-green-700" : "text-red-600"}`}>
+          {bulkMessage.text}
+        </p>
+      )}
 
       {usersQuery.isLoading ? (
         <Spinner />

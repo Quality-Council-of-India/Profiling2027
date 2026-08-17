@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { prisma } from "../utils/prisma.js";
@@ -11,9 +12,14 @@ import { signAuthToken } from "../utils/jwt.js";
 import { publicUser, sendPasswordResetEmail } from "./auth.controller.js";
 import { ALL_ROLES, ROLES } from "../utils/roles.js";
 import { notify, getActiveNonAdminIds, getAdminIds } from "../services/notifications.js";
+import { sendMail } from "../services/mailer.js";
 
 const EXPORTABLE_TABLES = ["self_evaluations", "peer_evaluations"];
 const setPasswordSchema = z.object({ password: z.string().min(8) });
+
+function generateTempPassword() {
+  return crypto.randomBytes(9).toString("base64url"); // 12 chars, URL-safe
+}
 
 /**
  * "View portal as <person>" — lets Admin preview/test the app exactly as a
@@ -244,6 +250,44 @@ export async function sendUserPasswordReset(req, res, next) {
   } catch (err) {
     next(err);
   }
+}
+
+/**
+ * One-time go-live action: generates a fresh temp password for every active
+ * non-admin user and emails it with the same "new account" template roster
+ * import uses for first-time users. Needed because this project's real
+ * roster was imported while EMAIL_DRY_RUN was on, so none of those original
+ * welcome emails ever actually delivered — every real user is currently
+ * without a working password.
+ */
+export async function sendLoginCredentialsToAll(req, res) {
+  const users = await prisma.user.findMany({
+    where: { project_id: req.user.project_id, is_active: true, role: { not: ROLES.ADMIN } },
+    select: { id: true, name: true, email: true },
+  });
+
+  const outcomes = await Promise.all(
+    users.map(async (user) => {
+      try {
+        const tempPassword = generateTempPassword();
+        const password_hash = await bcrypt.hash(tempPassword, 12);
+        await prisma.user.update({ where: { id: user.id }, data: { password_hash } });
+        await sendMail({
+          to: user.email,
+          subject: "Your Profiling 2027 Feedback Portal account",
+          html: `<p>Hi ${user.name},</p><p>An account has been created for you on the Feedback Portal.</p><p>Email: ${user.email}<br/>Temporary password: <strong>${tempPassword}</strong></p><p>Please log in and use "Forgot password" to set your own password.</p>`,
+        });
+        return { email: user.email, ok: true };
+      } catch (err) {
+        console.error(`Failed to email ${user.email}:`, err.message);
+        return { email: user.email, ok: false };
+      }
+    })
+  );
+
+  const sent = outcomes.filter((o) => o.ok).length;
+  const failed = outcomes.filter((o) => !o.ok).map((o) => o.email);
+  res.json({ sent, total: users.length, failed });
 }
 
 const PHOTO_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"];
