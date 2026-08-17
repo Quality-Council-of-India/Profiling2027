@@ -23,7 +23,7 @@ function ButtonSpinner() {
 export default function AdminPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const { user, impersonateUser } = useAuth();
+  const { impersonateUser } = useAuth();
   const weeksQuery = useQuery({ queryKey: ["weeks"], queryFn: weeksApi.list });
   const usersQuery = useQuery({ queryKey: ["adminUsers"], queryFn: adminApi.listUsers });
   const [exportError, setExportError] = useState("");
@@ -44,7 +44,6 @@ export default function AdminPage() {
     mutationFn: adminApi.closeWeek,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["weeks"] }),
   });
-  const testEmailMutation = useMutation({ mutationFn: adminApi.sendTestEmail });
   const [unlockAllMessage, setUnlockAllMessage] = useState("");
   const unlockAllMutation = useMutation({
     mutationFn: adminApi.unlockAllForWeek,
@@ -141,29 +140,6 @@ export default function AdminPage() {
             </button>
           ))}
         </div>
-      </Card>
-
-      <Card className="p-5">
-        <h2 className="text-sm font-semibold text-slate-800 mb-1">Email Formatting Check</h2>
-        <p className="text-xs text-slate-500 mb-3">
-          Sends one real test email to your own address ({user.email}) — bypasses EMAIL_DRY_RUN, so it works even
-          while dry-run is on, and it never reaches the real roster.
-        </p>
-        {testEmailMutation.isError && (
-          <div className="mb-3">
-            <ErrorBanner message={testEmailMutation.error?.response?.data?.error || "Failed to send test email"} />
-          </div>
-        )}
-        {testEmailMutation.isSuccess && (
-          <p className="text-xs text-green-700 mb-3">Sent to {testEmailMutation.data.sentTo} — check your inbox.</p>
-        )}
-        <button
-          onClick={() => testEmailMutation.mutate()}
-          disabled={testEmailMutation.isPending}
-          className="px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-medium text-slate-600 hover:bg-slate-50 hover:border-slate-400 disabled:opacity-50 transition-standard"
-        >
-          {testEmailMutation.isPending ? "Sending…" : `Send Test Email to ${user.email}`}
-        </button>
       </Card>
 
       {pickerRole && (

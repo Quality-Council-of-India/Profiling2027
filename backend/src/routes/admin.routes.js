@@ -18,7 +18,6 @@ import {
   unlockEvaluation,
   unlockAllForWeek,
   uploadUserPhoto,
-  sendTestEmail,
 } from "../controllers/admin.controller.js";
 
 const ROSTER_EXTENSIONS = [".csv", ".xlsx"];
@@ -69,6 +68,5 @@ router.get("/data/:table", authenticate, requireRole(ROLES.ADMIN), getRawTable);
 router.get("/data/:table/export", authenticate, requireRole(ROLES.ADMIN), exportRawTable);
 router.post("/impersonate-user/:id", authenticate, requireRole(ROLES.ADMIN), impersonateUser);
 router.patch("/evaluations/:id/unlock", authenticate, requireRole(ROLES.ADMIN), unlockEvaluation);
-router.post("/test-email", authenticate, requireRole(ROLES.ADMIN), sendTestEmail);
 
 export default router;
