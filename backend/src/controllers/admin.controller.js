@@ -11,7 +11,6 @@ import { signAuthToken } from "../utils/jwt.js";
 import { publicUser, sendPasswordResetEmail } from "./auth.controller.js";
 import { ALL_ROLES, ROLES } from "../utils/roles.js";
 import { notify, getActiveNonAdminIds, getAdminIds } from "../services/notifications.js";
-import { sendTestMail } from "../services/mailer.js";
 
 const EXPORTABLE_TABLES = ["self_evaluations", "peer_evaluations"];
 const setPasswordSchema = z.object({ password: z.string().min(8) });
@@ -361,29 +360,4 @@ export async function unlockAllForWeek(req, res) {
     data: { locked: false },
   });
   res.json({ unlockedCount: count });
-}
-
-/**
- * Sends one real email to the calling Admin's own address, bypassing
- * EMAIL_DRY_RUN, so formatting can be checked live without risking a send
- * to the real roster — the recipient is always req.user.email, never a
- * client-supplied address.
- */
-export async function sendTestEmail(req, res) {
-  try {
-    await sendTestMail({
-      to: req.user.email,
-      subject: "[Test] Profiling 2027 Feedback Portal — formatting check",
-      html: `
-        <p>Hi ${req.user.name},</p>
-        <p>This is a <strong>test email</strong> from the Profiling 2027 Feedback Portal — sent only to your own
-        address to verify formatting and delivery, regardless of the current EMAIL_DRY_RUN setting.</p>
-        <p>If this looks right, real emails to the team will render the same way.</p>
-        <p>Thanks.</p>
-      `,
-    });
-    res.json({ sentTo: req.user.email });
-  } catch (err) {
-    res.status(500).json({ error: err.message || "Failed to send test email" });
-  }
 }
