@@ -86,6 +86,7 @@ export const adminApi = {
       .then((r) => r.data);
   },
   sendUserPasswordReset: (userId) => api.post(`/admin/users/${userId}/send-reset`).then((r) => r.data),
+  sendLoginCredentialsToAll: () => api.post("/admin/users/send-credentials-all").then((r) => r.data),
   rawTables: () => api.get("/admin/data").then((r) => r.data.tables),
   rawTable: (table, { page = 1, pageSize = 50, weekId, search, locked } = {}) =>
     api

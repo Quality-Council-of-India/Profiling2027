@@ -11,6 +11,7 @@ import {
   setUserActive,
   setUserPassword,
   sendUserPasswordReset,
+  sendLoginCredentialsToAll,
   listRawTables,
   getRawTable,
   exportRawTable,
@@ -63,6 +64,7 @@ router.patch(
   uploadUserPhoto
 );
 router.post("/users/:id/send-reset", authenticate, requireRole(ROLES.ADMIN), sendUserPasswordReset);
+router.post("/users/send-credentials-all", authenticate, requireRole(ROLES.ADMIN), sendLoginCredentialsToAll);
 router.get("/data", authenticate, requireRole(ROLES.ADMIN), listRawTables);
 router.get("/data/:table", authenticate, requireRole(ROLES.ADMIN), getRawTable);
 router.get("/data/:table/export", authenticate, requireRole(ROLES.ADMIN), exportRawTable);
