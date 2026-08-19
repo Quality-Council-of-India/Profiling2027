@@ -102,6 +102,11 @@ model User {
   photo_url     String?  @db.Text
   is_active     Boolean  @default(true)
   created_at    DateTime @default(now())
+  // Set the first (and only) time "Send Login Credentials to All" emails
+  // this person — lets that bulk action target only people who've never
+  // been sent real credentials yet, so adding one new user later doesn't
+  // re-reset and re-email everyone who's already set their own password.
+  credentials_sent_at DateTime?
 
   project Project @relation(fields: [project_id], references: [id], onDelete: Cascade)
 

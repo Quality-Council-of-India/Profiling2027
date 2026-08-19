@@ -253,16 +253,25 @@ export async function sendUserPasswordReset(req, res, next) {
 }
 
 /**
- * One-time go-live action: generates a fresh temp password for every active
- * non-admin user and emails it with the same "new account" template roster
- * import uses for first-time users. Needed because this project's real
- * roster was imported while EMAIL_DRY_RUN was on, so none of those original
- * welcome emails ever actually delivered — every real user is currently
- * without a working password.
+ * Generates a fresh temp password and emails it (the same "new account"
+ * template roster import uses for first-time users) to every active
+ * non-admin user who has NEVER been sent real credentials before —
+ * `credentials_sent_at IS NULL`. Scoping to that, rather than every active
+ * user, is what makes this safely repeatable: adding one new person later
+ * and clicking this again only reaches that new person, instead of
+ * resetting and re-emailing everyone who's already logged in and set their
+ * own password. A one-off re-issue for someone who's already had
+ * credentials sent (lost their password, never got the email, etc.) still
+ * goes through "Send Reset Email" or "Set Password" for that one person.
  */
 export async function sendLoginCredentialsToAll(req, res) {
   const users = await prisma.user.findMany({
-    where: { project_id: req.user.project_id, is_active: true, role: { not: ROLES.ADMIN } },
+    where: {
+      project_id: req.user.project_id,
+      is_active: true,
+      role: { not: ROLES.ADMIN },
+      credentials_sent_at: null,
+    },
     select: { id: true, name: true, email: true },
   });
 
@@ -271,7 +280,10 @@ export async function sendLoginCredentialsToAll(req, res) {
       try {
         const tempPassword = generateTempPassword();
         const password_hash = await bcrypt.hash(tempPassword, 12);
-        await prisma.user.update({ where: { id: user.id }, data: { password_hash } });
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { password_hash, credentials_sent_at: new Date() },
+        });
         await sendMail({
           to: user.email,
           subject: "Your Profiling 2027 Feedback Portal account",

@@ -30,8 +30,10 @@ export default function PasswordManager() {
       setBulkMessage({
         type: data.failed.length ? "error" : "success",
         text:
-          `Sent to ${data.sent} of ${data.total} active user(s).` +
-          (data.failed.length ? ` Failed: ${data.failed.join(", ")}` : ""),
+          data.total === 0
+            ? "Everyone already has credentials — nobody was due to be sent any."
+            : `Sent to ${data.sent} of ${data.total} user(s) who'd never been sent credentials before.` +
+              (data.failed.length ? ` Failed: ${data.failed.join(", ")}` : ""),
       });
     },
     onError: (err) => {
@@ -42,7 +44,7 @@ export default function PasswordManager() {
   function startSendAll() {
     if (
       window.confirm(
-        "Send login credentials to every active user? This resets each person's password to a new random one and emails it to them — anyone with a working password will need to use the new one."
+        "Send login credentials to everyone who's never been sent any? This resets and emails a new password only to active users who've never received credentials before — anyone who's already logged in and set their own password is left untouched."
       )
     ) {
       setBulkMessage(null);
@@ -100,14 +102,15 @@ export default function PasswordManager() {
           disabled={sendAllMutation.isPending}
           className="px-3 py-1.5 rounded-md text-white text-[11px] font-medium bg-nav hover:bg-nav-deep disabled:opacity-50 transition-standard flex-shrink-0"
         >
-          {sendAllMutation.isPending ? "Sending…" : "Send Login Credentials to All"}
+          {sendAllMutation.isPending ? "Sending…" : "Send Login Credentials to New Users"}
         </button>
       </div>
       <p className={`text-xs text-slate-500 ${bulkMessage ? "mb-1" : "mb-4"}`}>
         Existing passwords are one-way hashed and can never be viewed by anyone, including Admin — that's a
         deliberate security property, not a missing feature. What Admin <em>can</em> do: set a brand-new password
         directly for someone, send them the same reset-link email they'd get from "Forgot password?" on the login
-        page, or — for go-live — email a fresh temporary password to everyone at once.
+        page, or email a fresh temporary password to everyone who's never been sent one before — safe to run again
+        any time you add new people, since it never touches anyone who's already had credentials sent.
       </p>
       {bulkMessage && (
         <p className={`text-xs mb-4 ${bulkMessage.type === "success" ? "text-green-700" : "text-red-600"}`}>
