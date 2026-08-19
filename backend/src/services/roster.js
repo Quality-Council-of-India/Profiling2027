@@ -5,7 +5,6 @@ import ExcelJS from "exceljs";
 import { prisma } from "../utils/prisma.js";
 import { ALL_ROLES } from "../utils/roles.js";
 import { regeneratePeerMappings } from "./peerMapping.js";
-import { sendMail } from "./mailer.js";
 
 function generateTempPassword() {
   return crypto.randomBytes(9).toString("base64url"); // 12 chars, URL-safe
@@ -42,9 +41,11 @@ async function parseXlsxRows(buffer) {
  * name,email,role,field, optionally photo_url) for a project, then rebuilds
  * peer_mappings from the new roster (§4.2.2 / §5 POST /api/admin/roster/import).
  *
- * New users get a random temp password (emailed to them, best-effort);
- * existing users (matched by email) have name/role/field updated but keep
- * their current password. photo_url is only touched when the uploaded file
+ * New users get a random placeholder password — not emailed here; an Admin
+ * issues real credentials afterward via "Send Login Credentials to All" in
+ * Password Management, in one deliberate batch rather than one email per
+ * import. Existing users (matched by email) have name/role/field updated but
+ * keep their current password. photo_url is only touched when the uploaded file
  * actually has that column — a re-import for an unrelated fix (e.g.
  * correcting someone's field) without a photo_url column won't wipe out
  * photos set by an earlier import.
@@ -87,18 +88,18 @@ export async function importRoster(projectId, buffer, filename = "roster.csv") {
       });
       updated.push({ id: user.id, name, email, role, field });
     } else {
+      // Temp password here is a placeholder only — nobody's emailed it. An
+      // Admin issues real, deliberate credentials afterward via "Send Login
+      // Credentials to All" in Password Management, which resets every
+      // active non-admin user's password (this one included) and emails it
+      // in one synchronized batch, rather than trickling out one welcome
+      // email per roster import.
       const tempPassword = generateTempPassword();
       const password_hash = await bcrypt.hash(tempPassword, 12);
       const user = await prisma.user.create({
         data: { project_id: projectId, name, email, role, field, password_hash, ...photoFields, ...empIdFields },
       });
-      created.push({ id: user.id, name, email, role, field, tempPassword });
-
-      sendMail({
-        to: email,
-        subject: "Your Profiling 2027 Feedback Portal account",
-        html: `<p>Hi ${name},</p><p>An account has been created for you on the Feedback Portal.</p><p>Email: ${email}<br/>Temporary password: <strong>${tempPassword}</strong></p><p>Please log in and use "Forgot password" to set your own password.</p>`,
-      }).catch((err) => console.error(`Failed to email ${email}:`, err.message));
+      created.push({ id: user.id, name, email, role, field });
     }
   }
 

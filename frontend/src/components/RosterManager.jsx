@@ -59,14 +59,10 @@ export default function RosterManager() {
             <p className="text-red-600">{rosterResult.errors.length} row(s) had errors — check line numbers in the CSV.</p>
           )}
           {rosterResult.created.length > 0 && (
-            <details className="mt-1">
-              <summary className="cursor-pointer text-blue-600">Temp passwords for new accounts (also emailed)</summary>
-              <ul className="mt-1 space-y-0.5">
-                {rosterResult.created.map((c) => (
-                  <li key={c.email}>{c.email}: <code>{c.tempPassword}</code></li>
-                ))}
-              </ul>
-            </details>
+            <p>
+              New accounts don't get emailed automatically — use "Send Login Credentials to All" in Password
+              Management when you're ready to notify everyone at once.
+            </p>
           )}
         </div>
       )}
