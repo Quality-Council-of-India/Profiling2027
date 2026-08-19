@@ -280,14 +280,18 @@ export async function sendLoginCredentialsToAll(req, res) {
       try {
         const tempPassword = generateTempPassword();
         const password_hash = await bcrypt.hash(tempPassword, 12);
-        await prisma.user.update({
-          where: { id: user.id },
-          data: { password_hash, credentials_sent_at: new Date() },
-        });
+        // Send first — only stamp credentials_sent_at (and change the
+        // password) once the email has actually gone out. A user whose send
+        // fails must stay eligible for a future retry, not get silently
+        // locked out of ever being reached again by this same button.
         await sendMail({
           to: user.email,
           subject: "Your Profiling 2027 Feedback Portal account",
           html: `<p>Hi ${user.name},</p><p>An account has been created for you on the Feedback Portal.</p><p>Email: ${user.email}<br/>Temporary password: <strong>${tempPassword}</strong></p><p>Please log in and use "Forgot password" to set your own password.</p>`,
+        });
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { password_hash, credentials_sent_at: new Date() },
         });
         return { email: user.email, ok: true };
       } catch (err) {
