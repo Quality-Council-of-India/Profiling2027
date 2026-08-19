@@ -4,6 +4,7 @@
 // user see" scoping that depends on field + role combinations.
 
 import { ROLES } from "../utils/roles.js";
+import { fieldList, sharesField } from "../utils/fields.js";
 
 /**
  * Can `requester` view the scores/profile of `target`?
@@ -22,8 +23,10 @@ export function canViewUser(requester, target) {
       return [ROLES.PROFILER, ROLES.GROUP_ANCHOR].includes(target.role);
     case ROLES.GROUP_ANCHOR:
     case ROLES.CASU_ANCHOR:
-      // "Profilers & Anchor scores in own field"
-      return target.field === requester.field;
+      // "Profilers & Anchor scores in own field" — a CASU Anchor can cover
+      // more than one field, so this is "shares at least one field" rather
+      // than an exact match.
+      return sharesField(requester, target);
     default:
       return false;
   }
@@ -44,7 +47,8 @@ export function teamViewFilter(requester) {
     case ROLES.GROUP_ANCHOR:
       return { field: requester.field, role: ROLES.PROFILER };
     case ROLES.CASU_ANCHOR:
-      return { field: requester.field, role: { in: [ROLES.PROFILER, ROLES.GROUP_ANCHOR] } };
+      // A CASU Anchor can cover more than one field (comma-joined in `field`).
+      return { field: { in: fieldList(requester.field) }, role: { in: [ROLES.PROFILER, ROLES.GROUP_ANCHOR] } };
     case ROLES.PROJECT_LEAD:
       return {
         OR: [

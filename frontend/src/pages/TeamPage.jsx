@@ -42,9 +42,15 @@ export default function TeamPage() {
   const members = teamQuery.data?.members || [];
   const groups = new Map();
   for (const m of members) {
-    const key = m.field || "—";
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(m);
+    // A CASU Anchor's field can be comma-joined (covers more than one field)
+    // — list them under each field group rather than one combined heading.
+    const keys = m.field
+      ? m.field.split(",").map((f) => f.trim()).filter(Boolean)
+      : ["—"];
+    for (const key of keys) {
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(m);
+    }
   }
   const showGroupHeaders = groups.size > 1;
 
