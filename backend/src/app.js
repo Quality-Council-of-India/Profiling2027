@@ -35,7 +35,9 @@ app.use(
 app.use(express.json({ limit: "1mb" }));
 
 // Auth endpoints get a tighter limiter to blunt credential-stuffing / brute force.
-const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 20 });
+// 400/15min accommodates a real rollout moment — dozens of users on the same
+// office IP all logging in or resetting a password within minutes of each other.
+const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 400 });
 app.use("/api/auth", authLimiter);
 
 // Sized for ~1000 concurrent users: a dashboard load alone fires several
