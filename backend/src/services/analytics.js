@@ -3,6 +3,7 @@ import { prisma } from "../utils/prisma.js";
 import { roleFilterForScope, analyticsScope } from "./access.js";
 import { ROLES } from "../utils/roles.js";
 import { PARAM_FIELDS } from "../utils/constants.js";
+import { fieldList, sharesField } from "../utils/fields.js";
 
 function clamp(n, lo, hi) {
   return Math.max(lo, Math.min(hi, n));
@@ -24,10 +25,13 @@ export async function getFieldHeatmap(projectId, weekId, scope) {
   for (const u of users) {
     const score = u.computedScores[0];
     if (!score) continue;
-    byField[u.field] ??= { count: 0, sums: Object.fromEntries(PARAM_FIELDS.map((p) => [p.label, 0])) };
-    byField[u.field].count += 1;
-    for (const p of PARAM_FIELDS) {
-      byField[u.field].sums[p.label] += Number(score[`${p.key}_peer`]);
+    // A CASU Anchor covering more than one field counts toward each of them.
+    for (const field of fieldList(u.field)) {
+      byField[field] ??= { count: 0, sums: Object.fromEntries(PARAM_FIELDS.map((p) => [p.label, 0])) };
+      byField[field].count += 1;
+      for (const p of PARAM_FIELDS) {
+        byField[field].sums[p.label] += Number(score[`${p.key}_peer`]);
+      }
     }
   }
 
@@ -59,18 +63,20 @@ export async function getSapaDistribution(projectId, weekId, scope) {
     include: { computedScores: { where: { week_id: weekId } } },
   });
 
-  function distribute(groupKeyFn) {
+  function distribute(groupKeysFn) {
     const groups = {};
     for (const u of users) {
       const score = u.computedScores[0];
       const bucket = score ? sapaBucket(score.sapa_factor) : null;
       if (!bucket) continue;
-      const key = groupKeyFn(u);
-      groups[key] ??= { over: 0, aligned: 0, under: 0, sapaSum: 0, sapaCount: 0, members: { over: [], aligned: [], under: [] } };
-      groups[key][bucket] += 1;
-      groups[key].sapaSum += Number(score.sapa_factor);
-      groups[key].sapaCount += 1;
-      groups[key].members[bucket].push({ id: u.id, name: u.name, sapa: Math.round(Number(score.sapa_factor) * 100) / 100 });
+      // A CASU Anchor covering more than one field counts toward each of them.
+      for (const key of groupKeysFn(u)) {
+        groups[key] ??= { over: 0, aligned: 0, under: 0, sapaSum: 0, sapaCount: 0, members: { over: [], aligned: [], under: [] } };
+        groups[key][bucket] += 1;
+        groups[key].sapaSum += Number(score.sapa_factor);
+        groups[key].sapaCount += 1;
+        groups[key].members[bucket].push({ id: u.id, name: u.name, sapa: Math.round(Number(score.sapa_factor) * 100) / 100 });
+      }
     }
     return Object.entries(groups).map(([key, g]) => {
       const total = g.over + g.aligned + g.under;
@@ -86,8 +92,8 @@ export async function getSapaDistribution(projectId, weekId, scope) {
   }
 
   return {
-    byRole: distribute((u) => u.role),
-    byField: distribute((u) => u.field || "—"),
+    byRole: distribute((u) => [u.role]),
+    byField: distribute((u) => (u.field ? fieldList(u.field) : ["—"])),
   };
 }
 
@@ -196,7 +202,7 @@ export async function getRankings(projectId, requester, weekIds) {
 
   let field = null;
   if (requester.field) {
-    const fieldPool = rank(withAvg.filter((u) => u.field === requester.field));
+    const fieldPool = rank(withAvg.filter((u) => sharesField(requester, u)));
     const mine = fieldPool.find((u) => u.id === requester.id);
     const canSeeFieldList = [ROLES.GROUP_ANCHOR, ROLES.CASU_ANCHOR, ROLES.CASU_LEAD, ROLES.ADMIN].includes(
       requester.role
@@ -264,7 +270,7 @@ export async function getPeerScoreTrendComparison(projectId, targetUser) {
   return weeks.map((w) => {
     const rows = byWeek.get(w.id) || [];
     const mine = rows.find((r) => r.user_id === targetUser.id);
-    const fieldRows = targetUser.field ? rows.filter((r) => r.user.field === targetUser.field) : [];
+    const fieldRows = targetUser.field ? rows.filter((r) => sharesField(targetUser, r.user)) : [];
     const fieldAvg = fieldRows.length
       ? round2(fieldRows.reduce((a, r) => a + Number(r.total_peer), 0) / fieldRows.length)
       : null;
@@ -304,10 +310,13 @@ export async function getFieldStandings(projectId, weekIds, scope) {
     const scores = u.computedScores;
     if (scores.length === 0) continue;
     const avgTotalPeer = scores.reduce((a, s) => a + Number(s.total_peer), 0) / scores.length;
-    if (!byField.has(u.field)) byField.set(u.field, { sum: 0, count: 0 });
-    const entry = byField.get(u.field);
-    entry.sum += avgTotalPeer;
-    entry.count += 1;
+    // A CASU Anchor covering more than one field counts toward each of them.
+    for (const field of fieldList(u.field)) {
+      if (!byField.has(field)) byField.set(field, { sum: 0, count: 0 });
+      const entry = byField.get(field);
+      entry.sum += avgTotalPeer;
+      entry.count += 1;
+    }
   }
 
   const standings = [...byField.entries()]
@@ -334,13 +343,16 @@ export async function getFieldMemberStandings(projectId, weekIds, field, scope) 
       project_id: projectId,
       is_active: true,
       role: { not: ROLES.ADMIN },
-      field,
+      field: { not: null },
       ...roleFilterForScope(scope),
     },
     include: { computedScores: { where: { week_id: { in: weekIds } } } },
   });
 
-  return rankByTotalPeer(averageScoresByUser(users, weekIds));
+  // A CASU Anchor's `field` may be comma-joined (covers more than one field),
+  // so this can't be a plain Prisma equality filter — filter in application code.
+  const inField = users.filter((u) => fieldList(u.field).includes(field));
+  return rankByTotalPeer(averageScoresByUser(inField, weekIds));
 }
 
 const HALL_OF_RECOGNITION_ROLES = [ROLES.PROFILER, ROLES.GROUP_ANCHOR, ROLES.CASU_ANCHOR];
