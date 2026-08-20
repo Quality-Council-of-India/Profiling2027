@@ -14,10 +14,26 @@ import { ALL_ROLES, ROLES } from "../utils/roles.js";
 import { FIELDS } from "../utils/constants.js";
 import { notify, getActiveNonAdminIds, getAdminIds } from "../services/notifications.js";
 import { sendMail } from "../services/mailer.js";
+import { resolveRecipients, broadcastEmailBody } from "../services/broadcast.js";
 
 const EXPORTABLE_TABLES = ["self_evaluations", "peer_evaluations"];
 const setPasswordSchema = z.object({ password: z.string().min(8) });
 const setFieldSchema = z.object({ field: z.string().trim().min(1) });
+const setPermissionsSchema = z.object({
+  can_manage_weeks: z.boolean(),
+  can_manage_passwords: z.boolean(),
+  can_manage_roster: z.boolean(),
+});
+const broadcastSchema = z.object({
+  subject: z.string().trim().min(1).max(200),
+  body_html: z.string().trim().min(1),
+  recipients: z.object({
+    scope: z.enum(["all", "role", "field", "users"]),
+    role: z.string().optional(),
+    field: z.string().optional(),
+    userIds: z.array(z.number()).optional(),
+  }),
+});
 
 function generateTempPassword() {
   return crypto.randomBytes(9).toString("base64url"); // 12 chars, URL-safe
@@ -194,9 +210,52 @@ export async function listUsers(req, res) {
       credentials_sent_at: true,
       last_login_at: true,
       password_changed_at: true,
+      is_master_admin: true,
+      can_manage_weeks: true,
+      can_manage_passwords: true,
+      can_manage_roster: true,
     },
   });
   res.json({ users });
+}
+
+/**
+ * Master-Admin-only: grants/revokes another Admin's edit access to Week
+ * Management, Password Management, and Team Roster (any mix — "full or
+ * half access"). Every other Admin panel section (View Portal As, Export
+ * Scoresheets, Raw Data Browser) is unrestricted for every Admin and isn't
+ * touched here. is_master_admin itself is never settable through this
+ * endpoint — only ever changed directly in the database.
+ */
+export async function setAdminPermissions(req, res, next) {
+  try {
+    const userId = Number(req.params.id);
+    const { can_manage_weeks, can_manage_passwords, can_manage_roster } = setPermissionsSchema.parse(req.body);
+
+    const user = await prisma.user.findFirst({ where: { id: userId, project_id: req.user.project_id } });
+    if (!user) return res.status(404).json({ error: "User not found" });
+    if (user.role !== ROLES.ADMIN) {
+      return res.status(400).json({ error: "Permissions only apply to Admin accounts" });
+    }
+
+    const updated = await prisma.user.update({
+      where: { id: userId },
+      data: { can_manage_weeks, can_manage_passwords, can_manage_roster },
+    });
+    res.json({
+      user: {
+        id: updated.id,
+        can_manage_weeks: updated.can_manage_weeks,
+        can_manage_passwords: updated.can_manage_passwords,
+        can_manage_roster: updated.can_manage_roster,
+      },
+    });
+  } catch (err) {
+    if (err.name === "ZodError") {
+      return res.status(400).json({ error: "Body must include can_manage_weeks, can_manage_passwords, can_manage_roster as booleans" });
+    }
+    next(err);
+  }
 }
 
 /**
@@ -359,6 +418,63 @@ export async function sendLoginCredentialsToAll(req, res) {
   const sent = outcomes.filter((o) => o.ok).length;
   const failed = outcomes.filter((o) => !o.ok).map((o) => o.email);
   res.json({ sent, total: users.length, failed });
+}
+
+/**
+ * "Send an email on any topic" — a free-form broadcast to all active
+ * users, a single role, a single field, or a hand-picked list. Available
+ * to every Admin (not gated by can_manage_*, unlike Week/Password/Roster
+ * management). Every send is logged to email_broadcasts so Admins can see
+ * what's already gone out before sending something similar again.
+ */
+export async function sendBroadcastEmail(req, res, next) {
+  try {
+    const { subject, body_html, recipients } = broadcastSchema.parse(req.body);
+    const { users, summary } = await resolveRecipients(req.user.project_id, recipients);
+
+    const outcomes = await Promise.all(
+      users.map(async (user) => {
+        try {
+          await sendMail({ to: user.email, subject, html: broadcastEmailBody(user.name, body_html) });
+          return true;
+        } catch (err) {
+          console.error(`Failed to email ${user.email}:`, err.message);
+          return false;
+        }
+      })
+    );
+    const sentCount = outcomes.filter(Boolean).length;
+
+    const broadcast = await prisma.emailBroadcast.create({
+      data: {
+        project_id: req.user.project_id,
+        sender_id: req.user.id,
+        subject,
+        body_html,
+        recipient_summary: summary,
+        recipient_count: users.length,
+        sent_count: sentCount,
+      },
+    });
+
+    res.json({ sent: sentCount, total: users.length, broadcast });
+  } catch (err) {
+    if (err.name === "ZodError") {
+      return res.status(400).json({ error: "Body must include subject, body_html, and a valid recipients spec" });
+    }
+    next(err);
+  }
+}
+
+/** Sent-history log for the broadcast-email feature — most recent first. */
+export async function listEmailBroadcasts(req, res) {
+  const broadcasts = await prisma.emailBroadcast.findMany({
+    where: { project_id: req.user.project_id },
+    orderBy: { created_at: "desc" },
+    take: 100,
+    include: { sender: { select: { name: true } } },
+  });
+  res.json({ broadcasts });
 }
 
 const PHOTO_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"];
