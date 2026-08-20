@@ -2,8 +2,7 @@
 // Mirrors Technical Specification v3, Section 3 (Database Schema)
 
 generator client {
-  provider      = "prisma-client-js"
-  binaryTargets = ["native", "rhel-openssl-3.0.x"] // rhel-openssl-3.0.x = Vercel's Node function runtime
+  provider = "prisma-client-js"
 }
 
 datasource db {
