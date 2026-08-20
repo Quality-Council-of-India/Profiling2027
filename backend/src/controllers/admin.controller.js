@@ -18,6 +18,11 @@ import { sendMail } from "../services/mailer.js";
 const EXPORTABLE_TABLES = ["self_evaluations", "peer_evaluations"];
 const setPasswordSchema = z.object({ password: z.string().min(8) });
 const setFieldSchema = z.object({ field: z.string().trim().min(1) });
+const setPermissionsSchema = z.object({
+  can_manage_weeks: z.boolean(),
+  can_manage_passwords: z.boolean(),
+  can_manage_roster: z.boolean(),
+});
 
 function generateTempPassword() {
   return crypto.randomBytes(9).toString("base64url"); // 12 chars, URL-safe
@@ -194,9 +199,52 @@ export async function listUsers(req, res) {
       credentials_sent_at: true,
       last_login_at: true,
       password_changed_at: true,
+      is_master_admin: true,
+      can_manage_weeks: true,
+      can_manage_passwords: true,
+      can_manage_roster: true,
     },
   });
   res.json({ users });
+}
+
+/**
+ * Master-Admin-only: grants/revokes another Admin's edit access to Week
+ * Management, Password Management, and Team Roster (any mix — "full or
+ * half access"). Every other Admin panel section (View Portal As, Export
+ * Scoresheets, Raw Data Browser) is unrestricted for every Admin and isn't
+ * touched here. is_master_admin itself is never settable through this
+ * endpoint — only ever changed directly in the database.
+ */
+export async function setAdminPermissions(req, res, next) {
+  try {
+    const userId = Number(req.params.id);
+    const { can_manage_weeks, can_manage_passwords, can_manage_roster } = setPermissionsSchema.parse(req.body);
+
+    const user = await prisma.user.findFirst({ where: { id: userId, project_id: req.user.project_id } });
+    if (!user) return res.status(404).json({ error: "User not found" });
+    if (user.role !== ROLES.ADMIN) {
+      return res.status(400).json({ error: "Permissions only apply to Admin accounts" });
+    }
+
+    const updated = await prisma.user.update({
+      where: { id: userId },
+      data: { can_manage_weeks, can_manage_passwords, can_manage_roster },
+    });
+    res.json({
+      user: {
+        id: updated.id,
+        can_manage_weeks: updated.can_manage_weeks,
+        can_manage_passwords: updated.can_manage_passwords,
+        can_manage_roster: updated.can_manage_roster,
+      },
+    });
+  } catch (err) {
+    if (err.name === "ZodError") {
+      return res.status(400).json({ error: "Body must include can_manage_weeks, can_manage_passwords, can_manage_roster as booleans" });
+    }
+    next(err);
+  }
 }
 
 /**

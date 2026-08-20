@@ -3,6 +3,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { adminApi } from "../api/endpoints.js";
 import { Card, Spinner, ErrorBanner, Badge } from "./ui.jsx";
 import { ROLE_LABELS, ROLE_COLORS } from "../utils/constants.js";
+import { useAuth } from "../context/AuthContext.jsx";
 
 function generatePassword() {
   // 12 random URL-safe chars — plenty strong, easy to read/relay verbally.
@@ -10,13 +11,21 @@ function generatePassword() {
   return btoa(String.fromCharCode(...bytes)).replace(/[+/=]/g, "").slice(0, 12);
 }
 
+const STATUS_FILTERS = [
+  { value: "all", label: "All statuses" },
+  { value: "not_sent", label: "Not sent yet" },
+  { value: "sent_not_logged_in", label: "Sent, not logged in" },
+  { value: "logged_in_temp", label: "Logged in, temp password" },
+  { value: "changed", label: "Password changed" },
+];
+
 /** Where someone stands in the credentials/login lifecycle — not applicable to Admins, who are never bulk-issued credentials. */
 function credentialStatus(u) {
-  if (u.role === "admin") return { label: "—", className: "text-slate-400" };
-  if (!u.credentials_sent_at) return { label: "Not sent yet", className: "text-slate-500" };
-  if (u.password_changed_at) return { label: "Password changed", className: "text-green-700" };
-  if (u.last_login_at) return { label: "Logged in, temp password", className: "text-amber-600" };
-  return { label: "Sent, not logged in", className: "text-slate-500" };
+  if (u.role === "admin") return { value: "na", label: "—", className: "text-slate-400" };
+  if (!u.credentials_sent_at) return { value: "not_sent", label: "Not sent yet", className: "text-slate-500" };
+  if (u.password_changed_at) return { value: "changed", label: "Password changed", className: "text-green-700" };
+  if (u.last_login_at) return { value: "logged_in_temp", label: "Logged in, temp password", className: "text-amber-600" };
+  return { value: "sent_not_logged_in", label: "Sent, not logged in", className: "text-slate-500" };
 }
 
 /**
@@ -27,11 +36,15 @@ function credentialStatus(u) {
  * is no "view password" capability anywhere in the system, by design.
  */
 export default function PasswordManager() {
+  const { user: currentUser } = useAuth();
+  const canEdit = currentUser?.is_master_admin || currentUser?.can_manage_passwords;
   const usersQuery = useQuery({ queryKey: ["adminUsers"], queryFn: adminApi.listUsers });
   const [openRowId, setOpenRowId] = useState(null);
   const [passwordDraft, setPasswordDraft] = useState("");
   const [rowMessage, setRowMessage] = useState({});
   const [bulkMessage, setBulkMessage] = useState(null);
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [showGuide, setShowGuide] = useState(false);
 
   const sendAllMutation = useMutation({
     mutationFn: adminApi.sendLoginCredentialsToAll,
@@ -102,35 +115,89 @@ export default function PasswordManager() {
     setPasswordMutation.mutate({ id, password: passwordDraft });
   }
 
+  const allUsers = usersQuery.data || [];
+  const visibleUsers =
+    statusFilter === "all" ? allUsers : allUsers.filter((u) => credentialStatus(u).value === statusFilter);
+
   return (
     <Card className="p-5">
       <div className="flex items-start justify-between gap-4 mb-1">
-        <h2 className="text-sm font-semibold text-slate-800">Password Management</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-semibold text-slate-800">Password Management</h2>
+          {!canEdit && <Badge text="View only" color="#64748b" />}
+        </div>
         <button
           onClick={startSendAll}
-          disabled={sendAllMutation.isPending}
+          disabled={sendAllMutation.isPending || !canEdit}
+          title={canEdit ? undefined : "Ask the Master Admin for Password Management edit access"}
           className="px-3 py-1.5 rounded-md text-white text-[11px] font-medium bg-nav hover:bg-nav-deep disabled:opacity-50 transition-standard flex-shrink-0"
         >
           {sendAllMutation.isPending ? "Sending…" : "Send Login Credentials to New Users"}
         </button>
       </div>
-      <p className={`text-xs text-slate-500 ${bulkMessage ? "mb-1" : "mb-4"}`}>
+      <p className="text-xs text-slate-500 mb-1">
         Existing passwords are one-way hashed and can never be viewed by anyone, including Admin — that's a
         deliberate security property, not a missing feature. What Admin <em>can</em> do: set a brand-new password
         directly for someone, send them the same reset-link email they'd get from "Forgot password?" on the login
         page, or email a fresh temporary password to everyone who's never been sent one before — safe to run again
         any time you add new people, since it never touches anyone who's already had credentials sent.
       </p>
+      <div className="mb-3">
+        <button
+          onClick={() => setShowGuide((v) => !v)}
+          className="text-xs font-medium text-nav hover:text-accent transition-standard"
+        >
+          {showGuide ? "Hide guide" : "What do these statuses mean?"}
+        </button>
+      </div>
+      {showGuide && (
+        <div className="mb-4 text-xs text-slate-600 bg-blue-50 border border-blue-100 rounded-lg p-3 space-y-1.5">
+          <p className="font-semibold text-slate-700">Each status reflects what's actually happened, in order.</p>
+          <ol className="list-decimal list-inside space-y-0.5 pl-1">
+            <li><strong>Not sent yet</strong> — this person has never been sent an account/credentials email at all.</li>
+            <li><strong>Sent, not logged in</strong> — credentials were emailed, but they haven't logged in even once yet.</li>
+            <li><strong>Logged in, temp password</strong> — they've logged in, but are still using whatever temporary password was last issued to them.</li>
+            <li><strong>Password changed</strong> — they've logged in and set their own password (self-service reset, or an Admin set one for them).</li>
+          </ol>
+          <p className="text-slate-500">
+            Note: login and password-change tracking only started recording from when this feature was added — activity
+            from before that isn't known retroactively, so someone who actually logged in and changed their password
+            long ago may still show "Sent, not logged in" here until they do either again.
+          </p>
+        </div>
+      )}
       {bulkMessage && (
         <p className={`text-xs mb-4 ${bulkMessage.type === "success" ? "text-green-700" : "text-red-600"}`}>
           {bulkMessage.text}
         </p>
       )}
 
+      <div className="flex items-center gap-2 mb-3">
+        <label className="text-xs text-slate-500">Filter by status:</label>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="text-xs border border-slate-300 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-standard"
+        >
+          {STATUS_FILTERS.map((f) => (
+            <option key={f.value} value={f.value}>
+              {f.label}
+            </option>
+          ))}
+        </select>
+        {statusFilter !== "all" && (
+          <span className="text-xs text-slate-400">
+            {visibleUsers.length} of {allUsers.length}
+          </span>
+        )}
+      </div>
+
       {usersQuery.isLoading ? (
         <Spinner />
       ) : usersQuery.isError ? (
         <ErrorBanner message="Failed to load users" />
+      ) : visibleUsers.length === 0 ? (
+        <p className="text-xs text-slate-400 py-4 text-center">No one matches this status filter.</p>
       ) : (
         <div className="max-h-96 overflow-y-auto -mx-1">
           <table className="w-full text-xs">
@@ -144,7 +211,7 @@ export default function PasswordManager() {
               </tr>
             </thead>
             <tbody>
-              {usersQuery.data.map((u, i) => (
+              {visibleUsers.map((u, i) => (
                 <Fragment key={u.id}>
                   <tr className={`border-b border-slate-50 ${!u.is_active ? "opacity-50" : ""} ${i % 2 === 0 ? "bg-slate-50/60" : ""}`}>
                     <td className="px-2 py-1.5 font-medium text-slate-800">{u.name}</td>
@@ -155,13 +222,16 @@ export default function PasswordManager() {
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => (openRowId === u.id ? cancelSetPassword() : startSetPassword(u.id))}
-                          className="px-2 py-1 rounded-md border border-slate-300 text-[11px] font-medium text-slate-600 hover:bg-slate-50 hover:border-slate-400 transition-standard"
+                          disabled={!canEdit}
+                          title={canEdit ? undefined : "Ask the Master Admin for Password Management edit access"}
+                          className="px-2 py-1 rounded-md border border-slate-300 text-[11px] font-medium text-slate-600 hover:bg-slate-50 hover:border-slate-400 disabled:opacity-50 transition-standard"
                         >
                           {openRowId === u.id ? "Cancel" : "Set Password"}
                         </button>
                         <button
                           onClick={() => sendResetMutation.mutate(u.id)}
-                          disabled={sendResetMutation.isPending && sendResetMutation.variables === u.id}
+                          disabled={!canEdit || (sendResetMutation.isPending && sendResetMutation.variables === u.id)}
+                          title={canEdit ? undefined : "Ask the Master Admin for Password Management edit access"}
                           className="px-2 py-1 rounded-md border border-slate-300 text-[11px] font-medium text-slate-600 hover:bg-slate-50 hover:border-slate-400 disabled:opacity-50 transition-standard"
                         >
                           {sendResetMutation.isPending && sendResetMutation.variables === u.id ? "Sending…" : "Send Reset Email"}

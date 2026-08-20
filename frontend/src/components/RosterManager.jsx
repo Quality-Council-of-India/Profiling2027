@@ -4,6 +4,7 @@ import { adminApi } from "../api/endpoints.js";
 import { Card, Spinner, ErrorBanner, Badge } from "./ui.jsx";
 import { ROLE_LABELS, ROLE_COLORS, FIELDS } from "../utils/constants.js";
 import { compressImage } from "../utils/imageCompression.js";
+import { useAuth } from "../context/AuthContext.jsx";
 
 function fieldsOf(field) {
   return field ? field.split(",").map((f) => f.trim()).filter(Boolean) : [];
@@ -14,6 +15,8 @@ function fieldsOf(field) {
  * PATCH /api/admin/users/:id/active, which regenerates peer_mappings but
  * never rewrites computed_scores. */
 export default function RosterManager() {
+  const { user } = useAuth();
+  const canEdit = user?.is_master_admin || user?.can_manage_roster;
   const queryClient = useQueryClient();
   const fileInputRef = useRef(null);
   const [rosterResult, setRosterResult] = useState(null);
@@ -45,11 +48,15 @@ export default function RosterManager() {
   return (
     <Card className="p-5">
       <div className="flex items-center justify-between mb-1">
-        <h2 className="text-sm font-semibold text-slate-800">Team Roster</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-semibold text-slate-800">Team Roster</h2>
+          {!canEdit && <Badge text="View only" color="#64748b" />}
+        </div>
         <input ref={fileInputRef} type="file" accept=".csv,.xlsx" className="hidden" onChange={handleFileChange} />
         <button
           onClick={() => fileInputRef.current?.click()}
-          disabled={rosterMutation.isPending}
+          disabled={rosterMutation.isPending || !canEdit}
+          title={canEdit ? undefined : "Ask the Master Admin for Team Roster edit access"}
           className="px-3 py-1.5 rounded-lg border border-dashed border-slate-300 text-xs text-slate-500 hover:bg-slate-50 hover:border-slate-400 disabled:opacity-50 transition-standard"
         >
           {rosterMutation.isPending ? "Importing…" : "↑ Import Roster (.csv / .xlsx)"}
@@ -119,22 +126,22 @@ export default function RosterManager() {
             <tbody>
               {usersQuery.data.map((u, i) => (
                 <tr key={u.id} className={`border-b border-slate-50 ${!u.is_active ? "opacity-50" : ""} ${i % 2 === 0 ? "bg-slate-50/60" : ""}`}>
-                  <td className="px-2 py-1.5"><PhotoCell user={u} /></td>
+                  <td className="px-2 py-1.5"><PhotoCell user={u} canEdit={canEdit} /></td>
                   <td className="px-2 py-1.5 font-medium text-slate-800">{u.name}</td>
                   <td className="px-2 py-1.5 text-slate-500">{u.emp_id || "—"}</td>
                   <td className="px-2 py-1.5"><Badge text={ROLE_LABELS[u.role]} color={ROLE_COLORS[u.role]} /></td>
-                  <td className="px-2 py-1.5 text-slate-600 align-top"><FieldCell user={u} /></td>
+                  <td className="px-2 py-1.5 text-slate-600 align-top"><FieldCell user={u} canEdit={canEdit} /></td>
                   <td className="px-2 py-1.5 text-center">
                     {u.role === "admin" ? (
                       <span className="text-slate-400">—</span>
                     ) : (
                       <button
                         onClick={() => toggleMutation.mutate({ id: u.id, is_active: !u.is_active })}
-                        disabled={toggleMutation.isPending}
+                        disabled={toggleMutation.isPending || !canEdit}
+                        title={canEdit ? undefined : "Ask the Master Admin for Team Roster edit access"}
                         className={`px-2 py-0.5 rounded-full text-[11px] font-medium transition-standard disabled:opacity-50 ${
                           u.is_active ? "bg-green-100 text-green-700 hover:bg-green-200" : "bg-slate-200 text-slate-600 hover:bg-slate-300"
                         }`}
-                        title={u.is_active ? "Click to deactivate (e.g. they've left the project)" : "Click to reactivate"}
                       >
                         {u.is_active ? "Active" : "Inactive"}
                       </button>
@@ -153,7 +160,7 @@ export default function RosterManager() {
 /** Avatar thumbnail that doubles as an upload button — click it to pick a
  * photo, compressed client-side before it's sent to the server (see
  * PATCH /api/admin/users/:id/photo, stored as a base64 data: URI). */
-function PhotoCell({ user }) {
+function PhotoCell({ user, canEdit }) {
   const queryClient = useQueryClient();
   const fileInputRef = useRef(null);
   const [error, setError] = useState("");
@@ -181,11 +188,11 @@ function PhotoCell({ user }) {
   }
 
   return (
-    <div className="relative inline-block" title={error || "Click to upload a photo"}>
+    <div className="relative inline-block" title={error || (canEdit ? "Click to upload a photo" : "Ask the Master Admin for Team Roster edit access")}>
       <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleFileChange} />
       <button
         onClick={() => fileInputRef.current?.click()}
-        disabled={uploadMutation.isPending}
+        disabled={uploadMutation.isPending || !canEdit}
         className="group relative w-8 h-8 rounded-full overflow-hidden ring-1 ring-slate-200 hover:ring-accent transition-standard disabled:opacity-50"
       >
         {user.photo_url ? (
@@ -221,7 +228,7 @@ function PhotoCell({ user }) {
  * role gets a plain single-select. See PATCH /api/admin/users/:id/field,
  * which regenerates peer_mappings right away — hence the guide above the
  * table about only doing this between weeks. */
-function FieldCell({ user }) {
+function FieldCell({ user, canEdit }) {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [selected, setSelected] = useState(() => fieldsOf(user.field));
@@ -239,6 +246,10 @@ function FieldCell({ user }) {
 
   if (user.role === "admin") {
     return <span className="text-slate-400">—</span>;
+  }
+
+  if (!canEdit) {
+    return <span>{user.field || "—"}</span>;
   }
 
   if (!editing) {

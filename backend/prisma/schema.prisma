@@ -114,6 +114,18 @@ model User {
   // Admin last issued (self-service reset, or Admin's own "Set Password") —
   // distinguishes "still on the temp password" from "has their own now".
   password_changed_at DateTime?
+  // The informal "Master Admin" — always has full access to every Admin
+  // Panel section, and is the only one who can grant the can_manage_*
+  // flags below to other Admins. Never settable through the app itself
+  // (only ever flipped directly in the database), so it can't be
+  // escalated to from within the product.
+  is_master_admin      Boolean  @default(false)
+  // Per-Admin edit access to the three sections a non-master Admin is
+  // otherwise view-only in. Irrelevant for every other role, and always
+  // implicitly true for is_master_admin regardless of these flags.
+  can_manage_weeks     Boolean  @default(false)
+  can_manage_passwords Boolean  @default(false)
+  can_manage_roster    Boolean  @default(false)
 
   project Project @relation(fields: [project_id], references: [id], onDelete: Cascade)
 

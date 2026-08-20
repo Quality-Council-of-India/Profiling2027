@@ -1,6 +1,6 @@
 import { Router } from "express";
 import multer from "multer";
-import { authenticate, requireRole } from "../middleware/auth.js";
+import { authenticate, requireRole, requireAdminAccess, requireMasterAdmin } from "../middleware/auth.js";
 import { ROLES } from "../utils/roles.js";
 import {
   createWeek,
@@ -11,6 +11,7 @@ import {
   setUserActive,
   setUserField,
   setUserPassword,
+  setAdminPermissions,
   sendUserPasswordReset,
   sendLoginCredentialsToAll,
   listRawTables,
@@ -43,30 +44,33 @@ const uploadPhoto = multer({
 
 const router = Router();
 
-router.post("/weeks", authenticate, requireRole(ROLES.ADMIN), createWeek);
-router.post("/weeks/:id/open", authenticate, requireRole(ROLES.ADMIN), openWeek);
-router.post("/weeks/:id/close", authenticate, requireRole(ROLES.ADMIN), closeWeek);
-router.post("/weeks/:id/unlock-all", authenticate, requireRole(ROLES.ADMIN), unlockAllForWeek);
+router.post("/weeks", authenticate, requireRole(ROLES.ADMIN), requireAdminAccess("weeks"), createWeek);
+router.post("/weeks/:id/open", authenticate, requireRole(ROLES.ADMIN), requireAdminAccess("weeks"), openWeek);
+router.post("/weeks/:id/close", authenticate, requireRole(ROLES.ADMIN), requireAdminAccess("weeks"), closeWeek);
+router.post("/weeks/:id/unlock-all", authenticate, requireRole(ROLES.ADMIN), requireAdminAccess("weeks"), unlockAllForWeek);
 router.post(
   "/roster/import",
   authenticate,
   requireRole(ROLES.ADMIN),
+  requireAdminAccess("roster"),
   upload.single("roster"),
   importRosterHandler
 );
 router.get("/users", authenticate, requireRole(ROLES.ADMIN), listUsers);
-router.patch("/users/:id/active", authenticate, requireRole(ROLES.ADMIN), setUserActive);
-router.patch("/users/:id/field", authenticate, requireRole(ROLES.ADMIN), setUserField);
-router.patch("/users/:id/password", authenticate, requireRole(ROLES.ADMIN), setUserPassword);
+router.patch("/users/:id/active", authenticate, requireRole(ROLES.ADMIN), requireAdminAccess("roster"), setUserActive);
+router.patch("/users/:id/field", authenticate, requireRole(ROLES.ADMIN), requireAdminAccess("roster"), setUserField);
+router.patch("/users/:id/password", authenticate, requireRole(ROLES.ADMIN), requireAdminAccess("passwords"), setUserPassword);
 router.patch(
   "/users/:id/photo",
   authenticate,
   requireRole(ROLES.ADMIN),
+  requireAdminAccess("roster"),
   uploadPhoto.single("photo"),
   uploadUserPhoto
 );
-router.post("/users/:id/send-reset", authenticate, requireRole(ROLES.ADMIN), sendUserPasswordReset);
-router.post("/users/send-credentials-all", authenticate, requireRole(ROLES.ADMIN), sendLoginCredentialsToAll);
+router.patch("/admins/:id/permissions", authenticate, requireRole(ROLES.ADMIN), requireMasterAdmin, setAdminPermissions);
+router.post("/users/:id/send-reset", authenticate, requireRole(ROLES.ADMIN), requireAdminAccess("passwords"), sendUserPasswordReset);
+router.post("/users/send-credentials-all", authenticate, requireRole(ROLES.ADMIN), requireAdminAccess("passwords"), sendLoginCredentialsToAll);
 router.get("/data", authenticate, requireRole(ROLES.ADMIN), listRawTables);
 router.get("/data/:table", authenticate, requireRole(ROLES.ADMIN), getRawTable);
 router.get("/data/:table/export", authenticate, requireRole(ROLES.ADMIN), exportRawTable);

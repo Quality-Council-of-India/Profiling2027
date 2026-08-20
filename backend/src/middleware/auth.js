@@ -32,3 +32,30 @@ export function requireRole(...roles) {
     next();
   };
 }
+
+/**
+ * Finer-grained gate for the three Admin Panel sections a non-master Admin
+ * is otherwise view-only in (Week Management, Password Management, Team
+ * Roster). The Master Admin always passes; every other Admin needs the
+ * matching can_manage_* flag on their own user row, granted by the Master
+ * Admin via PATCH /admin/admins/:id/permissions. req.user is the live DB
+ * row from authenticate() above, so a permission just granted/revoked
+ * takes effect on the very next request — no re-login needed.
+ */
+export function requireAdminAccess(section) {
+  const flag = `can_manage_${section}`;
+  return (req, res, next) => {
+    if (!req.user.is_master_admin && !req.user[flag]) {
+      return res.status(403).json({ error: "Only the Master Admin or an Admin granted access can do this" });
+    }
+    next();
+  };
+}
+
+/** Only the Master Admin can grant/revoke other Admins' can_manage_* flags. */
+export function requireMasterAdmin(req, res, next) {
+  if (!req.user.is_master_admin) {
+    return res.status(403).json({ error: "Only the Master Admin can do this" });
+  }
+  next();
+}

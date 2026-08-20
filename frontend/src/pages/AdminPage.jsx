@@ -3,11 +3,12 @@ import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../context/AuthContext.jsx";
 import { weeksApi, adminApi, downloadExport } from "../api/endpoints.js";
-import { Card, Spinner, ErrorBanner, EmptyState, RefreshButton, Modal } from "../components/ui.jsx";
+import { Card, Spinner, ErrorBanner, EmptyState, RefreshButton, Modal, Badge } from "../components/ui.jsx";
 import { ROLE_LABELS } from "../utils/constants.js";
 import RosterManager from "../components/RosterManager.jsx";
 import PasswordManager from "../components/PasswordManager.jsx";
 import RawDataBrowser from "../components/RawDataBrowser.jsx";
+import AdminAccessManager from "../components/AdminAccessManager.jsx";
 
 const PREVIEWABLE_ROLES = ["profiler", "group_anchor", "casu_anchor", "casu_lead", "project_lead"];
 
@@ -23,7 +24,8 @@ function ButtonSpinner() {
 export default function AdminPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const { impersonateUser } = useAuth();
+  const { user, impersonateUser } = useAuth();
+  const canManageWeeks = user?.is_master_admin || user?.can_manage_weeks;
   const weeksQuery = useQuery({ queryKey: ["weeks"], queryFn: weeksApi.list });
   const usersQuery = useQuery({ queryKey: ["adminUsers"], queryFn: adminApi.listUsers });
   const [exportError, setExportError] = useState("");
@@ -168,10 +170,15 @@ export default function AdminPage() {
         </Modal>
       )}
 
+      {user?.is_master_admin && <AdminAccessManager />}
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card className="p-5">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-slate-800">Week Management</h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-semibold text-slate-800">Week Management</h2>
+              {!canManageWeeks && <Badge text="View only" color="#64748b" />}
+            </div>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setShowGuide((v) => !v)}
@@ -181,7 +188,8 @@ export default function AdminPage() {
               </button>
               <button
                 onClick={() => createWeekMutation.mutate()}
-                disabled={createWeekMutation.isPending}
+                disabled={createWeekMutation.isPending || !canManageWeeks}
+                title={canManageWeeks ? undefined : "Ask the Master Admin for Week Management edit access"}
                 className="px-3 py-1.5 rounded-lg border border-dashed border-slate-300 text-xs text-slate-500 hover:bg-slate-50 hover:border-slate-400 disabled:opacity-50 transition-standard"
               >
                 {createWeekMutation.isPending ? "Adding…" : "+ Add Week"}
@@ -237,7 +245,8 @@ export default function AdminPage() {
                     {w.status === "upcoming" && (
                       <button
                         onClick={() => handleOpenWeek(w)}
-                        disabled={anyWeekActionPending}
+                        disabled={anyWeekActionPending || !canManageWeeks}
+                        title={canManageWeeks ? undefined : "Ask the Master Admin for Week Management edit access"}
                         className="inline-flex items-center gap-1.5 text-xs font-medium text-nav hover:text-accent disabled:opacity-50 transition-standard"
                       >
                         {openMutation.isPending && openMutation.variables === w.id && <ButtonSpinner />}
@@ -247,7 +256,8 @@ export default function AdminPage() {
                     {w.status === "open" && (
                       <button
                         onClick={() => handleCloseWeek(w)}
-                        disabled={anyWeekActionPending}
+                        disabled={anyWeekActionPending || !canManageWeeks}
+                        title={canManageWeeks ? undefined : "Ask the Master Admin for Week Management edit access"}
                         className="inline-flex items-center gap-1.5 text-xs font-medium text-red-600 hover:text-red-700 disabled:opacity-50 transition-standard"
                       >
                         {closeMutation.isPending && closeMutation.variables === w.id && <ButtonSpinner />}
@@ -257,8 +267,8 @@ export default function AdminPage() {
                     {w.status === "closed" && (
                       <button
                         onClick={() => handleReopenWeek(w)}
-                        disabled={anyWeekActionPending}
-                        title="Reopens this week — anyone whose evaluation is still locked stays locked until you unlock them individually in Raw Data Browser."
+                        disabled={anyWeekActionPending || !canManageWeeks}
+                        title={canManageWeeks ? "Reopens this week — anyone whose evaluation is still locked stays locked until you unlock them individually in Raw Data Browser." : "Ask the Master Admin for Week Management edit access"}
                         className="inline-flex items-center gap-1.5 text-xs font-medium text-nav hover:text-accent disabled:opacity-50 transition-standard"
                       >
                         {openMutation.isPending && openMutation.variables === w.id && <ButtonSpinner />}
@@ -272,8 +282,8 @@ export default function AdminPage() {
                             unlockAllMutation.mutate(w.id);
                           }
                         }}
-                        disabled={unlockAllMutation.isPending}
-                        title="For a whole-team redo (e.g. turnout was too low) — unlocks everyone at once instead of one row at a time in Raw Data Browser."
+                        disabled={unlockAllMutation.isPending || !canManageWeeks}
+                        title={canManageWeeks ? "For a whole-team redo (e.g. turnout was too low) — unlocks everyone at once instead of one row at a time in Raw Data Browser." : "Ask the Master Admin for Week Management edit access"}
                         className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-accent disabled:opacity-50 transition-standard"
                       >
                         {unlockAllMutation.isPending && unlockAllMutation.variables === w.id && <ButtonSpinner />}

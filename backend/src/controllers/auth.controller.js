@@ -18,6 +18,10 @@ export function publicUser(user) {
     field: user.field,
     photo_url: user.photo_url,
     project_id: user.project_id,
+    is_master_admin: user.is_master_admin,
+    can_manage_weeks: user.can_manage_weeks,
+    can_manage_passwords: user.can_manage_passwords,
+    can_manage_roster: user.can_manage_roster,
   };
 }
 
