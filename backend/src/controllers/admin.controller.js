@@ -180,7 +180,19 @@ export async function listUsers(req, res) {
   const users = await prisma.user.findMany({
     where: { project_id: req.user.project_id },
     orderBy: [{ is_active: "desc" }, { field: "asc" }, { role: "asc" }, { name: "asc" }],
-    select: { id: true, name: true, email: true, emp_id: true, role: true, field: true, photo_url: true, is_active: true },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      emp_id: true,
+      role: true,
+      field: true,
+      photo_url: true,
+      is_active: true,
+      credentials_sent_at: true,
+      last_login_at: true,
+      password_changed_at: true,
+    },
   });
   res.json({ users });
 }
@@ -228,7 +240,10 @@ export async function setUserPassword(req, res, next) {
     if (!user) return res.status(404).json({ error: "User not found" });
 
     const password_hash = await bcrypt.hash(password, 12);
-    await prisma.user.update({ where: { id: userId }, data: { password_hash } });
+    await prisma.user.update({
+      where: { id: userId },
+      data: { password_hash, password_changed_at: new Date() },
+    });
     res.json({ message: `Password updated for ${user.name}.` });
   } catch (err) {
     if (err.name === "ZodError") {

@@ -10,6 +10,15 @@ function generatePassword() {
   return btoa(String.fromCharCode(...bytes)).replace(/[+/=]/g, "").slice(0, 12);
 }
 
+/** Where someone stands in the credentials/login lifecycle — not applicable to Admins, who are never bulk-issued credentials. */
+function credentialStatus(u) {
+  if (u.role === "admin") return { label: "—", className: "text-slate-400" };
+  if (!u.credentials_sent_at) return { label: "Not sent yet", className: "text-slate-500" };
+  if (u.password_changed_at) return { label: "Password changed", className: "text-green-700" };
+  if (u.last_login_at) return { label: "Logged in, temp password", className: "text-amber-600" };
+  return { label: "Sent, not logged in", className: "text-slate-500" };
+}
+
 /**
  * Admin password management — the only two things an Admin can ever do
  * with a password: set a brand-new one directly, or trigger the same
@@ -130,6 +139,7 @@ export default function PasswordManager() {
                 <th className="text-left px-2 py-1.5 font-medium text-slate-500 uppercase">Name</th>
                 <th className="text-left px-2 py-1.5 font-medium text-slate-500 uppercase">Email</th>
                 <th className="text-left px-2 py-1.5 font-medium text-slate-500 uppercase">Role</th>
+                <th className="text-left px-2 py-1.5 font-medium text-slate-500 uppercase">Status</th>
                 <th className="text-left px-2 py-1.5 font-medium text-slate-500 uppercase">Actions</th>
               </tr>
             </thead>
@@ -140,6 +150,7 @@ export default function PasswordManager() {
                     <td className="px-2 py-1.5 font-medium text-slate-800">{u.name}</td>
                     <td className="px-2 py-1.5 text-slate-600">{u.email}</td>
                     <td className="px-2 py-1.5"><Badge text={ROLE_LABELS[u.role]} color={ROLE_COLORS[u.role]} /></td>
+                    <td className={`px-2 py-1.5 ${credentialStatus(u).className}`}>{credentialStatus(u).label}</td>
                     <td className="px-2 py-1.5">
                       <div className="flex items-center gap-2">
                         <button
@@ -160,7 +171,7 @@ export default function PasswordManager() {
                   </tr>
                   {openRowId === u.id && (
                     <tr className={i % 2 === 0 ? "bg-slate-50/60" : ""}>
-                      <td colSpan={4} className="px-2 pb-2">
+                      <td colSpan={5} className="px-2 pb-2">
                         <div className="flex items-center gap-2 bg-slate-100/70 rounded-lg p-2.5">
                           <input
                             type="text"
@@ -192,7 +203,7 @@ export default function PasswordManager() {
                   )}
                   {rowMessage[u.id] && (
                     <tr className={i % 2 === 0 ? "bg-slate-50/60" : ""}>
-                      <td colSpan={4} className="px-2 pb-2">
+                      <td colSpan={5} className="px-2 pb-2">
                         <p className={`text-[11px] ${rowMessage[u.id].type === "success" ? "text-green-700" : "text-red-600"}`}>
                           {rowMessage[u.id].text}
                         </p>
