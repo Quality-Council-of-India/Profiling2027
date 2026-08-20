@@ -1,0 +1,247 @@
+name: Deploy Profiling 2027 to EC2
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+
+          script: |
+            set -e
+
+            APP_DIR="/opt/Profiling2027"
+            BACKUP_DIR="/opt/Profiling2027-backups"
+            TIMESTAMP=$(date +"%Y%m%d-%H%M%S")
+
+            cd "$APP_DIR"
+
+            echo "======================================"
+            echo "PROFILING 2027 DEPLOYMENT STARTED"
+            echo "======================================"
+
+            # ==========================================
+            # 1. Check current version
+            # ==========================================
+
+            CURRENT_COMMIT=$(git rev-parse HEAD)
+
+            echo "Current EC2 commit:"
+            echo "$CURRENT_COMMIT"
+
+            # ==========================================
+            # 2. Create backup
+            # ==========================================
+
+            echo "Creating application backup..."
+
+            mkdir -p "$BACKUP_DIR"
+
+            tar -czf \
+              "$BACKUP_DIR/Profiling2027-$TIMESTAMP.tar.gz" \
+              backend \
+              frontend \
+              docker-compose.yml
+
+            echo "$CURRENT_COMMIT" \
+              > "$BACKUP_DIR/previous-commit-$TIMESTAMP.txt"
+
+            echo "Backup created:"
+            echo "$BACKUP_DIR/Profiling2027-$TIMESTAMP.tar.gz"
+
+            # ==========================================
+            # 3. Fetch latest GitHub code
+            # ==========================================
+
+            echo "======================================"
+            echo "Fetching latest GitHub code"
+            echo "======================================"
+
+            git fetch origin main
+
+            NEW_COMMIT=$(git rev-parse origin/main)
+
+            echo "New GitHub commit:"
+            echo "$NEW_COMMIT"
+
+            # ==========================================
+            # 4. Update backend and frontend
+            # ==========================================
+
+            echo "======================================"
+            echo "Updating backend and frontend"
+            echo "======================================"
+
+            git checkout origin/main -- backend frontend
+
+            # ==========================================
+            # 5. Build backend
+            # ==========================================
+
+            echo "======================================"
+            echo "Building backend Docker image"
+            echo "======================================"
+
+            docker compose build backend
+
+            # ==========================================
+            # 6. Build frontend
+            # ==========================================
+
+            echo "======================================"
+            echo "Building frontend Docker image"
+            echo "======================================"
+
+            docker compose build frontend
+
+            # ==========================================
+            # 7. Check Prisma migration status
+            # ==========================================
+
+            echo "======================================"
+            echo "Checking Prisma migration status"
+            echo "======================================"
+
+            docker compose run --rm backend \
+              npx prisma migrate status
+
+            # ==========================================
+            # 8. Apply Prisma migrations
+            # ==========================================
+
+            echo "======================================"
+            echo "Applying Prisma migrations"
+            echo "======================================"
+
+            docker compose run --rm backend \
+              npx prisma migrate deploy
+
+            echo "Prisma migration completed."
+
+            # ==========================================
+            # 9. Start backend and frontend
+            # ==========================================
+
+            echo "======================================"
+            echo "Starting backend and frontend"
+            echo "======================================"
+
+            docker compose up -d backend frontend
+
+            # ==========================================
+            # 10. Wait for containers
+            # ==========================================
+
+            echo "Waiting for containers..."
+
+            sleep 15
+
+            # ==========================================
+            # 11. Container status
+            # ==========================================
+
+            echo "======================================"
+            echo "Container status"
+            echo "======================================"
+
+            docker compose ps
+
+            # ==========================================
+            # 12. Check backend
+            # ==========================================
+
+            BACKEND_STATUS=$(docker inspect \
+              -f '{{.State.Status}}' \
+              profiling2027-backend-1 2>/dev/null || echo "missing")
+
+            echo "Backend status:"
+            echo "$BACKEND_STATUS"
+
+            if [ "$BACKEND_STATUS" != "running" ]; then
+
+              echo "======================================"
+              echo "DEPLOYMENT FAILED"
+              echo "======================================"
+
+              echo "Backend logs:"
+              docker logs profiling2027-backend-1 --tail=100 || true
+
+              echo "======================================"
+              echo "ROLLING BACK APPLICATION"
+              echo "======================================"
+
+              # Restore previous source
+              git checkout HEAD -- backend frontend
+
+              # Rebuild previous version
+              docker compose build backend frontend
+
+              # Start previous version
+              docker compose up -d backend frontend
+
+              echo "Rollback completed."
+
+              exit 1
+            fi
+
+            # ==========================================
+            # 13. Backend logs
+            # ==========================================
+
+            echo "======================================"
+            echo "Backend logs"
+            echo "======================================"
+
+            docker logs profiling2027-backend-1 --tail=50
+
+            # ==========================================
+            # 14. Check frontend
+            # ==========================================
+
+            FRONTEND_STATUS=$(docker inspect \
+              -f '{{.State.Status}}' \
+              profiling2027-frontend-1 2>/dev/null || echo "missing")
+
+            echo "Frontend status:"
+            echo "$FRONTEND_STATUS"
+
+            if [ "$FRONTEND_STATUS" != "running" ]; then
+
+              echo "Frontend is not running."
+
+              docker logs profiling2027-frontend-1 --tail=50 || true
+
+              exit 1
+            fi
+
+            # ==========================================
+            # 15. Final status
+            # ==========================================
+
+            echo "======================================"
+            echo "FINAL DEPLOYMENT STATUS"
+            echo "======================================"
+
+            docker compose ps
+
+            echo "======================================"
+            echo "DEPLOYMENT SUCCESSFUL"
+            echo "======================================"
+
+            echo "Previous commit:"
+            echo "$CURRENT_COMMIT"
+
+            echo "Deployed commit:"
+            echo "$NEW_COMMIT"
+
+            echo "Deployment completed at:"
+            date
