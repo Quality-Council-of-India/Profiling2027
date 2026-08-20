@@ -48,6 +48,12 @@ function generateTempPassword() {
  * role — different people can have very different pending items (e.g. zero
  * peers mapped, or already fully submitted). Signs them a token; the
  * `impersonated_by` claim keeps a trace of who initiated it.
+ *
+ * Previewing as another Admin is the one exception, and only the Master
+ * Admin can do it — useful for checking exactly what a view-only Admin
+ * sees after a permission grant/revoke. Nobody can preview as the Master
+ * Admin (there'd be nothing distinct to check, and it'd bypass the
+ * database-only rule for granting that flag).
  */
 export async function impersonateUser(req, res) {
   const userId = Number(req.params.id);
@@ -55,8 +61,16 @@ export async function impersonateUser(req, res) {
     where: { id: userId, project_id: req.user.project_id, is_active: true },
   });
   if (!target) return res.status(404).json({ error: "User not found or inactive" });
-  if (target.role === ROLES.ADMIN || !ALL_ROLES.includes(target.role)) {
-    return res.status(400).json({ error: "Cannot preview as another Admin" });
+  if (!ALL_ROLES.includes(target.role)) {
+    return res.status(400).json({ error: "Invalid role" });
+  }
+  if (target.role === ROLES.ADMIN) {
+    if (!req.user.is_master_admin) {
+      return res.status(400).json({ error: "Only the Master Admin can preview as another Admin" });
+    }
+    if (target.is_master_admin) {
+      return res.status(400).json({ error: "Cannot preview as the Master Admin" });
+    }
   }
 
   const token = signAuthToken(target, { impersonated_by: req.user.id });

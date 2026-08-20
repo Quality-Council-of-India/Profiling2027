@@ -9,7 +9,6 @@ import RosterManager from "../components/RosterManager.jsx";
 import PasswordManager from "../components/PasswordManager.jsx";
 import RawDataBrowser from "../components/RawDataBrowser.jsx";
 import AdminAccessManager from "../components/AdminAccessManager.jsx";
-import BroadcastEmail from "../components/BroadcastEmail.jsx";
 
 const PREVIEWABLE_ROLES = ["profiler", "group_anchor", "casu_anchor", "casu_lead", "project_lead"];
 
@@ -107,8 +106,9 @@ export default function AdminPage() {
     queryClient.invalidateQueries({ queryKey: ["rawData"] });
   }
 
+  const previewableRoles = user?.is_master_admin ? [...PREVIEWABLE_ROLES, "admin"] : PREVIEWABLE_ROLES;
   const weeks = weeksQuery.data || [];
-  const pickerUsers = (usersQuery.data || []).filter((u) => u.role === pickerRole && u.is_active);
+  const pickerUsers = (usersQuery.data || []).filter((u) => u.role === pickerRole && u.is_active && u.id !== user.id);
   // Disables every week's action buttons while any one of them is in
   // flight — these calls email the whole roster and recompute scores, so
   // a second click before the first finishes could double-fire either.
@@ -133,7 +133,7 @@ export default function AdminPage() {
           </div>
         )}
         <div className="flex flex-wrap gap-2">
-          {PREVIEWABLE_ROLES.map((role) => (
+          {previewableRoles.map((role) => (
             <button
               key={role}
               onClick={() => setPickerRole(role)}
@@ -303,8 +303,6 @@ export default function AdminPage() {
       </div>
 
       <PasswordManager />
-
-      <BroadcastEmail />
 
       <Card className="p-5">
         <h2 className="text-sm font-semibold text-slate-800 mb-3">Export Scoresheets</h2>

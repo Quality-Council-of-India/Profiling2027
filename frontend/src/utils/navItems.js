@@ -8,6 +8,7 @@ import {
   TrophyIcon,
   ConcernIcon,
   AdminIcon,
+  MailIcon,
 } from "../components/icons.jsx";
 
 /** Single source of truth for the sidebar's nav list, shared with the
@@ -88,6 +89,13 @@ export function getNavItems(user) {
       Icon: ConcernIcon,
       show: isAdmin,
       tourText: "Concerns raised by the team land here for you to respond to and resolve.",
+    },
+    {
+      to: "/admin/broadcast",
+      label: "Send an Email",
+      Icon: MailIcon,
+      show: isAdmin,
+      tourText: "Send a message on any topic to everyone, a specific role, a specific field, or a hand-picked list.",
     },
   ];
 }
