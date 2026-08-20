@@ -9,6 +9,7 @@ import {
   importRosterHandler,
   listUsers,
   setUserActive,
+  setUserField,
   setUserPassword,
   sendUserPasswordReset,
   sendLoginCredentialsToAll,
@@ -55,6 +56,7 @@ router.post(
 );
 router.get("/users", authenticate, requireRole(ROLES.ADMIN), listUsers);
 router.patch("/users/:id/active", authenticate, requireRole(ROLES.ADMIN), setUserActive);
+router.patch("/users/:id/field", authenticate, requireRole(ROLES.ADMIN), setUserField);
 router.patch("/users/:id/password", authenticate, requireRole(ROLES.ADMIN), setUserPassword);
 router.patch(
   "/users/:id/photo",

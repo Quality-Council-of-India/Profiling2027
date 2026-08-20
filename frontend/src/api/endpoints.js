@@ -76,6 +76,7 @@ export const adminApi = {
   listUsers: () => api.get("/admin/users").then((r) => r.data.users),
   setUserActive: (userId, is_active) =>
     api.patch(`/admin/users/${userId}/active`, { is_active }).then((r) => r.data),
+  setUserField: (userId, field) => api.patch(`/admin/users/${userId}/field`, { field }).then((r) => r.data),
   setUserPassword: (userId, password) =>
     api.patch(`/admin/users/${userId}/password`, { password }).then((r) => r.data),
   uploadUserPhoto: (userId, blob) => {
