@@ -11,11 +11,13 @@ import { streamWorkbook } from "./export.controller.js";
 import { signAuthToken } from "../utils/jwt.js";
 import { publicUser, sendPasswordResetEmail } from "./auth.controller.js";
 import { ALL_ROLES, ROLES } from "../utils/roles.js";
+import { FIELDS } from "../utils/constants.js";
 import { notify, getActiveNonAdminIds, getAdminIds } from "../services/notifications.js";
 import { sendMail } from "../services/mailer.js";
 
 const EXPORTABLE_TABLES = ["self_evaluations", "peer_evaluations"];
 const setPasswordSchema = z.object({ password: z.string().min(8) });
+const setFieldSchema = z.object({ field: z.string().trim().min(1) });
 
 function generateTempPassword() {
   return crypto.randomBytes(9).toString("base64url"); // 12 chars, URL-safe
@@ -180,7 +182,19 @@ export async function listUsers(req, res) {
   const users = await prisma.user.findMany({
     where: { project_id: req.user.project_id },
     orderBy: [{ is_active: "desc" }, { field: "asc" }, { role: "asc" }, { name: "asc" }],
-    select: { id: true, name: true, email: true, emp_id: true, role: true, field: true, photo_url: true, is_active: true },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      emp_id: true,
+      role: true,
+      field: true,
+      photo_url: true,
+      is_active: true,
+      credentials_sent_at: true,
+      last_login_at: true,
+      password_changed_at: true,
+    },
   });
   res.json({ users });
 }
@@ -228,11 +242,52 @@ export async function setUserPassword(req, res, next) {
     if (!user) return res.status(404).json({ error: "User not found" });
 
     const password_hash = await bcrypt.hash(password, 12);
-    await prisma.user.update({ where: { id: userId }, data: { password_hash } });
+    await prisma.user.update({
+      where: { id: userId },
+      data: { password_hash, password_changed_at: new Date() },
+    });
     res.json({ message: `Password updated for ${user.name}.` });
   } catch (err) {
     if (err.name === "ZodError") {
       return res.status(400).json({ error: "Password must be at least 8 characters" });
+    }
+    next(err);
+  }
+}
+
+/**
+ * Lets Admin change one user's field directly (e.g. a reshuffle affecting
+ * just one or two people), without re-uploading the whole roster. Regenerates
+ * peer_mappings immediately — like setUserActive — so this should happen
+ * between weeks, not while one is open (see the "Reshuffling fields?" guide
+ * in the roster UI). Historical computed_scores are untouched: each week's
+ * own field snapshot (ComputedScore.field) was frozen when that week was
+ * computed and never gets rewritten by a later reshuffle.
+ */
+export async function setUserField(req, res, next) {
+  try {
+    const userId = Number(req.params.id);
+    const { field } = setFieldSchema.parse(req.body);
+
+    const parts = field.split(",").map((f) => f.trim()).filter(Boolean);
+    const invalid = parts.filter((f) => !FIELDS.includes(f));
+    if (parts.length === 0 || invalid.length > 0) {
+      return res.status(400).json({ error: `Invalid field(s): ${invalid.join(", ") || "none provided"}` });
+    }
+
+    const user = await prisma.user.findFirst({ where: { id: userId, project_id: req.user.project_id } });
+    if (!user) return res.status(404).json({ error: "User not found" });
+    if (user.role === ROLES.ADMIN) {
+      return res.status(400).json({ error: "Admin accounts don't have a field" });
+    }
+
+    const updated = await prisma.user.update({ where: { id: userId }, data: { field: parts.join(", ") } });
+    const { mappingsCreated } = await regeneratePeerMappings(req.user.project_id);
+
+    res.json({ user: updated, mappingsCreated });
+  } catch (err) {
+    if (err.name === "ZodError") {
+      return res.status(400).json({ error: "Body must include a non-empty field string" });
     }
     next(err);
   }

@@ -2,8 +2,12 @@ import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { adminApi } from "../api/endpoints.js";
 import { Card, Spinner, ErrorBanner, Badge } from "./ui.jsx";
-import { ROLE_LABELS, ROLE_COLORS } from "../utils/constants.js";
+import { ROLE_LABELS, ROLE_COLORS, FIELDS } from "../utils/constants.js";
 import { compressImage } from "../utils/imageCompression.js";
+
+function fieldsOf(field) {
+  return field ? field.split(",").map((f) => f.trim()).filter(Boolean) : [];
+}
 
 /** CSV import + per-user active/inactive toggle — handles mid-project
  * roster changes (someone quits) without touching historical data; see
@@ -14,6 +18,7 @@ export default function RosterManager() {
   const fileInputRef = useRef(null);
   const [rosterResult, setRosterResult] = useState(null);
   const [rosterError, setRosterError] = useState("");
+  const [showGuide, setShowGuide] = useState(false);
 
   const usersQuery = useQuery({ queryKey: ["adminUsers"], queryFn: adminApi.listUsers });
 
@@ -39,7 +44,7 @@ export default function RosterManager() {
 
   return (
     <Card className="p-5">
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-1">
         <h2 className="text-sm font-semibold text-slate-800">Team Roster</h2>
         <input ref={fileInputRef} type="file" accept=".csv,.xlsx" className="hidden" onChange={handleFileChange} />
         <button
@@ -50,6 +55,33 @@ export default function RosterManager() {
           {rosterMutation.isPending ? "Importing…" : "↑ Import Roster (.csv / .xlsx)"}
         </button>
       </div>
+
+      <div className="mb-3">
+        <button
+          onClick={() => setShowGuide((v) => !v)}
+          className="text-xs font-medium text-nav hover:text-accent transition-standard"
+        >
+          {showGuide ? "Hide guide" : "Reshuffling fields?"}
+        </button>
+      </div>
+
+      {showGuide && (
+        <div className="mb-4 text-xs text-slate-600 bg-blue-50 border border-blue-100 rounded-lg p-3 space-y-1.5">
+          <p className="font-semibold text-slate-700">Only reshuffle fields between weeks, not during one.</p>
+          <p>
+            Use the "Change" link next to a person's field below to move them — no need to re-upload the whole
+            roster for a one-off change. It takes effect immediately, so if a week is currently open, anyone who
+            hasn't submitted yet would suddenly follow the new mapping mid-week. Wait until the week closes first.
+          </p>
+          <ol className="list-decimal list-inside space-y-0.5 pl-1">
+            <li>Make sure the current week is closed (or none is open).</li>
+            <li>Change the field(s) for whoever moved.</li>
+            <li>Peer mappings regenerate automatically, right away.</li>
+            <li>The next week you open will route evaluations under the new field(s).</li>
+            <li>Every week already closed keeps showing that person under whichever field they were in at the time — nothing gets rewritten.</li>
+          </ol>
+        </div>
+      )}
 
       {rosterError && <ErrorBanner message={rosterError} />}
       {rosterResult && (
@@ -91,7 +123,7 @@ export default function RosterManager() {
                   <td className="px-2 py-1.5 font-medium text-slate-800">{u.name}</td>
                   <td className="px-2 py-1.5 text-slate-500">{u.emp_id || "—"}</td>
                   <td className="px-2 py-1.5"><Badge text={ROLE_LABELS[u.role]} color={ROLE_COLORS[u.role]} /></td>
-                  <td className="px-2 py-1.5 text-slate-600">{u.field || "—"}</td>
+                  <td className="px-2 py-1.5 text-slate-600 align-top"><FieldCell user={u} /></td>
                   <td className="px-2 py-1.5 text-center">
                     {u.role === "admin" ? (
                       <span className="text-slate-400">—</span>
@@ -179,6 +211,114 @@ function PhotoCell({ user }) {
         </div>
       </button>
       {error && <p className="absolute left-0 top-full mt-0.5 w-24 text-[10px] text-red-600">{error}</p>}
+    </div>
+  );
+}
+
+/** Inline field editor — lets Admin move one person to a new field (a
+ * reshuffle) without re-uploading the whole roster. CASU Anchors can cover
+ * more than one field at once, so they get a checkbox list; every other
+ * role gets a plain single-select. See PATCH /api/admin/users/:id/field,
+ * which regenerates peer_mappings right away — hence the guide above the
+ * table about only doing this between weeks. */
+function FieldCell({ user }) {
+  const queryClient = useQueryClient();
+  const [editing, setEditing] = useState(false);
+  const [selected, setSelected] = useState(() => fieldsOf(user.field));
+  const [error, setError] = useState("");
+
+  const mutation = useMutation({
+    mutationFn: (field) => adminApi.setUserField(user.id, field),
+    onSuccess: () => {
+      setError("");
+      setEditing(false);
+      queryClient.invalidateQueries({ queryKey: ["adminUsers"] });
+    },
+    onError: (err) => setError(err.response?.data?.error || "Update failed"),
+  });
+
+  if (user.role === "admin") {
+    return <span className="text-slate-400">—</span>;
+  }
+
+  if (!editing) {
+    return (
+      <div className="flex items-center gap-1.5">
+        <span>{user.field || "—"}</span>
+        <button
+          onClick={() => {
+            setSelected(fieldsOf(user.field));
+            setError("");
+            setEditing(true);
+          }}
+          className="text-[10px] text-nav hover:text-accent transition-standard"
+        >
+          Change
+        </button>
+      </div>
+    );
+  }
+
+  const isMulti = user.role === "casu_anchor";
+
+  function toggle(f) {
+    setSelected((prev) => (prev.includes(f) ? prev.filter((x) => x !== f) : [...prev, f]));
+  }
+
+  function save() {
+    if (selected.length === 0) {
+      setError("Pick at least one field");
+      return;
+    }
+    mutation.mutate(selected.join(", "));
+  }
+
+  return (
+    <div className="w-52 bg-white border border-slate-200 rounded-lg shadow-sm p-2 space-y-1.5">
+      {isMulti ? (
+        <div className="max-h-32 overflow-y-auto space-y-1">
+          {FIELDS.map((f) => (
+            <label key={f} className="flex items-center gap-1.5 text-[11px] text-slate-700">
+              <input type="checkbox" checked={selected.includes(f)} onChange={() => toggle(f)} />
+              {f}
+            </label>
+          ))}
+        </div>
+      ) : (
+        <select
+          value={selected[0] || ""}
+          onChange={(e) => setSelected([e.target.value])}
+          className="w-full text-xs border border-slate-200 rounded px-1.5 py-1"
+        >
+          <option value="" disabled>
+            Select a field…
+          </option>
+          {FIELDS.map((f) => (
+            <option key={f} value={f}>
+              {f}
+            </option>
+          ))}
+        </select>
+      )}
+      {error && <p className="text-[10px] text-red-600">{error}</p>}
+      <div className="flex justify-end gap-2 pt-0.5">
+        <button
+          onClick={() => {
+            setEditing(false);
+            setError("");
+          }}
+          className="text-[11px] text-slate-500 hover:text-slate-700"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={save}
+          disabled={mutation.isPending}
+          className="text-[11px] font-medium text-white bg-nav rounded px-2 py-0.5 hover:bg-nav/90 disabled:opacity-50 transition-standard"
+        >
+          {mutation.isPending ? "Saving…" : "Save"}
+        </button>
+      </div>
     </div>
   );
 }

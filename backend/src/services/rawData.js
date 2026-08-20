@@ -163,11 +163,17 @@ export async function queryTable(table, projectId, query) {
       const weeksById = new Map(weeks.map((w) => [w.id, w]));
       return {
         ...result,
-        rows: result.rows.map((r) => ({
-          ...r,
-          user: usersById.get(r.user_id) || null,
-          week: weeksById.get(r.week_id) || null,
-        })),
+        rows: result.rows.map((r) => {
+          const user = usersById.get(r.user_id) || null;
+          return {
+            ...r,
+            // Prefer the field frozen at compute time — a later reshuffle
+            // shouldn't relabel this week's own row. Falls back to the
+            // user's current field for rows computed before this existed.
+            user: user ? { ...user, field: r.field || user.field } : null,
+            week: weeksById.get(r.week_id) || null,
+          };
+        }),
       };
     }
 

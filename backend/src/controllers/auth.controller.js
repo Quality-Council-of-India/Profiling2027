@@ -37,6 +37,8 @@ export async function login(req, res, next) {
       return res.status(401).json({ error: "Invalid email or password" });
     }
 
+    await prisma.user.update({ where: { id: user.id }, data: { last_login_at: new Date() } });
+
     const token = signAuthToken(user);
     res.json({ token, user: publicUser(user) });
   } catch (err) {
@@ -92,7 +94,10 @@ export async function confirmPasswordReset(req, res, next) {
     }
 
     const password_hash = await bcrypt.hash(newPassword, 12);
-    await prisma.user.update({ where: { id: payload.sub }, data: { password_hash } });
+    await prisma.user.update({
+      where: { id: payload.sub },
+      data: { password_hash, password_changed_at: new Date() },
+    });
 
     res.json({ message: "Password updated. You can now log in." });
   } catch (err) {

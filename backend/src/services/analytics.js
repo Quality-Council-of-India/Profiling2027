@@ -25,8 +25,10 @@ export async function getFieldHeatmap(projectId, weekId, scope) {
   for (const u of users) {
     const score = u.computedScores[0];
     if (!score) continue;
-    // A CASU Anchor covering more than one field counts toward each of them.
-    for (const field of fieldList(u.field)) {
+    // Group by the field frozen at compute time, not the user's current one —
+    // a later reshuffle shouldn't silently relabel this week's own numbers.
+    // Falls back to the live field for rows computed before this snapshot existed.
+    for (const field of fieldList(score.field || u.field)) {
       byField[field] ??= { count: 0, sums: Object.fromEntries(PARAM_FIELDS.map((p) => [p.label, 0])) };
       byField[field].count += 1;
       for (const p of PARAM_FIELDS) {
@@ -70,7 +72,7 @@ export async function getSapaDistribution(projectId, weekId, scope) {
       const bucket = score ? sapaBucket(score.sapa_factor) : null;
       if (!bucket) continue;
       // A CASU Anchor covering more than one field counts toward each of them.
-      for (const key of groupKeysFn(u)) {
+      for (const key of groupKeysFn(u, score)) {
         groups[key] ??= { over: 0, aligned: 0, under: 0, sapaSum: 0, sapaCount: 0, members: { over: [], aligned: [], under: [] } };
         groups[key][bucket] += 1;
         groups[key].sapaSum += Number(score.sapa_factor);
@@ -93,7 +95,12 @@ export async function getSapaDistribution(projectId, weekId, scope) {
 
   return {
     byRole: distribute((u) => [u.role]),
-    byField: distribute((u) => (u.field ? fieldList(u.field) : ["—"])),
+    // Frozen-at-compute-time field, falling back to the live one for rows
+    // computed before this snapshot existed — see getFieldHeatmap above.
+    byField: distribute((u, score) => {
+      const field = score.field || u.field;
+      return field ? fieldList(field) : ["—"];
+    }),
   };
 }
 
@@ -142,7 +149,7 @@ export async function getQuadrantData(projectId, weekId, scope) {
         id: u.id,
         name: u.name,
         role: u.role,
-        field: u.field,
+        field: score.field || u.field, // frozen at compute time; see getFieldHeatmap
         performance: Number(score.total_peer), // X axis, out of 49
         sentiment: Math.round(sentiment * 100) / 100, // Y axis, -1..1
       };
@@ -405,7 +412,7 @@ export async function getHallOfRecognition(projectId) {
               const top = {
                 id: s.user.id,
                 name: s.user.name,
-                field: s.user.field,
+                field: s.field || s.user.field, // frozen at compute time; see getFieldHeatmap
                 photo_url: s.user.photo_url,
                 totalPeer: Number(s.total_peer),
               };

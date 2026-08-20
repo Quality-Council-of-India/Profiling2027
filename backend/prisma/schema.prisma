@@ -107,6 +107,13 @@ model User {
   // been sent real credentials yet, so adding one new user later doesn't
   // re-reset and re-email everyone who's already set their own password.
   credentials_sent_at DateTime?
+  // Updated on every successful login — lets Admin see who's never signed
+  // in at all versus who has.
+  last_login_at       DateTime?
+  // Updated whenever the password actually changes away from whatever
+  // Admin last issued (self-service reset, or Admin's own "Set Password") —
+  // distinguishes "still on the temp password" from "has their own now".
+  password_changed_at DateTime?
 
   project Project @relation(fields: [project_id], references: [id], onDelete: Cascade)
 
@@ -220,6 +227,12 @@ model ComputedScore {
   expected_peer_count               Int      @default(0)
   sapa_factor                       Decimal? @db.Decimal(4, 3)
   computed_at                       DateTime @default(now())
+  // Snapshot of the user's field AT THE TIME this week's score was computed
+  // — frozen forever once written, so a later team reshuffle (someone
+  // moving fields) never silently relabels a past week's Heatmap/SAPA/
+  // export row under their new field. Null on rows computed before this
+  // column existed; those fall back to the user's current field.
+  field                             String?  @db.VarChar(50)
 
   week Week @relation(fields: [week_id], references: [id], onDelete: Cascade)
   user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
