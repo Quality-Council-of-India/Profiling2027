@@ -14,6 +14,8 @@ import {
   setAdminPermissions,
   sendUserPasswordReset,
   sendLoginCredentialsToAll,
+  sendBroadcastEmail,
+  listEmailBroadcasts,
   listRawTables,
   getRawTable,
   exportRawTable,
@@ -71,6 +73,8 @@ router.patch(
 router.patch("/admins/:id/permissions", authenticate, requireRole(ROLES.ADMIN), requireMasterAdmin, setAdminPermissions);
 router.post("/users/:id/send-reset", authenticate, requireRole(ROLES.ADMIN), requireAdminAccess("passwords"), sendUserPasswordReset);
 router.post("/users/send-credentials-all", authenticate, requireRole(ROLES.ADMIN), requireAdminAccess("passwords"), sendLoginCredentialsToAll);
+router.post("/broadcast-email", authenticate, requireRole(ROLES.ADMIN), sendBroadcastEmail);
+router.get("/broadcast-email", authenticate, requireRole(ROLES.ADMIN), listEmailBroadcasts);
 router.get("/data", authenticate, requireRole(ROLES.ADMIN), listRawTables);
 router.get("/data/:table", authenticate, requireRole(ROLES.ADMIN), getRawTable);
 router.get("/data/:table/export", authenticate, requireRole(ROLES.ADMIN), exportRawTable);

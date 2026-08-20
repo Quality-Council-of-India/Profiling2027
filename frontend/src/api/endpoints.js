@@ -79,6 +79,8 @@ export const adminApi = {
   setUserField: (userId, field) => api.patch(`/admin/users/${userId}/field`, { field }).then((r) => r.data),
   setAdminPermissions: (userId, permissions) =>
     api.patch(`/admin/admins/${userId}/permissions`, permissions).then((r) => r.data),
+  sendBroadcastEmail: (payload) => api.post("/admin/broadcast-email", payload).then((r) => r.data),
+  listEmailBroadcasts: () => api.get("/admin/broadcast-email").then((r) => r.data.broadcasts),
   setUserPassword: (userId, password) =>
     api.patch(`/admin/users/${userId}/password`, { password }).then((r) => r.data),
   uploadUserPhoto: (userId, blob) => {

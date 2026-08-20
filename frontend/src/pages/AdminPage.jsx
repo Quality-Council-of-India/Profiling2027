@@ -9,6 +9,7 @@ import RosterManager from "../components/RosterManager.jsx";
 import PasswordManager from "../components/PasswordManager.jsx";
 import RawDataBrowser from "../components/RawDataBrowser.jsx";
 import AdminAccessManager from "../components/AdminAccessManager.jsx";
+import BroadcastEmail from "../components/BroadcastEmail.jsx";
 
 const PREVIEWABLE_ROLES = ["profiler", "group_anchor", "casu_anchor", "casu_lead", "project_lead"];
 
@@ -302,6 +303,8 @@ export default function AdminPage() {
       </div>
 
       <PasswordManager />
+
+      <BroadcastEmail />
 
       <Card className="p-5">
         <h2 className="text-sm font-semibold text-slate-800 mb-3">Export Scoresheets</h2>

@@ -14,6 +14,7 @@ import { ALL_ROLES, ROLES } from "../utils/roles.js";
 import { FIELDS } from "../utils/constants.js";
 import { notify, getActiveNonAdminIds, getAdminIds } from "../services/notifications.js";
 import { sendMail } from "../services/mailer.js";
+import { resolveRecipients, broadcastEmailBody } from "../services/broadcast.js";
 
 const EXPORTABLE_TABLES = ["self_evaluations", "peer_evaluations"];
 const setPasswordSchema = z.object({ password: z.string().min(8) });
@@ -22,6 +23,16 @@ const setPermissionsSchema = z.object({
   can_manage_weeks: z.boolean(),
   can_manage_passwords: z.boolean(),
   can_manage_roster: z.boolean(),
+});
+const broadcastSchema = z.object({
+  subject: z.string().trim().min(1).max(200),
+  body_html: z.string().trim().min(1),
+  recipients: z.object({
+    scope: z.enum(["all", "role", "field", "users"]),
+    role: z.string().optional(),
+    field: z.string().optional(),
+    userIds: z.array(z.number()).optional(),
+  }),
 });
 
 function generateTempPassword() {
@@ -407,6 +418,63 @@ export async function sendLoginCredentialsToAll(req, res) {
   const sent = outcomes.filter((o) => o.ok).length;
   const failed = outcomes.filter((o) => !o.ok).map((o) => o.email);
   res.json({ sent, total: users.length, failed });
+}
+
+/**
+ * "Send an email on any topic" — a free-form broadcast to all active
+ * users, a single role, a single field, or a hand-picked list. Available
+ * to every Admin (not gated by can_manage_*, unlike Week/Password/Roster
+ * management). Every send is logged to email_broadcasts so Admins can see
+ * what's already gone out before sending something similar again.
+ */
+export async function sendBroadcastEmail(req, res, next) {
+  try {
+    const { subject, body_html, recipients } = broadcastSchema.parse(req.body);
+    const { users, summary } = await resolveRecipients(req.user.project_id, recipients);
+
+    const outcomes = await Promise.all(
+      users.map(async (user) => {
+        try {
+          await sendMail({ to: user.email, subject, html: broadcastEmailBody(user.name, body_html) });
+          return true;
+        } catch (err) {
+          console.error(`Failed to email ${user.email}:`, err.message);
+          return false;
+        }
+      })
+    );
+    const sentCount = outcomes.filter(Boolean).length;
+
+    const broadcast = await prisma.emailBroadcast.create({
+      data: {
+        project_id: req.user.project_id,
+        sender_id: req.user.id,
+        subject,
+        body_html,
+        recipient_summary: summary,
+        recipient_count: users.length,
+        sent_count: sentCount,
+      },
+    });
+
+    res.json({ sent: sentCount, total: users.length, broadcast });
+  } catch (err) {
+    if (err.name === "ZodError") {
+      return res.status(400).json({ error: "Body must include subject, body_html, and a valid recipients spec" });
+    }
+    next(err);
+  }
+}
+
+/** Sent-history log for the broadcast-email feature — most recent first. */
+export async function listEmailBroadcasts(req, res) {
+  const broadcasts = await prisma.emailBroadcast.findMany({
+    where: { project_id: req.user.project_id },
+    orderBy: { created_at: "desc" },
+    take: 100,
+    include: { sender: { select: { name: true } } },
+  });
+  res.json({ broadcasts });
 }
 
 const PHOTO_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"];
