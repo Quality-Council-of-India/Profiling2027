@@ -1,35 +1,70 @@
-name: Deploy to Vercel (Production)
+name: Deploy Profiling 2027 to EC2
 
-# Runs on GitHub's own runners, not on any restricted sandbox — so it works
-# regardless of the network policy of whatever environment authored the
-# commit. Vercel's native GitHub App integration (if connected) still deploys
-# independently of this; this workflow is a guaranteed, repo-native fallback
-# that fires the same way every time.
 on:
   push:
-    branches: [main]
-  workflow_dispatch: {}
-
-concurrency:
-  group: vercel-production-deploy
-  cancel-in-progress: false
+    branches:
+      - main
 
 jobs:
   deploy:
+    name: Deploy to EC2
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.2.2
         with:
-          node-version: 20
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -e
 
-      - name: Install Vercel CLI
-        run: npm install --global vercel@latest
+            cd /opt/Profiling2027
 
-      - name: Deploy to Vercel (production)
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-        run: vercel deploy --prod --token="$VERCEL_TOKEN" --yes
+            echo "======================================"
+            echo "Fetching latest GitHub code"
+            echo "======================================"
+
+            git fetch origin main
+
+            echo "======================================"
+            echo "Updating backend and frontend only"
+            echo "======================================"
+
+            git checkout origin/main -- backend frontend
+
+            echo "======================================"
+            echo "Running Prisma migrations"
+            echo "======================================"
+
+            docker compose run --rm backend \
+              npx prisma migrate deploy
+
+            echo "======================================"
+            echo "Building backend and frontend"
+            echo "======================================"
+
+            docker compose build backend frontend
+
+            echo "======================================"
+            echo "Restarting backend and frontend"
+            echo "======================================"
+
+            docker compose up -d backend frontend
+
+            echo "======================================"
+            echo "Container status"
+            echo "======================================"
+
+            docker ps
+
+            echo "======================================"
+            echo "Backend logs"
+            echo "======================================"
+
+            docker logs profiling2027-backend-1 --tail=30
+
+            echo "======================================"
+            echo "Deployment completed"
+            echo "======================================"
