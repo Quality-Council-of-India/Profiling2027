@@ -79,7 +79,10 @@ export async function buildWeekScoreWorkbook(projectId, weekId) {
     const row = sheet.addRow({
       name: s.user.name,
       role: s.user.role,
-      field: s.user.field || "—",
+      // Frozen at compute time — a later reshuffle shouldn't relabel this
+      // week's own export row. Falls back to the current field for rows
+      // computed before this snapshot existed.
+      field: s.field || s.user.field || "—",
       ...paramValues,
       total_self: Number(s.total_self),
       total_peer: Number(s.total_peer),

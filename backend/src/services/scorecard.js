@@ -175,7 +175,10 @@ export async function buildScorecardDocx(projectId, user, weekId) {
                         children: [
                           new TextRun({ text: user.name, bold: true, size: 24, color: "FFFFFF" }),
                           new TextRun({
-                            text: `   ·   ${ROLE_LABELS[user.role] || user.role}${user.field ? ` · ${user.field}` : ""}`,
+                            // Frozen at compute time; see scoreEngine.js — the
+                            // scorecard for a past week shouldn't relabel
+                            // someone under a field they moved to since.
+                            text: `   ·   ${ROLE_LABELS[user.role] || user.role}${(current.field || user.field) ? ` · ${current.field || user.field}` : ""}`,
                             size: 20,
                             color: "CBD5E1",
                           }),

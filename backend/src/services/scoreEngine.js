@@ -18,7 +18,7 @@ function round2(n) {
 }
 
 /** Pure scoring math, shared by the single-user and batch code paths. */
-function computeRow({ weekId, userId, selfEval, peerEvals, expectedPeerCount }) {
+function computeRow({ weekId, userId, field, selfEval, peerEvals, expectedPeerCount }) {
   const selfScores = {};
   let totalSelf = 0;
   for (const p of PARAMS) {
@@ -39,7 +39,7 @@ function computeRow({ weekId, userId, selfEval, peerEvals, expectedPeerCount }) 
 
   const sapaFactor = totalSelf > 0 && totalPeer > 0 ? round2(totalSelf / totalPeer) : null;
 
-  const row = { week_id: weekId, user_id: userId };
+  const row = { week_id: weekId, user_id: userId, field: field ?? null };
   for (const p of PARAMS) {
     row[`${p}_self`] = selfScores[p];
     row[`${p}_peer`] = peerScores[p];
@@ -54,7 +54,8 @@ function computeRow({ weekId, userId, selfEval, peerEvals, expectedPeerCount }) 
 
 /** Computes and upserts the computed_scores row for one user in one week. */
 export async function computeScoresForUserWeek(weekId, userId) {
-  const [selfEval, peerEvals, expectedPeerCount] = await Promise.all([
+  const [user, selfEval, peerEvals, expectedPeerCount] = await Promise.all([
+    prisma.user.findUnique({ where: { id: userId }, select: { field: true } }),
     prisma.evaluation.findUnique({
       where: {
         week_id_evaluator_id_evaluatee_id_eval_type: {
@@ -71,7 +72,7 @@ export async function computeScoresForUserWeek(weekId, userId) {
     prisma.peerMapping.count({ where: { evaluatee_id: userId } }),
   ]);
 
-  const row = computeRow({ weekId, userId, selfEval, peerEvals, expectedPeerCount });
+  const row = computeRow({ weekId, userId, field: user?.field, selfEval, peerEvals, expectedPeerCount });
 
   return prisma.computedScore.upsert({
     where: { week_id_user_id: { week_id: weekId, user_id: userId } },
@@ -88,12 +89,13 @@ async function upsertComputedScoresBatch(rows) {
   // request input, so interpolating them directly (rather than as bound
   // params, which Postgres doesn't allow for identifiers) is safe.
   const scoreColumns = PARAMS.flatMap((p) => [`${p}_self`, `${p}_peer`]);
-  const allColumns = ["week_id", "user_id", ...scoreColumns, "total_self", "total_peer", "peer_count", "expected_peer_count", "sapa_factor", "computed_at"];
+  const allColumns = ["week_id", "user_id", "field", ...scoreColumns, "total_self", "total_peer", "peer_count", "expected_peer_count", "sapa_factor", "computed_at"];
 
   const valueRows = rows.map((r) => {
     const values = [
       r.week_id,
       r.user_id,
+      r.field,
       ...scoreColumns.map((c) => r[c]),
       r.total_self,
       r.total_peer,
@@ -105,7 +107,7 @@ async function upsertComputedScoresBatch(rows) {
   });
 
   const updateSet = Prisma.join(
-    [...scoreColumns, "total_self", "total_peer", "peer_count", "expected_peer_count", "sapa_factor", "computed_at"].map(
+    ["field", ...scoreColumns, "total_self", "total_peer", "peer_count", "expected_peer_count", "sapa_factor", "computed_at"].map(
       (c) => Prisma.raw(`"${c}" = EXCLUDED."${c}"`)
     )
   );
@@ -124,10 +126,11 @@ async function upsertComputedScoresBatch(rows) {
 export async function computeScoresForWeek(weekId, projectId) {
   const users = await prisma.user.findMany({
     where: { project_id: projectId, is_active: true, role: { not: "admin" } },
-    select: { id: true },
+    select: { id: true, field: true },
   });
   if (users.length === 0) return [];
   const userIds = users.map((u) => u.id);
+  const fieldByUser = new Map(users.map((u) => [u.id, u.field]));
 
   const [selfEvals, peerEvals, mappingCounts] = await Promise.all([
     prisma.evaluation.findMany({
@@ -155,6 +158,7 @@ export async function computeScoresForWeek(weekId, projectId) {
     computeRow({
       weekId,
       userId,
+      field: fieldByUser.get(userId),
       selfEval: selfByUser.get(userId) || null,
       peerEvals: peersByUser.get(userId) || [],
       expectedPeerCount: expectedByUser.get(userId) || 0,
