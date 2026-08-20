@@ -133,6 +133,15 @@ export function HelpIcon(props) {
   );
 }
 
+export function MailIcon(props) {
+  return (
+    <svg viewBox="0 0 20 20" width="18" height="18" {...base} {...props}>
+      <rect x="2.5" y="4.5" width="15" height="11" rx="1.5" />
+      <path d="M3 5.5l7 5.5 7-5.5" />
+    </svg>
+  );
+}
+
 export function AdminIcon(props) {
   return (
     <svg viewBox="0 0 20 20" width="18" height="18" {...base} {...props}>

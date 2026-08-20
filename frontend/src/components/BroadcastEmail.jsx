@@ -122,7 +122,6 @@ export default function BroadcastEmail() {
 
   return (
     <Card className="p-5">
-      <h2 className="text-sm font-semibold text-slate-800 mb-1">Send an Email</h2>
       <p className="text-xs text-slate-500 mb-4">
         Send a message on any topic to everyone, a specific role, a specific field, or a hand-picked list — separate
         from the automatic week/reminder/ticket emails the portal sends on its own.

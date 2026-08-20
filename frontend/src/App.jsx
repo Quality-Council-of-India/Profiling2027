@@ -12,6 +12,7 @@ import AnalyticsPage from "./pages/AnalyticsPage.jsx";
 import HallOfRecognitionPage from "./pages/HallOfRecognitionPage.jsx";
 import RaiseConcernPage from "./pages/RaiseConcernPage.jsx";
 import AdminGrievancesPage from "./pages/AdminGrievancesPage.jsx";
+import AdminBroadcastPage from "./pages/AdminBroadcastPage.jsx";
 import AdminPage from "./pages/AdminPage.jsx";
 
 export default function App() {
@@ -69,6 +70,14 @@ export default function App() {
           element={
             <ProtectedRoute roles={["admin"]}>
               <AdminGrievancesPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/broadcast"
+          element={
+            <ProtectedRoute roles={["admin"]}>
+              <AdminBroadcastPage />
             </ProtectedRoute>
           }
         />
