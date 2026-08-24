@@ -6,6 +6,34 @@ import RadarComparison from "../components/charts/RadarComparison.jsx";
 import SAPAGauge from "../components/charts/SAPAGauge.jsx";
 import { PARAM_FIELDS, TRAJECTORY_LABELS, ACCENT, NAV } from "../utils/constants.js";
 
+function tagLabel(tag, otherText) {
+  return tag === "Others" && otherText ? `Others (${otherText})` : tag;
+}
+
+/**
+ * Compares what someone said about themselves against what their peers
+ * said, using data already fetched for this page — no extra request.
+ * Deliberately conservative: only flags a strength with literally zero
+ * peer agreement, or a weakness at least 2 peers raised that the person
+ * didn't mention themselves. Informational, not a verdict.
+ */
+function selfAwarenessGaps(subjective) {
+  if (!subjective?.self || !subjective.peer || subjective.peer.responseCount === 0) return null;
+  const peerResponseCount = subjective.peer.responseCount;
+  const peerStrengthMap = Object.fromEntries(subjective.peer.strengthsFrequency.map((f) => [f.tag, f.count]));
+  const selfWeaknesses = subjective.self.weakness_tags || [];
+
+  const unconfirmedStrengths = (subjective.self.strengths_tags || []).filter(
+    (t) => t !== "Others" && !peerStrengthMap[t]
+  );
+  const blindSpotWeaknesses = subjective.peer.weaknessFrequency.filter(
+    (f) => f.tag !== "Others" && f.count >= 2 && !selfWeaknesses.includes(f.tag)
+  );
+
+  if (unconfirmedStrengths.length === 0 && blindSpotWeaknesses.length === 0) return null;
+  return { peerResponseCount, unconfirmedStrengths, blindSpotWeaknesses };
+}
+
 /**
  * My Scores — the ongoing week's score card only (open week if one exists,
  * else the most recently closed one). Multi-week exploration, cumulative
@@ -16,6 +44,7 @@ export default function ScoresPage({ userId, userLabel }) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const targetId = userId || user.id;
+  const isOwnView = !userId;
 
   const weeksQuery = useQuery({ queryKey: ["weeks"], queryFn: weeksApi.list });
   const weeks = weeksQuery.data || [];
@@ -40,6 +69,7 @@ export default function ScoresPage({ userId, userLabel }) {
   const totalSelf = computed ? Number(computed.total_self) : 0;
   const totalPeer = computed ? Number(computed.total_peer) : 0;
   const sapa = computed?.sapa_factor !== null && computed?.sapa_factor !== undefined ? Number(computed.sapa_factor) : null;
+  const gaps = selfAwarenessGaps(subjective);
 
   return (
     <div className="space-y-6">
@@ -106,6 +136,80 @@ export default function ScoresPage({ userId, userLabel }) {
             <StatCard label="Total Self" value={totalSelf.toFixed(1)} sub="/49" tone="accent" />
             <StatCard label="Total Peer" value={totalPeer.toFixed(1)} sub={`${computed.peer_count} of ${computed.expected_peer_count} peers responded`} tone="info" />
           </div>
+
+          <Card className="p-5">
+            <h2 className="text-sm font-semibold text-slate-800 mb-3">My Self-Evaluation — {currentWeek.label}</h2>
+            {!subjective ? (
+              <Spinner />
+            ) : !subjective.self ? (
+              <p className="text-sm text-slate-400">
+                {isOwnView ? "You haven't" : "They haven't"} submitted a Self-Evaluation for this week yet.
+              </p>
+            ) : (
+              <>
+                <div className="flex flex-wrap gap-2 mb-4 pb-4 border-b border-slate-100">
+                  <span className="text-xs text-slate-500 mr-1">Compared to last week:</span>
+                  <span className="text-[11px] px-2 py-1 rounded-full bg-slate-100 text-slate-700">
+                    {TRAJECTORY_LABELS[subjective.self.trajectory] || "—"}
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-xs font-medium text-green-700 uppercase tracking-wide mb-2">Strengths</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(subjective.self.strengths_tags || []).map((tag) => (
+                        <span key={tag} className="text-[11px] px-2 py-1 rounded-full bg-green-100 text-green-800">
+                          {tagLabel(tag, subjective.self.strengths_other_text)}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-red-700 uppercase tracking-wide mb-2">Areas of Improvement</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(subjective.self.weakness_tags || []).map((tag) => (
+                        <span key={tag} className="text-[11px] px-2 py-1 rounded-full bg-red-100 text-red-800">
+                          {tagLabel(tag, subjective.self.weakness_other_text)}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <p className="text-xs font-medium text-slate-600 uppercase tracking-wide mb-2">My Improvement Plan</p>
+                  <p className="text-xs text-slate-600 bg-slate-50 rounded-md px-3 py-2 border border-slate-100">
+                    "{subjective.self.improvement_suggestion}"
+                  </p>
+                </div>
+              </>
+            )}
+          </Card>
+
+          {gaps && (
+            <Card className="p-5 border-amber-200 bg-amber-50/50">
+              <h2 className="text-sm font-semibold text-slate-800 mb-1">Self-Awareness Check — {currentWeek.label}</h2>
+              <p className="text-xs text-slate-500 mb-3">
+                A quick comparison between what {isOwnView ? "you said" : "they said"} about{" "}
+                {isOwnView ? "yourself" : "themselves"} and what {gaps.peerResponseCount} peer
+                {gaps.peerResponseCount === 1 ? "" : "s"} said. Not a verdict — just worth a look.
+              </p>
+              <div className="space-y-1.5">
+                {gaps.unconfirmedStrengths.map((tag) => (
+                  <p key={`s-${tag}`} className="text-xs text-slate-600">
+                    {isOwnView ? "You" : "They"} picked <strong>{tag}</strong> as a strength — none of the{" "}
+                    {gaps.peerResponseCount} peer{gaps.peerResponseCount === 1 ? "" : "s"} who responded agreed.
+                  </p>
+                ))}
+                {gaps.blindSpotWeaknesses.map((f) => (
+                  <p key={`w-${f.tag}`} className="text-xs text-slate-600">
+                    {f.count} of {gaps.peerResponseCount} peers flagged <strong>{f.tag}</strong> as an area to improve
+                    — {isOwnView ? "you didn't" : "they didn't"} mention it{" "}
+                    {isOwnView ? "yourself" : "themselves"}.
+                  </p>
+                ))}
+              </div>
+            </Card>
+          )}
 
           <Card className="p-5">
             <h2 className="text-sm font-semibold text-slate-800 mb-3">Peer Feedback Received — {currentWeek.label}</h2>

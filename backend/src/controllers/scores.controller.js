@@ -74,6 +74,42 @@ export async function getUserTrend(req, res) {
  * Lead automatically sees every Profiler + Group Anchor + the other
  * Project Lead(s), and so on up the hierarchy.
  */
+/**
+ * Multi-week history of a person's own Self-Evaluation (Part II subjective
+ * answers) — trajectory, strengths/weakness tags, and improvement plan for
+ * every week they've submitted one. Complements getUserTrend (Part I
+ * quantitative scores only) in Analytics.
+ */
+export async function getUserSelfEvalHistory(req, res) {
+  const userId = Number(req.params.userId);
+
+  const target = await prisma.user.findFirst({
+    where: { id: userId, project_id: req.user.project_id },
+  });
+  if (!target) return res.status(404).json({ error: "User not found" });
+  if (!canViewUser(req.user, target)) {
+    return res.status(403).json({ error: "You cannot view this user's scores" });
+  }
+
+  const evaluations = await prisma.evaluation.findMany({
+    where: { evaluator_id: userId, evaluatee_id: userId, eval_type: "self", week: { project_id: req.user.project_id } },
+    include: { week: true },
+    orderBy: { week: { week_number: "asc" } },
+  });
+
+  res.json({
+    history: evaluations.map((e) => ({
+      week: { id: e.week.id, label: e.week.label, week_number: e.week.week_number },
+      trajectory: e.trajectory,
+      strengths_tags: e.strengths_tags,
+      weakness_tags: e.weakness_tags,
+      strengths_other_text: e.strengths_other_text,
+      weakness_other_text: e.weakness_other_text,
+      improvement_suggestion: e.improvement_suggestion,
+    })),
+  });
+}
+
 export async function getTeamScores(req, res) {
   const weekId = Number(req.params.weekId);
 

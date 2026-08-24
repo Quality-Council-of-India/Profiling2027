@@ -11,9 +11,13 @@ import PeerScoreTrendChart from "../components/charts/PeerScoreTrendChart.jsx";
 import HeatmapGrid from "../components/charts/HeatmapGrid.jsx";
 import QuadrantPlot from "../components/charts/QuadrantPlot.jsx";
 import SAPAGauge from "../components/charts/SAPAGauge.jsx";
-import { PARAM_FIELDS, ACCENT, NAV, ROLE_LABELS } from "../utils/constants.js";
+import { PARAM_FIELDS, ACCENT, NAV, ROLE_LABELS, TRAJECTORY_LABELS } from "../utils/constants.js";
 
 const AGGREGATE_ROLES = ["project_lead", "casu_lead", "admin"];
+
+function tagLabel(tag, otherText) {
+  return tag === "Others" && otherText ? `Others (${otherText})` : tag;
+}
 
 // Short forms for the x-axis ticks of the Per-Parameter Breakdown bar chart —
 // the full labels (e.g. "Work Quality & Attention to Detail") get clipped.
@@ -69,6 +73,12 @@ export default function AnalyticsPage() {
     queryFn: () => analyticsApi.peerTrend(user.id),
   });
   const peerTrendRows = peerTrendQuery.data?.trend || [];
+
+  const selfEvalHistoryQuery = useQuery({
+    queryKey: ["selfEvalHistory", user.id],
+    queryFn: () => scoresApi.selfEvalHistory(user.id),
+  });
+  const selfEvalHistory = selfEvalHistoryQuery.data || [];
   const selectedWeekNums = weeks.filter((w) => selectedWeekIds.includes(w.id)).map((w) => w.week_number);
   const selectedRows = allRows.filter((r) => selectedWeekNums.includes(r.week_number));
   const summary = averageRows(selectedRows);
@@ -208,6 +218,62 @@ export default function AnalyticsPage() {
                     <Bar dataKey="Peer" fill={NAV} radius={[3, 3, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
+              </Card>
+
+              <Card interactive className="p-5">
+                <h2 className="text-sm font-semibold text-slate-800 mb-1">My Self-Evaluation History</h2>
+                <p className="text-xs text-slate-500 mb-3">
+                  What you said about yourself — trajectory, strengths, areas of improvement, and your improvement
+                  plan — for every week you've submitted a Self-Evaluation.
+                </p>
+                {selfEvalHistoryQuery.isLoading ? (
+                  <Spinner />
+                ) : selfEvalHistoryQuery.isError ? (
+                  <ErrorBanner message="Failed to load Self-Evaluation history" />
+                ) : selfEvalHistory.length === 0 ? (
+                  <p className="text-sm text-slate-400 text-center py-8">No Self-Evaluations submitted yet.</p>
+                ) : (
+                  <div className="overflow-x-auto -mx-1">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-slate-200">
+                          <th className="text-left px-2 py-1.5 font-medium text-slate-500 uppercase whitespace-nowrap">Week</th>
+                          <th className="text-left px-2 py-1.5 font-medium text-slate-500 uppercase whitespace-nowrap">Trajectory</th>
+                          <th className="text-left px-2 py-1.5 font-medium text-slate-500 uppercase">Strengths</th>
+                          <th className="text-left px-2 py-1.5 font-medium text-slate-500 uppercase">Areas of Improvement</th>
+                          <th className="text-left px-2 py-1.5 font-medium text-slate-500 uppercase">Improvement Plan</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selfEvalHistory.map((h) => (
+                          <tr key={h.week.id} className="border-b border-slate-50 align-top">
+                            <td className="px-2 py-2 font-medium text-slate-700 whitespace-nowrap">{h.week.label}</td>
+                            <td className="px-2 py-2 whitespace-nowrap text-slate-600">{TRAJECTORY_LABELS[h.trajectory] || "—"}</td>
+                            <td className="px-2 py-2">
+                              <div className="flex flex-wrap gap-1">
+                                {(h.strengths_tags || []).map((tag) => (
+                                  <span key={tag} className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-100 text-green-800">
+                                    {tagLabel(tag, h.strengths_other_text)}
+                                  </span>
+                                ))}
+                              </div>
+                            </td>
+                            <td className="px-2 py-2">
+                              <div className="flex flex-wrap gap-1">
+                                {(h.weakness_tags || []).map((tag) => (
+                                  <span key={tag} className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 text-red-800">
+                                    {tagLabel(tag, h.weakness_other_text)}
+                                  </span>
+                                ))}
+                              </div>
+                            </td>
+                            <td className="px-2 py-2 text-slate-600 max-w-xs">{h.improvement_suggestion}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </Card>
             </>
           )}
