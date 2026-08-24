@@ -5,8 +5,10 @@ import {
   getSapaDistribution,
   getQuadrantData,
   getParameterAlignment,
+  getParameterAlignmentTrend,
   getTeamTagFrequency,
-  getTeamFocusWords,
+  getTeamTagTrend,
+  getTeamFocusSuggestions,
   getTeamTrajectory,
   getRankings,
   getFieldStandings,
@@ -14,6 +16,24 @@ import {
   getHallOfRecognition,
   getPeerScoreTrendComparison,
 } from "../services/analytics.js";
+
+/** Parses "?weeks=1,2,3" into a validated array of week IDs, or returns null (and responds) on failure. */
+function parseWeekIdsParam(req, res) {
+  const weeksParam = req.query.weeks;
+  if (!weeksParam) {
+    res.status(400).json({ error: "Provide one or more week IDs via ?weeks=1,2,3" });
+    return null;
+  }
+  const weekIds = String(weeksParam)
+    .split(",")
+    .map((s) => Number(s.trim()))
+    .filter((n) => Number.isInteger(n));
+  if (weekIds.length === 0) {
+    res.status(400).json({ error: "No valid week IDs provided" });
+    return null;
+  }
+  return weekIds;
+}
 
 async function requireAggregateAccess(req, res) {
   const scope = analyticsScope(req.user);
@@ -62,6 +82,29 @@ export async function parameterAlignment(req, res) {
   res.json({ week: ctx.week, alignment: data });
 }
 
+/** ?weeks=1,2,3 — % Aligned per parameter, one point per week, for the trend chart shown when multiple weeks are selected. */
+export async function parameterAlignmentTrend(req, res, next) {
+  try {
+    const scope = analyticsScope(req.user);
+    if (scope === "personal") {
+      return res.status(403).json({ error: "Your role has a personalised analytics view only" });
+    }
+    const weekIds = parseWeekIdsParam(req, res);
+    if (!weekIds) return;
+    const weeks = await prisma.week.findMany({ where: { id: { in: weekIds }, project_id: req.user.project_id } });
+    if (weeks.length === 0) return res.status(404).json({ error: "No matching weeks found" });
+
+    const trend = await getParameterAlignmentTrend(
+      req.user.project_id,
+      weeks.map((w) => w.id),
+      scope
+    );
+    res.json({ trend });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function teamTags(req, res) {
   const ctx = await requireAggregateAccess(req, res);
   if (!ctx) return;
@@ -69,11 +112,34 @@ export async function teamTags(req, res) {
   res.json({ week: ctx.week, ...data });
 }
 
-export async function teamFocusWords(req, res) {
+/** ?weeks=1,2,3 — top strength/weakness tag counts per week, for the trend chart shown when multiple weeks are selected. */
+export async function teamTagTrend(req, res, next) {
+  try {
+    const scope = analyticsScope(req.user);
+    if (scope === "personal") {
+      return res.status(403).json({ error: "Your role has a personalised analytics view only" });
+    }
+    const weekIds = parseWeekIdsParam(req, res);
+    if (!weekIds) return;
+    const weeks = await prisma.week.findMany({ where: { id: { in: weekIds }, project_id: req.user.project_id } });
+    if (weeks.length === 0) return res.status(404).json({ error: "No matching weeks found" });
+
+    const data = await getTeamTagTrend(
+      req.user.project_id,
+      weeks.map((w) => w.id),
+      scope
+    );
+    res.json(data);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function teamFocusSuggestions(req, res) {
   const ctx = await requireAggregateAccess(req, res);
   if (!ctx) return;
-  const words = await getTeamFocusWords(req.user.project_id, ctx.week.id, ctx.scope);
-  res.json({ week: ctx.week, words });
+  const data = await getTeamFocusSuggestions(req.user.project_id, ctx.week.id, ctx.scope);
+  res.json({ week: ctx.week, ...data });
 }
 
 export async function teamTrajectory(req, res) {

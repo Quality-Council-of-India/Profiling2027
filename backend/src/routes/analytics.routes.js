@@ -5,8 +5,10 @@ import {
   sapaDistribution,
   quadrant,
   parameterAlignment,
+  parameterAlignmentTrend,
   teamTags,
-  teamFocusWords,
+  teamTagTrend,
+  teamFocusSuggestions,
   teamTrajectory,
   rankings,
   fieldStandings,
@@ -21,8 +23,10 @@ router.get("/heatmap/:weekId", authenticate, heatmap);
 router.get("/sapa/:weekId", authenticate, sapaDistribution);
 router.get("/quadrant/:weekId", authenticate, quadrant);
 router.get("/parameter-alignment/:weekId", authenticate, parameterAlignment);
+router.get("/parameter-alignment-trend", authenticate, parameterAlignmentTrend);
 router.get("/team-tags/:weekId", authenticate, teamTags);
-router.get("/team-focus-words/:weekId", authenticate, teamFocusWords);
+router.get("/team-tag-trend", authenticate, teamTagTrend);
+router.get("/team-focus-suggestions/:weekId", authenticate, teamFocusSuggestions);
 router.get("/team-trajectory/:weekId", authenticate, teamTrajectory);
 router.get("/rankings", authenticate, rankings);
 router.get("/field-standings", authenticate, fieldStandings);

@@ -197,6 +197,40 @@ export async function getParameterAlignment(projectId, weekId, scope) {
 }
 
 /**
+ * Same as getParameterAlignment, but one row per week — feeds the "% Aligned
+ * over time" trend chart shown when more than one week is selected.
+ */
+export async function getParameterAlignmentTrend(projectId, weekIds, scope) {
+  const weeks = await prisma.week.findMany({
+    where: { id: { in: weekIds }, project_id: projectId },
+    orderBy: { week_number: "asc" },
+  });
+  const users = await prisma.user.findMany({
+    where: { project_id: projectId, is_active: true, role: { not: ROLES.ADMIN }, ...roleFilterForScope(scope) },
+    include: { computedScores: { where: { week_id: { in: weekIds } } } },
+  });
+
+  return weeks.map((week) => {
+    const buckets = Object.fromEntries(PARAM_FIELDS.map((p) => [p.key, { aligned: 0, someGap: 0, largeGap: 0 }]));
+    for (const u of users) {
+      const score = u.computedScores.find((s) => s.week_id === week.id);
+      if (!score) continue;
+      for (const p of PARAM_FIELDS) {
+        const diff = Math.abs(Number(score[`${p.key}_self`]) - Number(score[`${p.key}_peer`]));
+        buckets[p.key][gapBucket(diff)] += 1;
+      }
+    }
+    const row = { weekLabel: week.label, weekNumber: week.week_number };
+    for (const p of PARAM_FIELDS) {
+      const b = buckets[p.key];
+      const total = b.aligned + b.someGap + b.largeGap;
+      row[p.key] = total > 0 ? Math.round((b.aligned / total) * 100) : null;
+    }
+    return row;
+  });
+}
+
+/**
  * Team Strengths & Growth Areas — strengths/weakness tag frequency across
  * every peer evaluation received for one week, team-wide (scoped the same
  * way as the other aggregate views).
@@ -230,12 +264,80 @@ export async function getTeamTagFrequency(projectId, weekId, scope) {
   return { strengths: topSorted(strengthFreq), weaknesses: topSorted(weaknessFreq) };
 }
 
+const TAG_TREND_TOP_N = 5;
+
+/**
+ * Same idea as getTeamTagFrequency, but tracked over several weeks — picks
+ * a FIXED top-N set of tags (by total frequency across the whole selected
+ * range) so the trend lines track the same tags week to week, rather than
+ * whichever tags happened to be #1-5 in any single week.
+ */
+export async function getTeamTagTrend(projectId, weekIds, scope) {
+  const weeks = await prisma.week.findMany({
+    where: { id: { in: weekIds }, project_id: projectId },
+    orderBy: { week_number: "asc" },
+  });
+  const users = await prisma.user.findMany({
+    where: { project_id: projectId, is_active: true, role: { not: ROLES.ADMIN }, ...roleFilterForScope(scope) },
+    include: {
+      evaluationsReceived: {
+        where: { week_id: { in: weekIds }, eval_type: "peer" },
+        select: { week_id: true, strengths_tags: true, weakness_tags: true },
+      },
+    },
+  });
+
+  const perWeekStrength = new Map(weeks.map((w) => [w.id, {}]));
+  const perWeekWeakness = new Map(weeks.map((w) => [w.id, {}]));
+  const totalStrength = {};
+  const totalWeakness = {};
+  for (const u of users) {
+    for (const e of u.evaluationsReceived) {
+      const sBucket = perWeekStrength.get(e.week_id);
+      const wBucket = perWeekWeakness.get(e.week_id);
+      if (!sBucket) continue;
+      for (const tag of e.strengths_tags) {
+        sBucket[tag] = (sBucket[tag] || 0) + 1;
+        totalStrength[tag] = (totalStrength[tag] || 0) + 1;
+      }
+      for (const tag of e.weakness_tags) {
+        wBucket[tag] = (wBucket[tag] || 0) + 1;
+        totalWeakness[tag] = (totalWeakness[tag] || 0) + 1;
+      }
+    }
+  }
+
+  const topTags = (totals) =>
+    Object.entries(totals)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, TAG_TREND_TOP_N)
+      .map(([tag]) => tag);
+  const strengthTags = topTags(totalStrength);
+  const weaknessTags = topTags(totalWeakness);
+
+  const trendFor = (tags, perWeek) =>
+    weeks.map((week) => {
+      const bucket = perWeek.get(week.id) || {};
+      const row = { weekLabel: week.label, weekNumber: week.week_number };
+      for (const tag of tags) row[tag] = bucket[tag] || 0;
+      return row;
+    });
+
+  return {
+    strengthTags,
+    weaknessTags,
+    strengthTrend: trendFor(strengthTags, perWeekStrength),
+    weaknessTrend: trendFor(weaknessTags, perWeekWeakness),
+  };
+}
+
 // Generic English function words, plus a few filler verbs specific to how
 // this questionnaire's suggestions tend to be phrased ("needs to improve...",
-// "should take...") — excluded so the word cloud surfaces actual THEMES
-// (communication, ownership, deadlines, ...) instead of restating the
-// question. Deliberately generous rather than exhaustive.
-const FOCUS_WORD_STOPWORDS = new Set([
+// "should take...") — excluded before clustering so near-duplicate
+// suggestions match on their actual THEMES (communication, ownership,
+// deadlines, ...) instead of on filler words shared by every answer.
+// Deliberately generous rather than exhaustive.
+const SUGGESTION_STOPWORDS = new Set([
   "the", "a", "an", "to", "and", "of", "in", "on", "for", "is", "are", "be", "this", "that",
   "with", "should", "needs", "need", "more", "take", "can", "could", "would", "their", "them",
   "he", "she", "they", "his", "her", "as", "yet", "some", "cases", "while", "working", "from",
@@ -248,39 +350,103 @@ const FOCUS_WORD_STOPWORDS = new Set([
   "area", "areas", "things", "thing", "help", "work", "good", "well", "him", "one", "upon",
 ]);
 
+function tokenizeSuggestion(text) {
+  return (text.toLowerCase().match(/[a-z']+/g) || []).filter((w) => w.length >= 3 && !SUGGESTION_STOPWORDS.has(w));
+}
+
+function jaccardSimilarity(tokensA, tokensB) {
+  if (tokensA.length === 0 || tokensB.length === 0) return 0;
+  const setA = new Set(tokensA);
+  const setB = new Set(tokensB);
+  let intersection = 0;
+  for (const t of setA) if (setB.has(t)) intersection += 1;
+  const unionSize = new Set([...setA, ...setB]).size;
+  return unionSize === 0 ? 0 : intersection / unionSize;
+}
+
+// How much stopword-stripped word overlap two suggestions need to be
+// treated as "the same suggestion" — tuned for short (5-15 content word)
+// free-text answers, not long prose.
+const CLUSTER_JACCARD_THRESHOLD = 0.3;
+
 /**
- * What the team should focus on — word-frequency data for a word cloud,
- * built from every peer improvement-suggestion answer for one week. Plain
- * frequency counting after stopword removal — no NLP model available in
- * this stack (same honest limitation as the Quadrant sentiment heuristic).
+ * Groups near-duplicate free-text suggestions together by word overlap
+ * (Jaccard similarity on stopword-stripped tokens) — no NLP/ML service
+ * available in this stack, so this only catches suggestions worded
+ * similarly to each other, not ones that are merely related in meaning.
+ * Each cluster is compared against the FIRST suggestion that started it
+ * (not a running union of every member added since), so a cluster's
+ * definition stays anchored instead of drifting as it grows.
  */
-export async function getTeamFocusWords(projectId, weekId, scope) {
+function clusterSuggestions(texts) {
+  const clusters = []; // { anchorTokens, texts: Map<text, count> }
+  for (const text of texts) {
+    const tokens = tokenizeSuggestion(text);
+    if (tokens.length === 0) continue;
+    let cluster = clusters.find((c) => jaccardSimilarity(tokens, c.anchorTokens) >= CLUSTER_JACCARD_THRESHOLD);
+    if (!cluster) {
+      cluster = { anchorTokens: tokens, texts: new Map() };
+      clusters.push(cluster);
+    }
+    cluster.texts.set(text, (cluster.texts.get(text) || 0) + 1);
+  }
+  return clusters
+    .map((c) => {
+      const count = [...c.texts.values()].reduce((a, b) => a + b, 0);
+      const representative = [...c.texts.entries()].sort((a, b) => b[1] - a[1])[0][0];
+      return { anchorTokens: c.anchorTokens, representative, count };
+    })
+    .sort((a, b) => b.count - a.count);
+}
+
+const FOCUS_SUGGESTIONS_TOP_N = 8;
+
+/**
+ * What the team should focus on — the most-repeated peer "single most
+ * impactful action" suggestions, clustered by near-duplicate wording rather
+ * than reduced to a bag of individual words (a word cloud strips exactly the
+ * context that makes a short free-text answer actionable). Each returned
+ * cluster also reports how many SELF-evaluations that same week raised a
+ * similarly-worded suggestion about themselves, as a self-awareness signal —
+ * self answers are matched against peer clusters, not clustered on their own.
+ */
+export async function getTeamFocusSuggestions(projectId, weekId, scope) {
   const users = await prisma.user.findMany({
     where: { project_id: projectId, is_active: true, role: { not: ROLES.ADMIN }, ...roleFilterForScope(scope) },
     include: {
       evaluationsReceived: {
-        where: { week_id: weekId, eval_type: "peer" },
-        select: { improvement_suggestion: true },
+        where: { week_id: weekId, eval_type: { in: ["peer", "self"] } },
+        select: { eval_type: true, improvement_suggestion: true },
       },
     },
   });
 
-  const freq = {};
+  const peerTexts = [];
+  const selfTexts = [];
   for (const u of users) {
     for (const e of u.evaluationsReceived) {
       if (!e.improvement_suggestion) continue;
-      const words = e.improvement_suggestion.toLowerCase().match(/[a-z]+/g) || [];
-      for (const w of words) {
-        if (w.length < 3 || FOCUS_WORD_STOPWORDS.has(w)) continue;
-        freq[w] = (freq[w] || 0) + 1;
-      }
+      (e.eval_type === "peer" ? peerTexts : selfTexts).push(e.improvement_suggestion);
     }
   }
 
-  return Object.entries(freq)
-    .map(([word, count]) => ({ word, count }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 30);
+  const peerClusters = clusterSuggestions(peerTexts).slice(0, FOCUS_SUGGESTIONS_TOP_N);
+  const selfTokenized = selfTexts.map(tokenizeSuggestion);
+
+  const items = peerClusters.map((c) => {
+    const selfOverlapCount = selfTokenized.filter(
+      (tokens) => jaccardSimilarity(tokens, c.anchorTokens) >= CLUSTER_JACCARD_THRESHOLD
+    ).length;
+    return {
+      text: c.representative,
+      count: c.count,
+      pct: peerTexts.length ? Math.round((c.count / peerTexts.length) * 100) : 0,
+      selfOverlapCount,
+      selfOverlapPct: selfTexts.length ? Math.round((selfOverlapCount / selfTexts.length) * 100) : 0,
+    };
+  });
+
+  return { items, totalPeerSuggestions: peerTexts.length, totalSelfSuggestions: selfTexts.length };
 }
 
 /**
