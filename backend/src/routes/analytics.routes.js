@@ -19,15 +19,17 @@ import {
 
 const router = Router();
 
-router.get("/heatmap/:weekId", authenticate, heatmap);
-router.get("/sapa/:weekId", authenticate, sapaDistribution);
-router.get("/quadrant/:weekId", authenticate, quadrant);
-router.get("/parameter-alignment/:weekId", authenticate, parameterAlignment);
+// ?weeks=1,2,3 — one week for that week's numbers, several (including
+// "Cumulative") for an all-time combined view — see requireAggregateAccess.
+router.get("/heatmap", authenticate, heatmap);
+router.get("/sapa", authenticate, sapaDistribution);
+router.get("/quadrant", authenticate, quadrant);
+router.get("/parameter-alignment", authenticate, parameterAlignment);
 router.get("/parameter-alignment-trend", authenticate, parameterAlignmentTrend);
-router.get("/team-tags/:weekId", authenticate, teamTags);
+router.get("/team-tags", authenticate, teamTags);
 router.get("/team-tag-trend", authenticate, teamTagTrend);
-router.get("/team-focus-suggestions/:weekId", authenticate, teamFocusSuggestions);
-router.get("/team-trajectory/:weekId", authenticate, teamTrajectory);
+router.get("/team-focus-suggestions", authenticate, teamFocusSuggestions);
+router.get("/team-trajectory", authenticate, teamTrajectory);
 router.get("/rankings", authenticate, rankings);
 router.get("/field-standings", authenticate, fieldStandings);
 router.get("/field-members", authenticate, fieldMemberRankings);

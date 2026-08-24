@@ -108,29 +108,28 @@ export default function AnalyticsPage() {
     enabled: selectedWeekIds.length > 0 && !user.field,
   });
 
-  // Aggregate (heatmap/SAPA/quadrant) views are inherently single-week —
-  // use the most recent week among the current selection.
-  const aggregateWeekId = [...selectedWeekIds].sort((a, b) => b - a)[0];
-
+  // Every Team-Wide Analytics card now honors the full week selection: one
+  // week shows that week's numbers, several (including "Cumulative") pool
+  // into an all-time combined view — same rule Standings already followed.
   const heatmapQuery = useQuery({
-    queryKey: ["heatmap", aggregateWeekId],
-    queryFn: () => analyticsApi.heatmap(aggregateWeekId),
-    enabled: isAggregate && !!aggregateWeekId,
+    queryKey: ["heatmap", selectedWeekIds],
+    queryFn: () => analyticsApi.heatmap(selectedWeekIds),
+    enabled: isAggregate && selectedWeekIds.length > 0,
   });
   const sapaQuery = useQuery({
-    queryKey: ["sapa", aggregateWeekId],
-    queryFn: () => analyticsApi.sapa(aggregateWeekId),
-    enabled: isAggregate && !!aggregateWeekId,
+    queryKey: ["sapa", selectedWeekIds],
+    queryFn: () => analyticsApi.sapa(selectedWeekIds),
+    enabled: isAggregate && selectedWeekIds.length > 0,
   });
   const quadrantQuery = useQuery({
-    queryKey: ["quadrant", aggregateWeekId],
-    queryFn: () => analyticsApi.quadrant(aggregateWeekId),
-    enabled: isAggregate && !!aggregateWeekId,
+    queryKey: ["quadrant", selectedWeekIds],
+    queryFn: () => analyticsApi.quadrant(selectedWeekIds),
+    enabled: isAggregate && selectedWeekIds.length > 0,
   });
   const parameterAlignmentQuery = useQuery({
-    queryKey: ["parameterAlignment", aggregateWeekId],
-    queryFn: () => analyticsApi.parameterAlignment(aggregateWeekId),
-    enabled: isAggregate && !!aggregateWeekId,
+    queryKey: ["parameterAlignment", selectedWeekIds],
+    queryFn: () => analyticsApi.parameterAlignment(selectedWeekIds),
+    enabled: isAggregate && selectedWeekIds.length > 0,
   });
   const parameterAlignmentTrendQuery = useQuery({
     queryKey: ["parameterAlignmentTrend", selectedWeekIds],
@@ -138,9 +137,9 @@ export default function AnalyticsPage() {
     enabled: isAggregate && isMulti,
   });
   const teamTagsQuery = useQuery({
-    queryKey: ["teamTags", aggregateWeekId],
-    queryFn: () => analyticsApi.teamTags(aggregateWeekId),
-    enabled: isAggregate && !!aggregateWeekId,
+    queryKey: ["teamTags", selectedWeekIds],
+    queryFn: () => analyticsApi.teamTags(selectedWeekIds),
+    enabled: isAggregate && selectedWeekIds.length > 0,
   });
   const teamTagTrendQuery = useQuery({
     queryKey: ["teamTagTrend", selectedWeekIds],
@@ -148,14 +147,14 @@ export default function AnalyticsPage() {
     enabled: isAggregate && isMulti,
   });
   const teamFocusSuggestionsQuery = useQuery({
-    queryKey: ["teamFocusSuggestions", aggregateWeekId],
-    queryFn: () => analyticsApi.teamFocusSuggestions(aggregateWeekId),
-    enabled: isAggregate && !!aggregateWeekId,
+    queryKey: ["teamFocusSuggestions", selectedWeekIds],
+    queryFn: () => analyticsApi.teamFocusSuggestions(selectedWeekIds),
+    enabled: isAggregate && selectedWeekIds.length > 0,
   });
   const teamTrajectoryQuery = useQuery({
-    queryKey: ["teamTrajectory", aggregateWeekId],
-    queryFn: () => analyticsApi.teamTrajectory(aggregateWeekId),
-    enabled: isAggregate && !!aggregateWeekId,
+    queryKey: ["teamTrajectory", selectedWeekIds],
+    queryFn: () => analyticsApi.teamTrajectory(selectedWeekIds),
+    enabled: isAggregate && selectedWeekIds.length > 0,
   });
 
   if (weeksQuery.isLoading) return <Spinner />;
@@ -186,6 +185,12 @@ export default function AnalyticsPage() {
               queryClient.invalidateQueries({ queryKey: ["heatmap"] });
               queryClient.invalidateQueries({ queryKey: ["sapa"] });
               queryClient.invalidateQueries({ queryKey: ["quadrant"] });
+              queryClient.invalidateQueries({ queryKey: ["parameterAlignment"] });
+              queryClient.invalidateQueries({ queryKey: ["parameterAlignmentTrend"] });
+              queryClient.invalidateQueries({ queryKey: ["teamTags"] });
+              queryClient.invalidateQueries({ queryKey: ["teamTagTrend"] });
+              queryClient.invalidateQueries({ queryKey: ["teamFocusSuggestions"] });
+              queryClient.invalidateQueries({ queryKey: ["teamTrajectory"] });
             }}
             isFetching={trendQuery.isFetching || rankingsQuery.isFetching}
             label="Refresh Analytics"
@@ -362,22 +367,29 @@ export default function AnalyticsPage() {
         )}
       </div>
 
-      {/* ── Leads/Admin: full aggregate views (single most-recent selected week) ── */}
+      {/* ── Leads/Admin: full aggregate views, honoring the full week selection ── */}
       {isAggregate && (
         <>
           <div>
-            <h2 className="text-base font-semibold text-slate-800 mt-2">
-              Team-Wide Analytics — {weeks.find((w) => w.id === aggregateWeekId)?.label}
-            </h2>
+            <h2 className="text-base font-semibold text-slate-800 mt-2">Team-Wide Analytics — {rangeLabel}</h2>
             <p className="text-xs text-slate-500">
-              Heatmap, SAPA distribution, Quadrant, and Team Momentum always reflect a single week — the most recent
-              one selected above. Per-Parameter Alignment and Team Strengths & Growth Areas also show a trend across
-              your full week selection once you pick more than one.
+              Every card below reflects your full week selection above — pick one week for that week's numbers, or
+              several (including "Cumulative") for an all-time combined view. Per-Parameter Alignment and Team
+              Strengths & Growth Areas additionally show a trend line across the selected weeks once you pick more
+              than one.
             </p>
           </div>
 
           <Card className="p-5">
             <h2 className="text-sm font-semibold text-slate-800 mb-1">Field-Wise Performance Heatmap (Peer Scores)</h2>
+            <CalcGuide>
+              <p>Each cell is the average Peer Score (1–7) for that field on that parameter.</p>
+              <p>
+                One week selected → that week's scores. Several weeks selected → each person's own scores are
+                averaged across those weeks first, then those per-person averages are averaged again across
+                everyone in the field.
+              </p>
+            </CalcGuide>
             {heatmapQuery.isLoading ? (
               <Spinner />
             ) : heatmapQuery.isError ? (
@@ -393,6 +405,14 @@ export default function AnalyticsPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <Card className="p-5 h-full flex flex-col">
               <h2 className="text-sm font-semibold text-slate-800 mb-4">SAPA Distribution by Role</h2>
+              <CalcGuide>
+                <p>
+                  Each person's SAPA Factor (their own Self score ÷ their Peer score) is averaged across your
+                  selected weeks, then classified: above 1.10 = Over-rater, below 0.90 = Under-rater, in between =
+                  Aligned.
+                </p>
+                <p>The bar shows what share of each role falls into each bucket.</p>
+              </CalcGuide>
               {sapaQuery.isLoading ? (
                 <Spinner />
               ) : sapaQuery.isError ? (
@@ -403,17 +423,36 @@ export default function AnalyticsPage() {
             </Card>
             <Card className="p-5 h-full flex flex-col">
               <h2 className="text-sm font-semibold text-slate-800 mb-4">Quadrant Analysis — Performance vs Sentiment</h2>
+              <CalcGuide>
+                <p>X-axis: each person's Total Peer Score, averaged across your selected weeks.</p>
+                <p>
+                  Y-axis: a sentiment score blended from their peer Trajectory answers (Improved/Declined) and how
+                  many Strength vs. Area-of-Improvement tags they received, pooled across your selected weeks. This
+                  is a simple formula, not an AI/sentiment model — there isn't one available in this stack.
+                </p>
+              </CalcGuide>
               {quadrantQuery.isLoading ? <Spinner /> : quadrantQuery.isError ? <ErrorBanner message="Failed to load quadrant data" /> : <QuadrantPlot points={quadrantQuery.data.points} />}
             </Card>
           </div>
 
           <Card className="p-5">
             <h2 className="text-sm font-semibold text-slate-800 mb-1">Per-Parameter Alignment — Self vs Peer</h2>
-            <p className="text-xs text-slate-500 mb-4">
+            <p className="text-xs text-slate-500 mb-2">
               For each parameter, what share of the team is Aligned, has Some Gap, or a Large Gap between their
               self-rating and how peers rated them — the same comparison as the individual scorecard, rolled up
               team-wide.
             </p>
+            <CalcGuide>
+              <p>
+                For every scored (person, week) pair in your selection, we take |Self score − Peer score| on that
+                parameter (both on the 1–7 scale) and bucket it: 0–1.0 = Aligned, 1.0–2.0 = Some Gap, above 2.0 =
+                Large Gap.
+              </p>
+              <p>
+                Several weeks selected → every week someone was scored counts as its own data point (not averaged
+                together first), so someone scored in 3 of 5 selected weeks contributes 3 gap readings, one per week.
+              </p>
+            </CalcGuide>
             {parameterAlignmentQuery.isLoading ? (
               <Spinner />
             ) : parameterAlignmentQuery.isError ? (
@@ -440,7 +479,14 @@ export default function AnalyticsPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <Card className="p-5">
               <h2 className="text-sm font-semibold text-slate-800 mb-1">Team Strengths & Growth Areas</h2>
-              <p className="text-xs text-slate-500 mb-3">Most-selected Strength and Area of Improvement tags across every peer evaluation this week.</p>
+              <p className="text-xs text-slate-500 mb-2">Most-selected Strength and Area of Improvement tags across every peer evaluation in your selection.</p>
+              <CalcGuide>
+                <p>Counts how many peer evaluations selected each tag, pooled across your selected weeks.</p>
+                <p>
+                  % is that tag's share of all peer evaluations in the selection — since each evaluation can select
+                  up to 3 tags, percentages across different tags don't add up to 100%.
+                </p>
+              </CalcGuide>
               {teamTagsQuery.isLoading ? (
                 <Spinner />
               ) : teamTagsQuery.isError ? (
@@ -487,10 +533,18 @@ export default function AnalyticsPage() {
 
             <Card className="p-5">
               <h2 className="text-sm font-semibold text-slate-800 mb-1">What the Team Should Focus On</h2>
-              <p className="text-xs text-slate-500 mb-4">
+              <p className="text-xs text-slate-500 mb-2">
                 The most-repeated peer suggestions to "What is the single most impactful action this person could
                 take to improve?" — similarly-worded suggestions are grouped together, peer-only.
               </p>
+              <CalcGuide>
+                <p>
+                  Peers' free-text answers are grouped by shared wording, not exact matches — there's no AI model in
+                  this stack, so two answers phrased quite differently might not group together even if they mean
+                  the same thing.
+                </p>
+                <p>Only the top suggestions are shown; the note below tells you what share of all suggestions that covers.</p>
+              </CalcGuide>
               {teamFocusSuggestionsQuery.isLoading ? (
                 <Spinner />
               ) : teamFocusSuggestionsQuery.isError ? (
@@ -503,10 +557,14 @@ export default function AnalyticsPage() {
 
           <Card className="p-5">
             <h2 className="text-sm font-semibold text-slate-800 mb-1">Team Momentum</h2>
-            <p className="text-xs text-slate-500 mb-4">
-              Share of peer Trajectory answers this week saying the person Improved, Stayed the Same, or Declined
-              compared to last week.
+            <p className="text-xs text-slate-500 mb-2">
+              Share of peer Trajectory answers saying the person Improved, Stayed the Same, or Declined compared to
+              the week before, pooled across your selection.
             </p>
+            <CalcGuide>
+              <p>Every peer Trajectory answer in your selected weeks is pooled into one Improved / Stayed the Same / Declined distribution.</p>
+              <p>First-time pairings with no prior week to compare against are excluded from the percentages (shown as "excluded" below).</p>
+            </CalcGuide>
             {teamTrajectoryQuery.isLoading ? (
               <Spinner />
             ) : teamTrajectoryQuery.isError ? (
@@ -668,9 +726,10 @@ function HeatmapCallout({ rows }) {
 /** Ranked list of clustered peer "focus" suggestions, replacing the old word cloud. */
 function TeamFocusSuggestions({ data }) {
   if (!data || !data.items || data.items.length === 0) {
-    return <p className="text-sm text-slate-400 text-center py-8">No suggestions submitted yet this week.</p>;
+    return <p className="text-sm text-slate-400 text-center py-8">No suggestions submitted yet in this selection.</p>;
   }
   const top = data.items[0].count;
+  const shownCount = data.items.length;
   return (
     <div className="space-y-2.5">
       {data.items.map((item, i) => (
@@ -688,7 +747,8 @@ function TeamFocusSuggestions({ data }) {
         </div>
       ))}
       <p className="text-[11px] text-slate-400 pt-1">
-        Based on {data.totalPeerSuggestions} peer suggestion{data.totalPeerSuggestions === 1 ? "" : "s"} this week
+        Top {shownCount} of {data.totalClusters} distinct suggestion{data.totalClusters === 1 ? "" : "s"} shown,
+        covering {data.coveragePct}% of {data.totalPeerSuggestions} peer suggestion{data.totalPeerSuggestions === 1 ? "" : "s"}
         {data.totalSelfSuggestions > 0 ? ` · compared against ${data.totalSelfSuggestions} self-evaluations` : ""}.
       </p>
     </div>
@@ -697,7 +757,7 @@ function TeamFocusSuggestions({ data }) {
 
 function TagRankBars({ items, color }) {
   if (!items || items.length === 0) {
-    return <p className="text-xs text-slate-400">No tags selected this week.</p>;
+    return <p className="text-xs text-slate-400">No tags selected in this range.</p>;
   }
   const top = items[0].count;
   return (
@@ -706,13 +766,26 @@ function TagRankBars({ items, color }) {
         <div key={t.tag}>
           <div className="flex items-start justify-between gap-2 mb-1">
             <span className="text-xs text-slate-700 leading-snug">{t.tag}</span>
-            <span className="text-xs text-slate-400 flex-shrink-0">{t.count}</span>
+            <span className="text-xs text-slate-400 flex-shrink-0">{t.count} · {t.pct}%</span>
           </div>
           <div className="w-full bg-slate-100 rounded-full h-1.5">
             <div className="h-1.5 rounded-full" style={{ width: `${top > 0 ? (t.count / top) * 100 : 0}%`, background: color }} />
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+/** Collapsible "How is this calculated?" explainer — same toggle+box pattern as Week Management's "Correcting an older week?" guide. */
+function CalcGuide({ children }) {
+  const [show, setShow] = useState(false);
+  return (
+    <div className="mb-3">
+      <button onClick={() => setShow((v) => !v)} className="text-xs font-medium text-nav hover:text-accent transition-standard">
+        {show ? "Hide guide" : "How is this calculated?"}
+      </button>
+      {show && <div className="mt-2 text-xs text-slate-600 bg-blue-50 border border-blue-100 rounded-lg p-3 space-y-1.5">{children}</div>}
     </div>
   );
 }

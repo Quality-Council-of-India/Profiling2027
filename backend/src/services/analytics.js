@@ -9,8 +9,17 @@ function clamp(n, lo, hi) {
   return Math.max(lo, Math.min(hi, n));
 }
 
-/** §4.6.01 Field-Wise Heatmap: 10 fields x 7 parameters, avg peer scores. */
-export async function getFieldHeatmap(projectId, weekId, scope) {
+/**
+ * §4.6.01 Field-Wise Heatmap: 10 fields x 7 parameters, avg peer scores.
+ * weekIds is one-or-more — same "averaged across the selection" rule as
+ * getFieldStandings/getRankings: each person's own per-parameter peer score
+ * is averaged across their scored weeks in the selection FIRST, then those
+ * per-person averages are averaged again within each field. Grouped by the
+ * user's CURRENT field (not a per-week snapshot) so a multi-week/cumulative
+ * selection doesn't have to reconcile someone appearing under different
+ * field names across a reshuffle — same convention getFieldStandings uses.
+ */
+export async function getFieldHeatmap(projectId, weekIds, scope) {
   const users = await prisma.user.findMany({
     where: {
       project_id: projectId,
@@ -18,21 +27,21 @@ export async function getFieldHeatmap(projectId, weekId, scope) {
       field: { not: null },
       ...roleFilterForScope(scope),
     },
-    include: { computedScores: { where: { week_id: weekId } } },
+    include: { computedScores: { where: { week_id: { in: weekIds } } } },
   });
 
   const byField = {};
   for (const u of users) {
-    const score = u.computedScores[0];
-    if (!score) continue;
-    // Group by the field frozen at compute time, not the user's current one —
-    // a later reshuffle shouldn't silently relabel this week's own numbers.
-    // Falls back to the live field for rows computed before this snapshot existed.
-    for (const field of fieldList(score.field || u.field)) {
+    const scores = u.computedScores;
+    if (scores.length === 0) continue;
+    const avgByParam = Object.fromEntries(
+      PARAM_FIELDS.map((p) => [p.label, scores.reduce((a, s) => a + Number(s[`${p.key}_peer`]), 0) / scores.length])
+    );
+    for (const field of fieldList(u.field)) {
       byField[field] ??= { count: 0, sums: Object.fromEntries(PARAM_FIELDS.map((p) => [p.label, 0])) };
       byField[field].count += 1;
       for (const p of PARAM_FIELDS) {
-        byField[field].sums[p.label] += Number(score[`${p.key}_peer`]);
+        byField[field].sums[p.label] += avgByParam[p.label];
       }
     }
   }
@@ -58,26 +67,34 @@ function sapaBucket(sapa) {
   return "aligned";
 }
 
-/** §4.6.03 SAPA Distribution — by role and by field. */
-export async function getSapaDistribution(projectId, weekId, scope) {
+/**
+ * §4.6.03 SAPA Distribution — by role and by field. weekIds is one-or-more:
+ * each person's SAPA factor is averaged across their scored weeks in the
+ * selection FIRST, then that single averaged figure is bucketed into
+ * over/aligned/under — same two-step-averaging convention as the heatmap,
+ * so a person's classification doesn't wobble between weeks.
+ */
+export async function getSapaDistribution(projectId, weekIds, scope) {
   const users = await prisma.user.findMany({
     where: { project_id: projectId, is_active: true, ...roleFilterForScope(scope) },
-    include: { computedScores: { where: { week_id: weekId } } },
+    include: { computedScores: { where: { week_id: { in: weekIds } } } },
   });
 
   function distribute(groupKeysFn) {
     const groups = {};
     for (const u of users) {
-      const score = u.computedScores[0];
-      const bucket = score ? sapaBucket(score.sapa_factor) : null;
+      const scored = u.computedScores.filter((s) => s.sapa_factor !== null);
+      if (scored.length === 0) continue;
+      const avgSapa = scored.reduce((a, s) => a + Number(s.sapa_factor), 0) / scored.length;
+      const bucket = sapaBucket(avgSapa);
       if (!bucket) continue;
       // A CASU Anchor covering more than one field counts toward each of them.
-      for (const key of groupKeysFn(u, score)) {
+      for (const key of groupKeysFn(u)) {
         groups[key] ??= { over: 0, aligned: 0, under: 0, sapaSum: 0, sapaCount: 0, members: { over: [], aligned: [], under: [] } };
         groups[key][bucket] += 1;
-        groups[key].sapaSum += Number(score.sapa_factor);
+        groups[key].sapaSum += avgSapa;
         groups[key].sapaCount += 1;
-        groups[key].members[bucket].push({ id: u.id, name: u.name, sapa: Math.round(Number(score.sapa_factor) * 100) / 100 });
+        groups[key].members[bucket].push({ id: u.id, name: u.name, sapa: Math.round(avgSapa * 100) / 100 });
       }
     }
     return Object.entries(groups).map(([key, g]) => {
@@ -95,12 +112,8 @@ export async function getSapaDistribution(projectId, weekId, scope) {
 
   return {
     byRole: distribute((u) => [u.role]),
-    // Frozen-at-compute-time field, falling back to the live one for rows
-    // computed before this snapshot existed — see getFieldHeatmap above.
-    byField: distribute((u, score) => {
-      const field = score.field || u.field;
-      return field ? fieldList(field) : ["—"];
-    }),
+    // Current field, not a per-week snapshot — see getFieldHeatmap above.
+    byField: distribute((u) => (u.field ? fieldList(u.field) : ["—"])),
   };
 }
 
@@ -109,16 +122,19 @@ export async function getSapaDistribution(projectId, weekId, scope) {
  * feedback received. Sentiment is a lightweight heuristic (no NLP model
  * available in this stack): blends the week-over-week Trajectory answers
  * (Improved/Stayed the Same/Declined) with the strength-vs-weakness tag
- * balance, both from peer submissions for the given week. Replace with a
- * real sentiment model if/when available.
+ * balance, both from peer submissions. Replace with a real sentiment model
+ * if/when available. weekIds is one-or-more: performance is averaged across
+ * the selection's scored weeks (same rule as getRankings), and sentiment is
+ * computed from every peer submission POOLED across the selection, not just
+ * the latest week.
  */
-export async function getQuadrantData(projectId, weekId, scope) {
+export async function getQuadrantData(projectId, weekIds, scope) {
   const users = await prisma.user.findMany({
     where: { project_id: projectId, is_active: true, ...roleFilterForScope(scope) },
     include: {
-      computedScores: { where: { week_id: weekId } },
+      computedScores: { where: { week_id: { in: weekIds } } },
       evaluationsReceived: {
-        where: { week_id: weekId, eval_type: "peer" },
+        where: { week_id: { in: weekIds }, eval_type: "peer" },
         select: { trajectory: true, strengths_tags: true, weakness_tags: true },
       },
     },
@@ -126,8 +142,9 @@ export async function getQuadrantData(projectId, weekId, scope) {
 
   return users
     .map((u) => {
-      const score = u.computedScores[0];
-      if (!score) return null;
+      const scores = u.computedScores;
+      if (scores.length === 0) return null;
+      const avgPerformance = scores.reduce((a, s) => a + Number(s.total_peer), 0) / scores.length;
       const peerEvals = u.evaluationsReceived;
       const improved = peerEvals.filter((e) => e.trajectory === "improved").length;
       const declined = peerEvals.filter((e) => e.trajectory === "declined").length;
@@ -149,8 +166,8 @@ export async function getQuadrantData(projectId, weekId, scope) {
         id: u.id,
         name: u.name,
         role: u.role,
-        field: score.field || u.field, // frozen at compute time; see getFieldHeatmap
-        performance: Number(score.total_peer), // X axis, out of 49
+        field: u.field, // current field, not a per-week snapshot — see getFieldHeatmap
+        performance: Math.round(avgPerformance * 100) / 100, // X axis, out of 49
         sentiment: Math.round(sentiment * 100) / 100, // Y axis, -1..1
       };
     })
@@ -170,23 +187,27 @@ function gapBucket(diff) {
 
 /**
  * Per-Parameter Alignment — team-wide self-vs-peer gap distribution for
- * each of the 7 parameters, for one week. Complements the heatmap (which
- * only shows peer-score magnitude): this answers "how many people are
- * aligned/have some gap/have a large gap" on each parameter, team-wide.
+ * each of the 7 parameters. Complements the heatmap (which only shows
+ * peer-score magnitude): this answers "how many people are aligned/have
+ * some gap/have a large gap" on each parameter, team-wide. weekIds is
+ * one-or-more: each (person, scored week) pair contributes its own gap
+ * classification, so someone scored in 3 of 5 selected weeks contributes 3
+ * data points, not one averaged point — this pools every week's evaluation
+ * instances together rather than pre-averaging a person's gap across weeks.
  */
-export async function getParameterAlignment(projectId, weekId, scope) {
+export async function getParameterAlignment(projectId, weekIds, scope) {
   const users = await prisma.user.findMany({
     where: { project_id: projectId, is_active: true, role: { not: ROLES.ADMIN }, ...roleFilterForScope(scope) },
-    include: { computedScores: { where: { week_id: weekId } } },
+    include: { computedScores: { where: { week_id: { in: weekIds } } } },
   });
 
   const buckets = Object.fromEntries(PARAM_FIELDS.map((p) => [p.key, { aligned: 0, someGap: 0, largeGap: 0 }]));
   for (const u of users) {
-    const score = u.computedScores[0];
-    if (!score) continue;
-    for (const p of PARAM_FIELDS) {
-      const diff = Math.abs(Number(score[`${p.key}_self`]) - Number(score[`${p.key}_peer`]));
-      buckets[p.key][gapBucket(diff)] += 1;
+    for (const score of u.computedScores) {
+      for (const p of PARAM_FIELDS) {
+        const diff = Math.abs(Number(score[`${p.key}_self`]) - Number(score[`${p.key}_peer`]));
+        buckets[p.key][gapBucket(diff)] += 1;
+      }
     }
   }
 
@@ -230,17 +251,23 @@ export async function getParameterAlignmentTrend(projectId, weekIds, scope) {
   });
 }
 
+const TEAM_TAGS_TOP_N = 10;
+
 /**
  * Team Strengths & Growth Areas — strengths/weakness tag frequency across
- * every peer evaluation received for one week, team-wide (scoped the same
- * way as the other aggregate views).
+ * every peer evaluation received, team-wide (scoped the same way as the
+ * other aggregate views). weekIds is one-or-more — every peer evaluation
+ * across the whole selection is pooled into one frequency count, same as
+ * every other Team-Wide Analytics card. Each tag's % is its share of every
+ * peer evaluation response in the selection (not of total tag-selections,
+ * so multi-tag responses don't inflate the denominator).
  */
-export async function getTeamTagFrequency(projectId, weekId, scope) {
+export async function getTeamTagFrequency(projectId, weekIds, scope) {
   const users = await prisma.user.findMany({
     where: { project_id: projectId, is_active: true, role: { not: ROLES.ADMIN }, ...roleFilterForScope(scope) },
     include: {
       evaluationsReceived: {
-        where: { week_id: weekId, eval_type: "peer" },
+        where: { week_id: { in: weekIds }, eval_type: "peer" },
         select: { strengths_tags: true, weakness_tags: true },
       },
     },
@@ -248,8 +275,10 @@ export async function getTeamTagFrequency(projectId, weekId, scope) {
 
   const strengthFreq = {};
   const weaknessFreq = {};
+  let responseCount = 0;
   for (const u of users) {
     for (const e of u.evaluationsReceived) {
+      responseCount += 1;
       for (const tag of e.strengths_tags) strengthFreq[tag] = (strengthFreq[tag] || 0) + 1;
       for (const tag of e.weakness_tags) weaknessFreq[tag] = (weaknessFreq[tag] || 0) + 1;
     }
@@ -257,11 +286,11 @@ export async function getTeamTagFrequency(projectId, weekId, scope) {
 
   const topSorted = (freq) =>
     Object.entries(freq)
-      .map(([tag, count]) => ({ tag, count }))
+      .map(([tag, count]) => ({ tag, count, pct: responseCount ? Math.round((count / responseCount) * 100) : 0 }))
       .sort((a, b) => b.count - a.count)
-      .slice(0, 8);
+      .slice(0, TEAM_TAGS_TOP_N);
 
-  return { strengths: topSorted(strengthFreq), weaknesses: topSorted(weaknessFreq) };
+  return { strengths: topSorted(strengthFreq), weaknesses: topSorted(weaknessFreq), responseCount };
 }
 
 const TAG_TREND_TOP_N = 5;
@@ -367,55 +396,88 @@ function jaccardSimilarity(tokensA, tokensB) {
 // How much stopword-stripped word overlap two suggestions need to be
 // treated as "the same suggestion" — tuned for short (5-15 content word)
 // free-text answers, not long prose.
-const CLUSTER_JACCARD_THRESHOLD = 0.3;
+const CLUSTER_JACCARD_THRESHOLD = 0.25;
 
 /**
  * Groups near-duplicate free-text suggestions together by word overlap
  * (Jaccard similarity on stopword-stripped tokens) — no NLP/ML service
  * available in this stack, so this only catches suggestions worded
  * similarly to each other, not ones that are merely related in meaning.
- * Each cluster is compared against the FIRST suggestion that started it
- * (not a running union of every member added since), so a cluster's
- * definition stays anchored instead of drifting as it grows.
+ *
+ * Every new suggestion is compared against EVERY existing member of EVERY
+ * existing cluster (not just whichever suggestion happened to start that
+ * cluster) — it joins whichever cluster it's most similar to on AVERAGE,
+ * as long as that average clears the threshold. This "average-linkage"
+ * approach is deliberately not "join if similar to ANY member" (single-
+ * linkage): single-linkage lets A~B~C chain together into one cluster even
+ * when A and C don't actually resemble each other, which snowballs into
+ * one meaningless bucket. Requiring the average over the whole cluster
+ * keeps a cluster's members mutually similar to each other as it grows,
+ * without needing every pair to match (too strict) or just one anchor
+ * (too order-dependent). With a few hundred suggestions at most per
+ * team-week, comparing every pair is computationally trivial — there's no
+ * performance reason to take the cheaper anchor-only shortcut.
  */
 function clusterSuggestions(texts) {
-  const clusters = []; // { anchorTokens, texts: Map<text, count> }
+  const clusters = []; // { members: [{ text, tokens }], counts: Map<text, count> }
   for (const text of texts) {
     const tokens = tokenizeSuggestion(text);
     if (tokens.length === 0) continue;
-    let cluster = clusters.find((c) => jaccardSimilarity(tokens, c.anchorTokens) >= CLUSTER_JACCARD_THRESHOLD);
-    if (!cluster) {
-      cluster = { anchorTokens: tokens, texts: new Map() };
-      clusters.push(cluster);
+
+    let bestCluster = null;
+    let bestAvg = 0;
+    for (const cluster of clusters) {
+      const avg =
+        cluster.members.reduce((sum, m) => sum + jaccardSimilarity(tokens, m.tokens), 0) / cluster.members.length;
+      if (avg > bestAvg) {
+        bestAvg = avg;
+        bestCluster = cluster;
+      }
     }
-    cluster.texts.set(text, (cluster.texts.get(text) || 0) + 1);
+
+    if (bestCluster && bestAvg >= CLUSTER_JACCARD_THRESHOLD) {
+      bestCluster.members.push({ text, tokens });
+      bestCluster.counts.set(text, (bestCluster.counts.get(text) || 0) + 1);
+    } else {
+      clusters.push({ members: [{ text, tokens }], counts: new Map([[text, 1]]) });
+    }
   }
+
   return clusters
     .map((c) => {
-      const count = [...c.texts.values()].reduce((a, b) => a + b, 0);
-      const representative = [...c.texts.entries()].sort((a, b) => b[1] - a[1])[0][0];
-      return { anchorTokens: c.anchorTokens, representative, count };
+      const count = [...c.counts.values()].reduce((a, b) => a + b, 0);
+      const representative = [...c.counts.entries()].sort((a, b) => b[1] - a[1])[0][0];
+      return { members: c.members, representative, count };
     })
     .sort((a, b) => b.count - a.count);
 }
 
-const FOCUS_SUGGESTIONS_TOP_N = 8;
+/** Average similarity of `tokens` to every member of a cluster — same metric clusterSuggestions uses to grow clusters, reused here to test self-suggestion overlap against a peer cluster as a whole (not just its representative). */
+function avgSimilarityToCluster(tokens, cluster) {
+  return cluster.members.reduce((sum, m) => sum + jaccardSimilarity(tokens, m.tokens), 0) / cluster.members.length;
+}
+
+const FOCUS_SUGGESTIONS_TOP_N = 10;
 
 /**
  * What the team should focus on — the most-repeated peer "single most
  * impactful action" suggestions, clustered by near-duplicate wording rather
  * than reduced to a bag of individual words (a word cloud strips exactly the
  * context that makes a short free-text answer actionable). Each returned
- * cluster also reports how many SELF-evaluations that same week raised a
- * similarly-worded suggestion about themselves, as a self-awareness signal —
- * self answers are matched against peer clusters, not clustered on their own.
+ * cluster also reports how many SELF-evaluations raised a similarly-worded
+ * suggestion about themselves, as a self-awareness signal — self answers
+ * are matched against peer clusters, not clustered on their own. weekIds is
+ * one-or-more: every selected week's suggestions (peer and self) are pooled
+ * together before clustering. Only the top N clusters are returned — see
+ * totalClusters/totalPeerSuggestions on the response for how much of the
+ * full set that covers.
  */
-export async function getTeamFocusSuggestions(projectId, weekId, scope) {
+export async function getTeamFocusSuggestions(projectId, weekIds, scope) {
   const users = await prisma.user.findMany({
     where: { project_id: projectId, is_active: true, role: { not: ROLES.ADMIN }, ...roleFilterForScope(scope) },
     include: {
       evaluationsReceived: {
-        where: { week_id: weekId, eval_type: { in: ["peer", "self"] } },
+        where: { week_id: { in: weekIds }, eval_type: { in: ["peer", "self"] } },
         select: { eval_type: true, improvement_suggestion: true },
       },
     },
@@ -430,13 +492,12 @@ export async function getTeamFocusSuggestions(projectId, weekId, scope) {
     }
   }
 
-  const peerClusters = clusterSuggestions(peerTexts).slice(0, FOCUS_SUGGESTIONS_TOP_N);
+  const allPeerClusters = clusterSuggestions(peerTexts);
+  const peerClusters = allPeerClusters.slice(0, FOCUS_SUGGESTIONS_TOP_N);
   const selfTokenized = selfTexts.map(tokenizeSuggestion);
 
   const items = peerClusters.map((c) => {
-    const selfOverlapCount = selfTokenized.filter(
-      (tokens) => jaccardSimilarity(tokens, c.anchorTokens) >= CLUSTER_JACCARD_THRESHOLD
-    ).length;
+    const selfOverlapCount = selfTokenized.filter((tokens) => avgSimilarityToCluster(tokens, c) >= CLUSTER_JACCARD_THRESHOLD).length;
     return {
       text: c.representative,
       count: c.count,
@@ -446,21 +507,30 @@ export async function getTeamFocusSuggestions(projectId, weekId, scope) {
     };
   });
 
-  return { items, totalPeerSuggestions: peerTexts.length, totalSelfSuggestions: selfTexts.length };
+  const shownCount = items.reduce((a, it) => a + it.count, 0);
+  return {
+    items,
+    totalPeerSuggestions: peerTexts.length,
+    totalSelfSuggestions: selfTexts.length,
+    totalClusters: allPeerClusters.length,
+    coveragePct: peerTexts.length ? Math.round((shownCount / peerTexts.length) * 100) : 0,
+  };
 }
 
 /**
- * Team Momentum — what fraction of peer Trajectory answers this week said
- * Improved / Stayed the Same / Declined, team-wide. "not_applicable" (first
- * scored week for that pairing) is tracked but excluded from the scored
- * total, same convention as the Quadrant sentiment heuristic.
+ * Team Momentum — what fraction of peer Trajectory answers said Improved /
+ * Stayed the Same / Declined, team-wide. "not_applicable" (first scored
+ * week for that pairing) is tracked but excluded from the scored total,
+ * same convention as the Quadrant sentiment heuristic. weekIds is
+ * one-or-more — every selected week's trajectory answers are pooled
+ * together into one distribution.
  */
-export async function getTeamTrajectory(projectId, weekId, scope) {
+export async function getTeamTrajectory(projectId, weekIds, scope) {
   const users = await prisma.user.findMany({
     where: { project_id: projectId, is_active: true, role: { not: ROLES.ADMIN }, ...roleFilterForScope(scope) },
     include: {
       evaluationsReceived: {
-        where: { week_id: weekId, eval_type: "peer" },
+        where: { week_id: { in: weekIds }, eval_type: "peer" },
         select: { trajectory: true },
       },
     },
