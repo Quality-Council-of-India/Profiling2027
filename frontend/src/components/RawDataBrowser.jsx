@@ -331,6 +331,11 @@ function renderCell(table, column, row) {
   if (["total_self", "total_peer", "sapa_factor"].includes(column)) {
     return val === null || val === undefined ? "—" : Number(val).toFixed(2);
   }
+  if (column === "strengths_tags" || column === "weakness_tags") {
+    if (!val || val.length === 0) return "—";
+    const otherText = column === "strengths_tags" ? row.strengths_other_text : row.weakness_other_text;
+    return val.map((tag) => (tag === "Others" && otherText ? `Others (${otherText})` : tag)).join(", ");
+  }
   if (typeof val === "boolean") return val ? "yes" : "no";
   if (Array.isArray(val)) return val.length ? val.join(", ") : "—";
   return val ?? "—";

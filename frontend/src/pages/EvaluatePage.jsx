@@ -30,6 +30,10 @@ export default function EvaluatePage() {
   const [ratings, setRatings] = useState(DEFAULT_RATINGS);
   const [selectedStrengths, setSelectedStrengths] = useState([]);
   const [selectedWeaknesses, setSelectedWeaknesses] = useState([]);
+  const [otherStrengthSelected, setOtherStrengthSelected] = useState(false);
+  const [otherStrengthText, setOtherStrengthText] = useState("");
+  const [otherWeaknessSelected, setOtherWeaknessSelected] = useState(false);
+  const [otherWeaknessText, setOtherWeaknessText] = useState("");
   const [improvementSuggestion, setImprovementSuggestion] = useState("");
   const [trajectory, setTrajectory] = useState("");
   const [submitted, setSubmitted] = useState(false);
@@ -89,6 +93,10 @@ export default function EvaluatePage() {
     setRatings(DEFAULT_RATINGS);
     setSelectedStrengths([]);
     setSelectedWeaknesses([]);
+    setOtherStrengthSelected(false);
+    setOtherStrengthText("");
+    setOtherWeaknessSelected(false);
+    setOtherWeaknessText("");
     setImprovementSuggestion("");
     setTrajectory("");
   }
@@ -99,8 +107,10 @@ export default function EvaluatePage() {
   // what's still missing rather than letting a partial answer through.
   function getMissingFields() {
     const missing = [];
-    if (selectedStrengths.length === 0) missing.push("At least one Strength tag");
-    if (selectedWeaknesses.length === 0) missing.push("At least one Area of Improvement tag");
+    if (selectedStrengths.length === 0 && !otherStrengthSelected) missing.push("At least one Strength tag");
+    if (otherStrengthSelected && !otherStrengthText.trim()) missing.push("The \"Others\" strength detail");
+    if (selectedWeaknesses.length === 0 && !otherWeaknessSelected) missing.push("At least one Area of Improvement tag");
+    if (otherWeaknessSelected && !otherWeaknessText.trim()) missing.push("The \"Others\" area of improvement detail");
     if (!improvementSuggestion.trim()) missing.push("The improvement suggestion");
     if (needsTrajectory && !trajectory) missing.push("The trajectory question (compared to last week)");
     return missing;
@@ -122,8 +132,10 @@ export default function EvaluatePage() {
       evaluatee_id: evaluateeId,
       eval_type: evalType,
       ...ratings,
-      strengths_tags: selectedStrengths,
-      weakness_tags: selectedWeaknesses,
+      strengths_tags: otherStrengthSelected ? [...selectedStrengths, "Others"] : selectedStrengths,
+      weakness_tags: otherWeaknessSelected ? [...selectedWeaknesses, "Others"] : selectedWeaknesses,
+      strengths_other_text: otherStrengthSelected ? otherStrengthText.trim() : undefined,
+      weakness_other_text: otherWeaknessSelected ? otherWeaknessText.trim() : undefined,
       improvement_suggestion: improvementSuggestion || null,
       trajectory: needsTrajectory ? trajectory : "not_applicable",
     });
@@ -314,7 +326,27 @@ export default function EvaluatePage() {
                 </button>
               );
             })}
+            <button
+              onClick={() => setOtherStrengthSelected((v) => !v)}
+              className={`px-2.5 py-1.5 rounded-md text-xs transition-standard border ${
+                otherStrengthSelected
+                  ? "bg-green-50 border-green-400 text-green-700 font-medium"
+                  : "border-slate-200 text-slate-600 hover:border-slate-400 hover:bg-slate-50"
+              }`}
+            >
+              {otherStrengthSelected ? "✓ " : ""}Others
+            </button>
           </div>
+          {otherStrengthSelected && (
+            <input
+              type="text"
+              value={otherStrengthText}
+              onChange={(e) => setOtherStrengthText(e.target.value)}
+              maxLength={200}
+              placeholder="Describe this strength…"
+              className="mt-2 w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-standard"
+            />
+          )}
         </div>
 
         <div className="mt-5">
@@ -346,7 +378,27 @@ export default function EvaluatePage() {
                 </button>
               );
             })}
+            <button
+              onClick={() => setOtherWeaknessSelected((v) => !v)}
+              className={`px-2.5 py-1.5 rounded-md text-xs transition-standard border ${
+                otherWeaknessSelected
+                  ? "bg-red-50 border-red-300 text-red-700 font-medium"
+                  : "border-slate-200 text-slate-600 hover:border-slate-400 hover:bg-slate-50"
+              }`}
+            >
+              {otherWeaknessSelected ? "✓ " : ""}Others
+            </button>
           </div>
+          {otherWeaknessSelected && (
+            <input
+              type="text"
+              value={otherWeaknessText}
+              onChange={(e) => setOtherWeaknessText(e.target.value)}
+              maxLength={200}
+              placeholder="Describe this area of improvement…"
+              className="mt-2 w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-standard"
+            />
+          )}
         </div>
 
         <div className="mt-5">
