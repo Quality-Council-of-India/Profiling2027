@@ -40,7 +40,7 @@ export default function RankingCard({ title, myRank, total, list, meId, emptyLab
       )}
 
       {list && (
-        <div className="max-h-64 overflow-y-auto -mx-1 px-1">
+        <div className="max-h-80 overflow-y-auto -mx-1 px-1">
           <table className="w-full text-xs">
             <tbody>
               {list.map((m) => (

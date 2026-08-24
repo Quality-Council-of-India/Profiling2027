@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { useAuth } from "../context/AuthContext.jsx";
 import { weeksApi, scoresApi, analyticsApi } from "../api/endpoints.js";
 import { Card, StatCard, Spinner, ErrorBanner, EmptyState, RefreshButton } from "../components/ui.jsx";
@@ -11,9 +11,18 @@ import PeerScoreTrendChart from "../components/charts/PeerScoreTrendChart.jsx";
 import HeatmapGrid from "../components/charts/HeatmapGrid.jsx";
 import QuadrantPlot from "../components/charts/QuadrantPlot.jsx";
 import SAPAGauge from "../components/charts/SAPAGauge.jsx";
-import { PARAM_FIELDS, ACCENT, NAV, ROLE_LABELS, TRAJECTORY_LABELS } from "../utils/constants.js";
+import { PARAM_FIELDS, PARAM_LABELS, ACCENT, NAV, ROLE_LABELS, TRAJECTORY_LABELS } from "../utils/constants.js";
 
 const AGGREGATE_ROLES = ["project_lead", "casu_lead", "admin"];
+
+// Categorical palette for the trend line charts (7 parameters / top-5 tags) —
+// distinct enough to tell apart, starting with the app's own NAV/ACCENT so
+// the first couple of lines feel consistent with the rest of the portal.
+const TREND_COLORS = ["#1F3864", "#E07B00", "#22C55E", "#8B5CF6", "#EC4899", "#0EA5E9", "#78716C"];
+
+function shortTagLabel(tag, max = 28) {
+  return tag.length > max ? `${tag.slice(0, max - 1)}…` : tag;
+}
 
 function tagLabel(tag, otherText) {
   return tag === "Others" && otherText ? `Others (${otherText})` : tag;
@@ -51,6 +60,7 @@ export default function AnalyticsPage() {
   const weeks = weeksQuery.data || [];
 
   const [selectedWeekIds, setSelectedWeekIds] = useState([]);
+  const isMulti = selectedWeekIds.length > 1;
   useEffect(() => {
     if (weeks.length && selectedWeekIds.length === 0) {
       // Prefer the currently open week — falling back to the most recently
@@ -122,14 +132,24 @@ export default function AnalyticsPage() {
     queryFn: () => analyticsApi.parameterAlignment(aggregateWeekId),
     enabled: isAggregate && !!aggregateWeekId,
   });
+  const parameterAlignmentTrendQuery = useQuery({
+    queryKey: ["parameterAlignmentTrend", selectedWeekIds],
+    queryFn: () => analyticsApi.parameterAlignmentTrend(selectedWeekIds),
+    enabled: isAggregate && isMulti,
+  });
   const teamTagsQuery = useQuery({
     queryKey: ["teamTags", aggregateWeekId],
     queryFn: () => analyticsApi.teamTags(aggregateWeekId),
     enabled: isAggregate && !!aggregateWeekId,
   });
-  const teamFocusWordsQuery = useQuery({
-    queryKey: ["teamFocusWords", aggregateWeekId],
-    queryFn: () => analyticsApi.teamFocusWords(aggregateWeekId),
+  const teamTagTrendQuery = useQuery({
+    queryKey: ["teamTagTrend", selectedWeekIds],
+    queryFn: () => analyticsApi.teamTagTrend(selectedWeekIds),
+    enabled: isAggregate && isMulti,
+  });
+  const teamFocusSuggestionsQuery = useQuery({
+    queryKey: ["teamFocusSuggestions", aggregateWeekId],
+    queryFn: () => analyticsApi.teamFocusSuggestions(aggregateWeekId),
     enabled: isAggregate && !!aggregateWeekId,
   });
   const teamTrajectoryQuery = useQuery({
@@ -145,7 +165,6 @@ export default function AnalyticsPage() {
   }
   if (selectedWeekIds.length === 0) return <Spinner />;
 
-  const isMulti = selectedWeekIds.length > 1;
   const rangeLabel = isMulti
     ? `${selectedWeekIds.length}-week average`
     : weeks.find((w) => w.id === selectedWeekIds[0])?.label || "";
@@ -301,7 +320,7 @@ export default function AnalyticsPage() {
       )}
 
       {/* ── Standings ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
         {rankingsQuery.isLoading ? (
           <Card className="p-6 lg:col-span-2 flex items-center justify-center">
             <Spinner />
@@ -350,15 +369,28 @@ export default function AnalyticsPage() {
             <h2 className="text-base font-semibold text-slate-800 mt-2">
               Team-Wide Analytics — {weeks.find((w) => w.id === aggregateWeekId)?.label}
             </h2>
-            <p className="text-xs text-slate-500">Heatmap, SAPA distribution, and quadrant always reflect a single week — the most recent one selected above.</p>
+            <p className="text-xs text-slate-500">
+              Heatmap, SAPA distribution, Quadrant, and Team Momentum always reflect a single week — the most recent
+              one selected above. Per-Parameter Alignment and Team Strengths & Growth Areas also show a trend across
+              your full week selection once you pick more than one.
+            </p>
           </div>
 
           <Card className="p-5">
-            <h2 className="text-sm font-semibold text-slate-800 mb-4">Field-Wise Performance Heatmap (Peer Scores)</h2>
-            {heatmapQuery.isLoading ? <Spinner /> : heatmapQuery.isError ? <ErrorBanner message="Failed to load heatmap" /> : <HeatmapGrid rows={heatmapQuery.data.heatmap} />}
+            <h2 className="text-sm font-semibold text-slate-800 mb-1">Field-Wise Performance Heatmap (Peer Scores)</h2>
+            {heatmapQuery.isLoading ? (
+              <Spinner />
+            ) : heatmapQuery.isError ? (
+              <ErrorBanner message="Failed to load heatmap" />
+            ) : (
+              <>
+                <HeatmapCallout rows={heatmapQuery.data.heatmap} />
+                <HeatmapGrid rows={heatmapQuery.data.heatmap} />
+              </>
+            )}
           </Card>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
             <Card className="p-5">
               <h2 className="text-sm font-semibold text-slate-800 mb-4">SAPA Distribution by Role</h2>
               {sapaQuery.isLoading ? <Spinner /> : sapaQuery.isError ? <ErrorBanner message="Failed to load SAPA distribution" /> : <SapaBars rows={sapaQuery.data.byRole} />}
@@ -383,42 +415,82 @@ export default function AnalyticsPage() {
             ) : (
               <ParameterAlignmentBars rows={parameterAlignmentQuery.data.alignment} />
             )}
+            {isMulti && (
+              <div className="mt-5 pt-4 border-t border-slate-100">
+                <p className="text-xs font-medium text-slate-600 mb-2">
+                  % Aligned — trend across your {selectedWeekIds.length} selected weeks
+                </p>
+                {parameterAlignmentTrendQuery.isLoading ? (
+                  <Spinner />
+                ) : parameterAlignmentTrendQuery.isError ? (
+                  <ErrorBanner message="Failed to load alignment trend" />
+                ) : (
+                  <ParameterAlignmentTrendChart rows={parameterAlignmentTrendQuery.data.trend} />
+                )}
+              </div>
+            )}
           </Card>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <Card className="p-5">
               <h2 className="text-sm font-semibold text-slate-800 mb-1">Team Strengths & Growth Areas</h2>
-              <p className="text-xs text-slate-500 mb-4">Most-selected Strength and Area of Improvement tags across every peer evaluation this week.</p>
+              <p className="text-xs text-slate-500 mb-3">Most-selected Strength and Area of Improvement tags across every peer evaluation this week.</p>
               {teamTagsQuery.isLoading ? (
                 <Spinner />
               ) : teamTagsQuery.isError ? (
                 <ErrorBanner message="Failed to load team tags" />
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-xs font-medium text-green-700 uppercase tracking-wide mb-2">Top Strengths</p>
-                    <TagRankBars items={teamTagsQuery.data.strengths} color={ACCENT} />
+                <>
+                  <TeamTagsCallout strengths={teamTagsQuery.data.strengths} weaknesses={teamTagsQuery.data.weaknesses} />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-xs font-medium text-green-700 uppercase tracking-wide mb-2">Top Strengths</p>
+                      <TagRankBars items={teamTagsQuery.data.strengths} color="#22C55E" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-red-700 uppercase tracking-wide mb-2">Top Areas of Improvement</p>
+                      <TagRankBars items={teamTagsQuery.data.weaknesses} color="#EF4444" />
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-xs font-medium text-red-700 uppercase tracking-wide mb-2">Top Areas of Improvement</p>
-                    <TagRankBars items={teamTagsQuery.data.weaknesses} color="#EF4444" />
-                  </div>
-                </div>
+                  {isMulti && (
+                    <div className="mt-5 pt-4 border-t border-slate-100">
+                      <p className="text-xs font-medium text-slate-600 mb-2">
+                        Trend across your {selectedWeekIds.length} selected weeks
+                      </p>
+                      {teamTagTrendQuery.isLoading ? (
+                        <Spinner />
+                      ) : teamTagTrendQuery.isError ? (
+                        <ErrorBanner message="Failed to load tag trend" />
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <p className="text-[11px] font-medium text-green-700 uppercase tracking-wide mb-1">Top Strengths</p>
+                            <TagTrendChart tags={teamTagTrendQuery.data.strengthTags} data={teamTagTrendQuery.data.strengthTrend} />
+                          </div>
+                          <div>
+                            <p className="text-[11px] font-medium text-red-700 uppercase tracking-wide mb-1">Top Areas of Improvement</p>
+                            <TagTrendChart tags={teamTagTrendQuery.data.weaknessTags} data={teamTagTrendQuery.data.weaknessTrend} />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
               )}
             </Card>
 
             <Card className="p-5">
               <h2 className="text-sm font-semibold text-slate-800 mb-1">What the Team Should Focus On</h2>
               <p className="text-xs text-slate-500 mb-4">
-                The most common words from peers' answers to "What is the single most impactful action this person
-                could take to improve?" — bigger means mentioned more often.
+                The most-repeated peer suggestions to "What is the single most impactful action this person could
+                take to improve?" — similarly-worded suggestions are grouped together, peer-only.
               </p>
-              {teamFocusWordsQuery.isLoading ? (
+              {teamFocusSuggestionsQuery.isLoading ? (
                 <Spinner />
-              ) : teamFocusWordsQuery.isError ? (
-                <ErrorBanner message="Failed to load focus words" />
+              ) : teamFocusSuggestionsQuery.isError ? (
+                <ErrorBanner message="Failed to load focus suggestions" />
               ) : (
-                <FocusWordCloud words={teamFocusWordsQuery.data.words} />
+                <TeamFocusSuggestions data={teamFocusSuggestionsQuery.data} />
               )}
             </Card>
           </div>
@@ -443,12 +515,34 @@ export default function AnalyticsPage() {
   );
 }
 
+/** The parameter with the widest combined Some Gap + Large Gap share — surfaced as a one-line callout. */
+function widestGapParameter(rows) {
+  let best = null;
+  for (const r of rows) {
+    if (!r.total) continue;
+    const someGapPct = Math.round((r.someGap / r.total) * 100);
+    const largeGapPct = Math.round((r.largeGap / r.total) * 100);
+    const gapPct = someGapPct + largeGapPct;
+    if (!best || gapPct > best.gapPct) best = { label: r.label, gapPct, someGapPct, largeGapPct };
+  }
+  return best;
+}
+
 function ParameterAlignmentBars({ rows }) {
   if (!rows || rows.every((r) => r.total === 0)) {
     return <p className="text-sm text-slate-400 text-center py-8">No scored data for this week yet.</p>;
   }
+  const totalScored = rows.find((r) => r.total > 0)?.total || 0;
+  const callout = widestGapParameter(rows);
   return (
     <div className="space-y-3">
+      <p className="text-xs text-slate-400">Based on {totalScored} scored team member{totalScored === 1 ? "" : "s"} this week.</p>
+      {callout && callout.gapPct > 0 && (
+        <p className="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-md px-3 py-2">
+          <span className="font-medium">{callout.label}</span> has the widest self-vs-peer gap on the team this
+          week — {callout.someGapPct}% Some Gap, {callout.largeGapPct}% Large Gap.
+        </p>
+      )}
       {rows.map((r) => {
         const total = r.total || 1;
         const alignedPct = Math.round((r.aligned / total) * 100);
@@ -456,10 +550,7 @@ function ParameterAlignmentBars({ rows }) {
         const largeGapPct = Math.max(0, 100 - alignedPct - someGapPct);
         return (
           <div key={r.key}>
-            <div className="flex justify-between text-xs text-slate-600 mb-1">
-              <span>{r.label}</span>
-              <span className="text-slate-400">{r.total} scored</span>
-            </div>
+            <div className="text-xs text-slate-600 mb-1">{r.label}</div>
             <div className="w-full h-2.5 rounded-full overflow-hidden flex bg-slate-100">
               {alignedPct > 0 && <div style={{ width: `${alignedPct}%`, background: "#22C55E" }} title={`Aligned ${alignedPct}%`} />}
               {someGapPct > 0 && <div style={{ width: `${someGapPct}%`, background: "#F59E0B" }} title={`Some Gap ${someGapPct}%`} />}
@@ -473,6 +564,127 @@ function ParameterAlignmentBars({ rows }) {
         <span className="flex items-center gap-1 text-xs text-slate-500"><span className="w-2 h-2 rounded-full inline-block" style={{ background: "#F59E0B" }} /> Some Gap</span>
         <span className="flex items-center gap-1 text-xs text-slate-500"><span className="w-2 h-2 rounded-full inline-block" style={{ background: "#EF4444" }} /> Large Gap</span>
       </div>
+    </div>
+  );
+}
+
+/** Multi-week % Aligned trend, one line per parameter — shown once more than one week is selected. */
+function ParameterAlignmentTrendChart({ rows }) {
+  if (!rows || rows.length === 0) return <p className="text-sm text-slate-400 text-center py-6">No data for this selection yet.</p>;
+  return (
+    <ResponsiveContainer width="100%" height={260}>
+      <LineChart data={rows}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+        <XAxis dataKey="weekLabel" tick={{ fontSize: 11 }} />
+        <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} unit="%" />
+        <Tooltip contentStyle={{ fontSize: 12 }} formatter={(v) => (v === null || v === undefined ? "—" : `${v}%`)} />
+        <Legend iconSize={8} wrapperStyle={{ fontSize: 10 }} formatter={(key) => SHORT_PARAM_LABELS[key] ?? key} />
+        {PARAM_FIELDS.map((p, i) => (
+          <Line
+            key={p.key}
+            type="monotone"
+            dataKey={p.key}
+            name={SHORT_PARAM_LABELS[p.key] ?? p.key}
+            stroke={TREND_COLORS[i % TREND_COLORS.length]}
+            strokeWidth={2}
+            dot={{ r: 2.5 }}
+            connectNulls
+          />
+        ))}
+      </LineChart>
+    </ResponsiveContainer>
+  );
+}
+
+/** Multi-week frequency trend for a fixed top-N set of tags (either all-strength or all-weakness). */
+function TagTrendChart({ tags, data }) {
+  if (!data || data.length === 0 || !tags || tags.length === 0) {
+    return <p className="text-xs text-slate-400 text-center py-6">No data for this selection yet.</p>;
+  }
+  return (
+    <ResponsiveContainer width="100%" height={220}>
+      <LineChart data={data}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+        <XAxis dataKey="weekLabel" tick={{ fontSize: 11 }} />
+        <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+        <Tooltip contentStyle={{ fontSize: 12 }} />
+        <Legend iconSize={8} wrapperStyle={{ fontSize: 10 }} formatter={(tag) => shortTagLabel(tag)} />
+        {tags.map((tag, i) => (
+          <Line key={tag} type="monotone" dataKey={tag} name={tag} stroke={TREND_COLORS[i % TREND_COLORS.length]} strokeWidth={2} dot={{ r: 2.5 }} connectNulls />
+        ))}
+      </LineChart>
+    </ResponsiveContainer>
+  );
+}
+
+/** One-line callout naming the single most-recognized strength and most-flagged growth area. */
+function TeamTagsCallout({ strengths, weaknesses }) {
+  if (!strengths?.length && !weaknesses?.length) return null;
+  return (
+    <p className="text-xs text-slate-600 bg-slate-50 border border-slate-100 rounded-md px-3 py-2 mb-3">
+      {strengths?.length ? (
+        <>
+          Most recognized: <span className="font-medium">"{strengths[0].tag}"</span>.{" "}
+        </>
+      ) : null}
+      {weaknesses?.length ? (
+        <>
+          Most flagged to improve: <span className="font-medium">"{weaknesses[0].tag}"</span>.
+        </>
+      ) : null}
+    </p>
+  );
+}
+
+/** One-line callout naming the strongest and weakest field/parameter cell in the heatmap. */
+function HeatmapCallout({ rows }) {
+  if (!rows || rows.length === 0) return null;
+  let best = null;
+  let worst = null;
+  for (const row of rows) {
+    for (const label of PARAM_LABELS) {
+      const v = row[label];
+      if (v === undefined || v === null) continue;
+      if (!best || v > best.value) best = { field: row.field, param: label, value: v };
+      if (!worst || v < worst.value) worst = { field: row.field, param: label, value: v };
+    }
+  }
+  if (!best || !worst) return null;
+  return (
+    <p className="text-xs text-slate-500 mb-3">
+      Strongest cell: <span className="font-medium text-slate-700">{best.field}</span> on {best.param} (
+      {best.value.toFixed(1)}). Weakest cell: <span className="font-medium text-slate-700">{worst.field}</span> on{" "}
+      {worst.param} ({worst.value.toFixed(1)}).
+    </p>
+  );
+}
+
+/** Ranked list of clustered peer "focus" suggestions, replacing the old word cloud. */
+function TeamFocusSuggestions({ data }) {
+  if (!data || !data.items || data.items.length === 0) {
+    return <p className="text-sm text-slate-400 text-center py-8">No suggestions submitted yet this week.</p>;
+  }
+  const top = data.items[0].count;
+  return (
+    <div className="space-y-2.5">
+      {data.items.map((item, i) => (
+        <div key={i} className="border border-slate-100 rounded-lg p-2.5">
+          <p className="text-xs text-slate-700 mb-1.5">{item.text}</p>
+          <div className="flex items-center gap-2">
+            <div className="flex-1 bg-slate-100 rounded-full h-1.5">
+              <div className="h-1.5 rounded-full" style={{ width: `${top > 0 ? (item.count / top) * 100 : 0}%`, background: NAV }} />
+            </div>
+            <span className="text-[11px] text-slate-400 flex-shrink-0">{item.count} · {item.pct}%</span>
+          </div>
+          {item.selfOverlapCount > 0 && (
+            <p className="text-[11px] text-slate-400 mt-1">Also self-identified in {item.selfOverlapPct}% of self-evaluations.</p>
+          )}
+        </div>
+      ))}
+      <p className="text-[11px] text-slate-400 pt-1">
+        Based on {data.totalPeerSuggestions} peer suggestion{data.totalPeerSuggestions === 1 ? "" : "s"} this week
+        {data.totalSelfSuggestions > 0 ? ` · compared against ${data.totalSelfSuggestions} self-evaluations` : ""}.
+      </p>
     </div>
   );
 }
@@ -494,30 +706,6 @@ function TagRankBars({ items, color }) {
             <div className="h-1.5 rounded-full" style={{ width: `${top > 0 ? (t.count / top) * 100 : 0}%`, background: color }} />
           </div>
         </div>
-      ))}
-    </div>
-  );
-}
-
-function FocusWordCloud({ words }) {
-  if (!words || words.length === 0) {
-    return <p className="text-sm text-slate-400 text-center py-8">No improvement suggestions yet this week.</p>;
-  }
-  const max = words[0].count;
-  const min = words[words.length - 1].count;
-  const scale = (count) => (max === min ? 16 : 12 + ((count - min) / (max - min)) * 20);
-  const fade = (count) => (max === min ? 1 : 0.55 + 0.45 * ((count - min) / (max - min)));
-  return (
-    <div className="flex flex-wrap gap-x-3 gap-y-2 items-center justify-center py-2">
-      {words.map((w) => (
-        <span
-          key={w.word}
-          title={`${w.word} — mentioned ${w.count} time${w.count === 1 ? "" : "s"}`}
-          style={{ fontSize: `${scale(w.count)}px`, color: NAV, opacity: fade(w.count) }}
-          className="font-medium leading-none"
-        >
-          {w.word}
-        </span>
       ))}
     </div>
   );
@@ -555,7 +743,7 @@ function SapaBars({ rows }) {
   const [expandedKey, setExpandedKey] = useState(null);
   if (!rows.length) return <p className="text-sm text-slate-400">No SAPA data for this week yet.</p>;
   return (
-    <div className="space-y-3">
+    <div className="space-y-5">
       {rows.map((r) => {
         const isOpen = expandedKey === r.key;
         return (
