@@ -1,17 +1,32 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, Spinner, ErrorBanner } from "./ui.jsx";
 import { analyticsApi } from "../api/endpoints.js";
-import { FIELDS, ROLE_LABELS, ROLE_COLORS, NAV, ACCENT } from "../utils/constants.js";
+import { ROLE_LABELS, ROLE_COLORS, NAV, ACCENT } from "../utils/constants.js";
 
 /**
  * A leaderboard of FIELDS rather than individuals — shown instead of
  * "Standing in your field" for roles that don't belong to a single field
  * (Admin, CASU Lead, Project Lead). A field picker drills into the ranked
  * list of individual members within one chosen field.
+ *
+ * The picker's options come from `standings` (whatever field names actually
+ * have scored members in the currently selected week range) rather than the
+ * app's fixed FIELDS list — so a past week scored under old field names
+ * (before a reshuffle) stays drillable, and a future week only offers
+ * whichever new names actually have data.
  */
 export default function FieldStandingCard({ title, standings, weekIds }) {
   const [selectedField, setSelectedField] = useState("");
+
+  // Selecting a field, then changing the week range to one where that field
+  // no longer has any scored members, would otherwise leave the dropdown
+  // pointed at an option that no longer exists.
+  useEffect(() => {
+    if (selectedField && standings && !standings.some((s) => s.field === selectedField)) {
+      setSelectedField("");
+    }
+  }, [standings, selectedField]);
 
   const membersQuery = useQuery({
     queryKey: ["fieldMembers", weekIds, selectedField],
@@ -29,8 +44,8 @@ export default function FieldStandingCard({ title, standings, weekIds }) {
           className="px-2 py-1 border border-slate-300 rounded-lg text-xs"
         >
           <option value="">All Fields</option>
-          {FIELDS.map((f) => (
-            <option key={f} value={f}>{f}</option>
+          {(standings || []).map((s) => (
+            <option key={s.field} value={s.field}>{s.field}</option>
           ))}
         </select>
       </div>
