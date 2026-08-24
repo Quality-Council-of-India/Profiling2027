@@ -135,6 +135,8 @@ export async function queryTable(table, projectId, query) {
           trajectory: r.trajectory,
           strengths_tags: r.strengths_tags,
           weakness_tags: r.weakness_tags,
+          strengths_other_text: r.strengths_other_text,
+          weakness_other_text: r.weakness_other_text,
           improvement_suggestion: r.improvement_suggestion,
           submitted_at: r.submitted_at,
           locked: r.locked,

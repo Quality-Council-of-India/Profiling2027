@@ -380,6 +380,23 @@ export async function sendUserPasswordReset(req, res, next) {
   }
 }
 
+/** Same eligibility query as sendLoginCredentialsToAll, without sending
+ * anything — lets Admin see exactly who's about to be emailed before
+ * confirming, so the button is never a surprise blast. */
+export async function previewLoginCredentialsRecipients(req, res) {
+  const users = await prisma.user.findMany({
+    where: {
+      project_id: req.user.project_id,
+      is_active: true,
+      role: { not: ROLES.ADMIN },
+      credentials_sent_at: null,
+    },
+    select: { id: true, name: true, email: true, role: true },
+    orderBy: [{ role: "asc" }, { name: "asc" }],
+  });
+  res.json({ users });
+}
+
 /**
  * Generates a fresh temp password and emails it (the same "new account"
  * template roster import uses for first-time users) to every active

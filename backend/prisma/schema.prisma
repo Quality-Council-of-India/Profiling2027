@@ -197,6 +197,12 @@ model Evaluation {
   problem_solving_initiative  Int        @db.SmallInt
   strengths_tags              String[]
   weakness_tags               String[]
+  // Free-text detail behind the "Others" strengths/weakness tag — set only
+  // when "Others" is among the tags above. "Others" doesn't count toward
+  // the normal 3-tag cap, so it's tracked as its own optional add-on rather
+  // than folded into the capped tag arrays.
+  strengths_other_text        String?    @db.VarChar(200)
+  weakness_other_text         String?    @db.VarChar(200)
   improvement_suggestion      String?
   trajectory                  Trajectory
   submitted_at                DateTime   @default(now())

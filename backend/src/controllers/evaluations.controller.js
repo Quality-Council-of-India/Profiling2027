@@ -15,8 +15,12 @@ const submitSchema = z.object({
   timeliness_throughput: z.number().int().min(1).max(7),
   work_quality: z.number().int().min(1).max(7),
   problem_solving_initiative: z.number().int().min(1).max(7),
-  strengths_tags: z.array(z.string()).min(1, "Select at least one Strength").max(MAX_TAGS_PER_CATEGORY),
-  weakness_tags: z.array(z.string()).min(1, "Select at least one Area of Improvement").max(MAX_TAGS_PER_CATEGORY),
+  // +1 headroom for "Others", which doesn't count toward the normal cap —
+  // enforced precisely (excluding "Others") after parsing, below.
+  strengths_tags: z.array(z.string()).min(1, "Select at least one Strength").max(MAX_TAGS_PER_CATEGORY + 1),
+  weakness_tags: z.array(z.string()).min(1, "Select at least one Area of Improvement").max(MAX_TAGS_PER_CATEGORY + 1),
+  strengths_other_text: z.string().trim().max(200).optional(),
+  weakness_other_text: z.string().trim().max(200).optional(),
   improvement_suggestion: z.string().trim().min(1, "The improvement suggestion is required"),
   trajectory: z.enum(["improved", "stayed_same", "declined", "not_applicable"]),
 });
@@ -24,6 +28,24 @@ const submitSchema = z.object({
 export async function submitEvaluation(req, res, next) {
   try {
     const body = submitSchema.parse(req.body);
+
+    // "Others" is exempt from the normal 3-tag cap, so the array's own max
+    // (above) only bounds the total — check the capped tags separately here,
+    // and require the free-text detail whenever "Others" is selected.
+    if (body.strengths_tags.filter((t) => t !== "Others").length > MAX_TAGS_PER_CATEGORY) {
+      return res.status(400).json({ error: `Select at most ${MAX_TAGS_PER_CATEGORY} Strength tags (not counting "Others")` });
+    }
+    if (body.weakness_tags.filter((t) => t !== "Others").length > MAX_TAGS_PER_CATEGORY) {
+      return res.status(400).json({ error: `Select at most ${MAX_TAGS_PER_CATEGORY} Area of Improvement tags (not counting "Others")` });
+    }
+    if (body.strengths_tags.includes("Others") && !body.strengths_other_text?.trim()) {
+      return res.status(400).json({ error: "Describe the \"Others\" strength" });
+    }
+    if (body.weakness_tags.includes("Others") && !body.weakness_other_text?.trim()) {
+      return res.status(400).json({ error: "Describe the \"Others\" area of improvement" });
+    }
+    const strengths_other_text = body.strengths_tags.includes("Others") ? body.strengths_other_text.trim() : null;
+    const weakness_other_text = body.weakness_tags.includes("Others") ? body.weakness_other_text.trim() : null;
 
     const week = await prisma.week.findFirst({
       where: { id: body.week_id, project_id: req.user.project_id },
@@ -84,6 +106,8 @@ export async function submitEvaluation(req, res, next) {
         problem_solving_initiative: body.problem_solving_initiative,
         strengths_tags: body.strengths_tags,
         weakness_tags: body.weakness_tags,
+        strengths_other_text,
+        weakness_other_text,
         improvement_suggestion: body.improvement_suggestion,
         trajectory: body.trajectory,
         locked: true,
@@ -98,6 +122,8 @@ export async function submitEvaluation(req, res, next) {
         problem_solving_initiative: body.problem_solving_initiative,
         strengths_tags: body.strengths_tags,
         weakness_tags: body.weakness_tags,
+        strengths_other_text,
+        weakness_other_text,
         improvement_suggestion: body.improvement_suggestion,
         trajectory: body.trajectory,
         submitted_at: new Date(),

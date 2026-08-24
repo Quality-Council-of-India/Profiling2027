@@ -3,15 +3,15 @@
 // seeded data and the live form always use the same parameter/tag set.
 
 export const FIELDS = [
-  "Arts",
-  "Literature & Education",
+  "Arts - 1",
+  "Arts - 2",
+  "Literature & Education and Sports - 1",
+  "Literature & Education and Sports - 2",
   "Medicine",
-  "Others",
-  "Public Affairs & Civil Services",
+  "Public Affairs & Civil Services and Social Work - 1",
   "Science & Engineering",
-  "Social Work",
-  "Sports",
-  "Trade & Industry",
+  "Social Work - 2",
+  "Trade & Industry and Others",
 ];
 
 // [Profiling 2027] Feedback Form Revised Questionnaire v2, §4 Part I — 7

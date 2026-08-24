@@ -28,6 +28,8 @@ export async function getSubjectiveSummary(weekId, userId) {
         trajectory: true,
         strengths_tags: true,
         weakness_tags: true,
+        strengths_other_text: true,
+        weakness_other_text: true,
         improvement_suggestion: true,
       },
     }),
@@ -39,6 +41,8 @@ export async function getSubjectiveSummary(weekId, userId) {
           trajectory: selfEval.trajectory,
           strengths_tags: selfEval.strengths_tags,
           weakness_tags: selfEval.weakness_tags,
+          strengths_other_text: selfEval.strengths_other_text,
+          weakness_other_text: selfEval.weakness_other_text,
           improvement_suggestion: selfEval.improvement_suggestion,
         }
       : null,
@@ -52,6 +56,8 @@ export async function getSubjectiveSummary(weekId, userId) {
       },
       strengthsFrequency: tagFrequency(peerEvals, "strengths_tags"),
       weaknessFrequency: tagFrequency(peerEvals, "weakness_tags"),
+      othersStrengthTexts: peerEvals.map((e) => e.strengths_other_text).filter(Boolean),
+      othersWeaknessTexts: peerEvals.map((e) => e.weakness_other_text).filter(Boolean),
       improvementSuggestions: peerEvals.map((e) => e.improvement_suggestion).filter(Boolean),
     },
   };
