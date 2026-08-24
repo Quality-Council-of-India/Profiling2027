@@ -1,7 +1,7 @@
 import { Fragment, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { adminApi } from "../api/endpoints.js";
-import { Card, Spinner, ErrorBanner, Badge } from "./ui.jsx";
+import { Card, Spinner, ErrorBanner, Badge, Modal } from "./ui.jsx";
 import { ROLE_LABELS, ROLE_COLORS } from "../utils/constants.js";
 import { useAuth } from "../context/AuthContext.jsx";
 
@@ -38,6 +38,7 @@ function credentialStatus(u) {
 export default function PasswordManager() {
   const { user: currentUser } = useAuth();
   const canEdit = currentUser?.is_master_admin || currentUser?.can_manage_passwords;
+  const queryClient = useQueryClient();
   const usersQuery = useQuery({ queryKey: ["adminUsers"], queryFn: adminApi.listUsers });
   const [openRowId, setOpenRowId] = useState(null);
   const [passwordDraft, setPasswordDraft] = useState("");
@@ -45,10 +46,19 @@ export default function PasswordManager() {
   const [bulkMessage, setBulkMessage] = useState(null);
   const [statusFilter, setStatusFilter] = useState("all");
   const [showGuide, setShowGuide] = useState(false);
+  const [showRecipientPreview, setShowRecipientPreview] = useState(false);
+
+  const previewQuery = useQuery({
+    queryKey: ["credentialsPreview"],
+    queryFn: adminApi.previewLoginCredentialsRecipients,
+    enabled: showRecipientPreview,
+  });
 
   const sendAllMutation = useMutation({
     mutationFn: adminApi.sendLoginCredentialsToAll,
     onSuccess: (data) => {
+      setShowRecipientPreview(false);
+      queryClient.invalidateQueries({ queryKey: ["adminUsers"] });
       setBulkMessage({
         type: data.failed.length ? "error" : "success",
         text:
@@ -64,14 +74,12 @@ export default function PasswordManager() {
   });
 
   function startSendAll() {
-    if (
-      window.confirm(
-        "Send login credentials to everyone who's never been sent any? This resets and emails a new password only to active users who've never received credentials before — anyone who's already logged in and set their own password is left untouched."
-      )
-    ) {
-      setBulkMessage(null);
-      sendAllMutation.mutate();
-    }
+    setBulkMessage(null);
+    setShowRecipientPreview(true);
+  }
+
+  function confirmSendAll() {
+    sendAllMutation.mutate();
   }
 
   const setPasswordMutation = useMutation({
@@ -135,6 +143,58 @@ export default function PasswordManager() {
           {sendAllMutation.isPending ? "Sending…" : "Send Login Credentials to New Users"}
         </button>
       </div>
+
+      {showRecipientPreview && (
+        <Modal title="Confirm recipients" onClose={() => setShowRecipientPreview(false)} widthClass="max-w-md">
+          <div className="p-5">
+            {previewQuery.isLoading ? (
+              <Spinner />
+            ) : previewQuery.isError ? (
+              <ErrorBanner message="Failed to load recipient list" />
+            ) : previewQuery.data.length === 0 ? (
+              <p className="text-sm text-slate-500">
+                Everyone already has credentials — nobody is due to be sent any.
+              </p>
+            ) : (
+              <>
+                <p className="text-xs text-slate-500 mb-3">
+                  This will email a fresh temporary password to the following {previewQuery.data.length} user(s), who've
+                  never been sent credentials before:
+                </p>
+                <div className="max-h-64 overflow-y-auto space-y-1 mb-4 -mx-1">
+                  {previewQuery.data.map((u) => (
+                    <div key={u.id} className="flex items-center justify-between gap-2 px-2 py-1.5 rounded-md hover:bg-slate-50">
+                      <div className="min-w-0">
+                        <p className="text-sm text-slate-800 truncate">{u.name}</p>
+                        <p className="text-xs text-slate-400 truncate">{u.email}</p>
+                      </div>
+                      <Badge text={ROLE_LABELS[u.role]} color={ROLE_COLORS[u.role]} />
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowRecipientPreview(false)}
+                className="px-3 py-1.5 rounded-md border border-slate-300 text-xs font-medium text-slate-600 hover:bg-slate-50 transition-standard"
+              >
+                Cancel
+              </button>
+              {previewQuery.data?.length > 0 && (
+                <button
+                  onClick={confirmSendAll}
+                  disabled={sendAllMutation.isPending}
+                  className="px-3 py-1.5 rounded-md text-white text-xs font-medium bg-nav hover:bg-nav-deep disabled:opacity-50 transition-standard"
+                >
+                  {sendAllMutation.isPending ? "Sending…" : `Confirm & Send to ${previewQuery.data.length}`}
+                </button>
+              )}
+            </div>
+          </div>
+        </Modal>
+      )}
+
       <p className="text-xs text-slate-500 mb-1">
         Existing passwords are one-way hashed and can never be viewed by anyone, including Admin — that's a
         deliberate security property, not a missing feature. What Admin <em>can</em> do: set a brand-new password

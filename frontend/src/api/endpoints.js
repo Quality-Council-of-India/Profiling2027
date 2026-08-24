@@ -39,6 +39,7 @@ export const evaluationsApi = {
 export const scoresApi = {
   userWeek: (userId, weekId) => api.get(`/scores/${userId}/${weekId}`).then((r) => r.data),
   trend: (userId) => api.get(`/scores/${userId}/trend`).then((r) => r.data),
+  selfEvalHistory: (userId) => api.get(`/scores/${userId}/self-eval-trend`).then((r) => r.data.history),
   team: (weekId) => api.get(`/scores/team/${weekId}`).then((r) => r.data),
 };
 
@@ -91,6 +92,7 @@ export const adminApi = {
       .then((r) => r.data);
   },
   sendUserPasswordReset: (userId) => api.post(`/admin/users/${userId}/send-reset`).then((r) => r.data),
+  previewLoginCredentialsRecipients: () => api.get("/admin/users/send-credentials-all/preview").then((r) => r.data.users),
   sendLoginCredentialsToAll: () => api.post("/admin/users/send-credentials-all").then((r) => r.data),
   rawTables: () => api.get("/admin/data").then((r) => r.data.tables),
   rawTable: (table, { page = 1, pageSize = 50, weekId, search, locked } = {}) =>

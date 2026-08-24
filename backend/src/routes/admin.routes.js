@@ -13,6 +13,7 @@ import {
   setUserPassword,
   setAdminPermissions,
   sendUserPasswordReset,
+  previewLoginCredentialsRecipients,
   sendLoginCredentialsToAll,
   sendBroadcastEmail,
   listEmailBroadcasts,
@@ -72,6 +73,7 @@ router.patch(
 );
 router.patch("/admins/:id/permissions", authenticate, requireRole(ROLES.ADMIN), requireMasterAdmin, setAdminPermissions);
 router.post("/users/:id/send-reset", authenticate, requireRole(ROLES.ADMIN), requireAdminAccess("passwords"), sendUserPasswordReset);
+router.get("/users/send-credentials-all/preview", authenticate, requireRole(ROLES.ADMIN), requireAdminAccess("passwords"), previewLoginCredentialsRecipients);
 router.post("/users/send-credentials-all", authenticate, requireRole(ROLES.ADMIN), requireAdminAccess("passwords"), sendLoginCredentialsToAll);
 router.post("/broadcast-email", authenticate, requireRole(ROLES.ADMIN), sendBroadcastEmail);
 router.get("/broadcast-email", authenticate, requireRole(ROLES.ADMIN), listEmailBroadcasts);
