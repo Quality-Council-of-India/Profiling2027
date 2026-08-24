@@ -157,6 +157,158 @@ export async function getQuadrantData(projectId, weekId, scope) {
     .filter(Boolean);
 }
 
+// Self-vs-peer gap on a single 1-7 parameter — same thresholds as the
+// individual Performance Scorecard (scorecard.js), so a team-wide view and
+// a personal one always agree on what counts as "aligned".
+const GAP_ALIGNED = 1.0;
+const GAP_MODERATE = 2.0;
+function gapBucket(diff) {
+  if (diff <= GAP_ALIGNED) return "aligned";
+  if (diff <= GAP_MODERATE) return "someGap";
+  return "largeGap";
+}
+
+/**
+ * Per-Parameter Alignment — team-wide self-vs-peer gap distribution for
+ * each of the 7 parameters, for one week. Complements the heatmap (which
+ * only shows peer-score magnitude): this answers "how many people are
+ * aligned/have some gap/have a large gap" on each parameter, team-wide.
+ */
+export async function getParameterAlignment(projectId, weekId, scope) {
+  const users = await prisma.user.findMany({
+    where: { project_id: projectId, is_active: true, role: { not: ROLES.ADMIN }, ...roleFilterForScope(scope) },
+    include: { computedScores: { where: { week_id: weekId } } },
+  });
+
+  const buckets = Object.fromEntries(PARAM_FIELDS.map((p) => [p.key, { aligned: 0, someGap: 0, largeGap: 0 }]));
+  for (const u of users) {
+    const score = u.computedScores[0];
+    if (!score) continue;
+    for (const p of PARAM_FIELDS) {
+      const diff = Math.abs(Number(score[`${p.key}_self`]) - Number(score[`${p.key}_peer`]));
+      buckets[p.key][gapBucket(diff)] += 1;
+    }
+  }
+
+  return PARAM_FIELDS.map((p) => {
+    const b = buckets[p.key];
+    return { key: p.key, label: p.label, ...b, total: b.aligned + b.someGap + b.largeGap };
+  });
+}
+
+/**
+ * Team Strengths & Growth Areas — strengths/weakness tag frequency across
+ * every peer evaluation received for one week, team-wide (scoped the same
+ * way as the other aggregate views).
+ */
+export async function getTeamTagFrequency(projectId, weekId, scope) {
+  const users = await prisma.user.findMany({
+    where: { project_id: projectId, is_active: true, role: { not: ROLES.ADMIN }, ...roleFilterForScope(scope) },
+    include: {
+      evaluationsReceived: {
+        where: { week_id: weekId, eval_type: "peer" },
+        select: { strengths_tags: true, weakness_tags: true },
+      },
+    },
+  });
+
+  const strengthFreq = {};
+  const weaknessFreq = {};
+  for (const u of users) {
+    for (const e of u.evaluationsReceived) {
+      for (const tag of e.strengths_tags) strengthFreq[tag] = (strengthFreq[tag] || 0) + 1;
+      for (const tag of e.weakness_tags) weaknessFreq[tag] = (weaknessFreq[tag] || 0) + 1;
+    }
+  }
+
+  const topSorted = (freq) =>
+    Object.entries(freq)
+      .map(([tag, count]) => ({ tag, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 8);
+
+  return { strengths: topSorted(strengthFreq), weaknesses: topSorted(weaknessFreq) };
+}
+
+// Generic English function words, plus a few filler verbs specific to how
+// this questionnaire's suggestions tend to be phrased ("needs to improve...",
+// "should take...") — excluded so the word cloud surfaces actual THEMES
+// (communication, ownership, deadlines, ...) instead of restating the
+// question. Deliberately generous rather than exhaustive.
+const FOCUS_WORD_STOPWORDS = new Set([
+  "the", "a", "an", "to", "and", "of", "in", "on", "for", "is", "are", "be", "this", "that",
+  "with", "should", "needs", "need", "more", "take", "can", "could", "would", "their", "them",
+  "he", "she", "they", "his", "her", "as", "yet", "some", "cases", "while", "working", "from",
+  "it", "its", "at", "by", "or", "but", "not", "also", "you", "your", "i", "we", "our", "us",
+  "has", "have", "had", "do", "does", "did", "been", "being", "was", "were", "will", "shall",
+  "may", "might", "must", "than", "so", "if", "about", "into", "up", "down", "out", "over",
+  "under", "again", "further", "then", "once", "here", "there", "when", "where", "why", "how",
+  "all", "any", "both", "each", "few", "most", "other", "such", "no", "nor", "only", "own",
+  "same", "too", "very", "just", "don", "now", "improve", "improving", "improved", "improvement",
+  "area", "areas", "things", "thing", "help", "work", "good", "well", "him", "one", "upon",
+]);
+
+/**
+ * What the team should focus on — word-frequency data for a word cloud,
+ * built from every peer improvement-suggestion answer for one week. Plain
+ * frequency counting after stopword removal — no NLP model available in
+ * this stack (same honest limitation as the Quadrant sentiment heuristic).
+ */
+export async function getTeamFocusWords(projectId, weekId, scope) {
+  const users = await prisma.user.findMany({
+    where: { project_id: projectId, is_active: true, role: { not: ROLES.ADMIN }, ...roleFilterForScope(scope) },
+    include: {
+      evaluationsReceived: {
+        where: { week_id: weekId, eval_type: "peer" },
+        select: { improvement_suggestion: true },
+      },
+    },
+  });
+
+  const freq = {};
+  for (const u of users) {
+    for (const e of u.evaluationsReceived) {
+      if (!e.improvement_suggestion) continue;
+      const words = e.improvement_suggestion.toLowerCase().match(/[a-z]+/g) || [];
+      for (const w of words) {
+        if (w.length < 3 || FOCUS_WORD_STOPWORDS.has(w)) continue;
+        freq[w] = (freq[w] || 0) + 1;
+      }
+    }
+  }
+
+  return Object.entries(freq)
+    .map(([word, count]) => ({ word, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 30);
+}
+
+/**
+ * Team Momentum — what fraction of peer Trajectory answers this week said
+ * Improved / Stayed the Same / Declined, team-wide. "not_applicable" (first
+ * scored week for that pairing) is tracked but excluded from the scored
+ * total, same convention as the Quadrant sentiment heuristic.
+ */
+export async function getTeamTrajectory(projectId, weekId, scope) {
+  const users = await prisma.user.findMany({
+    where: { project_id: projectId, is_active: true, role: { not: ROLES.ADMIN }, ...roleFilterForScope(scope) },
+    include: {
+      evaluationsReceived: {
+        where: { week_id: weekId, eval_type: "peer" },
+        select: { trajectory: true },
+      },
+    },
+  });
+
+  const counts = { improved: 0, stayed_same: 0, declined: 0, not_applicable: 0 };
+  for (const u of users) {
+    for (const e of u.evaluationsReceived) counts[e.trajectory] += 1;
+  }
+  const scoredTotal = counts.improved + counts.stayed_same + counts.declined;
+
+  return { counts, scoredTotal, total: scoredTotal + counts.not_applicable };
+}
+
 /**
  * Standings by Total Peer Score — for one week, or averaged across several
  * (the frontend's multi-select / "cumulative across all weeks" options both

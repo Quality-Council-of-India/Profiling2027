@@ -8,6 +8,15 @@ import RadarComparison from "../components/charts/RadarComparison.jsx";
 import { ComplianceIcon, AnalyticsIcon, AdminIcon } from "../components/icons.jsx";
 import { ACCENT } from "../utils/constants.js";
 
+function formatDateRange(start, end) {
+  if (!start || !end) return "";
+  const opts = { month: "short", day: "numeric" };
+  const s = new Date(start);
+  const e = new Date(end);
+  const sameYear = s.getFullYear() === e.getFullYear();
+  return `${s.toLocaleDateString(undefined, opts)} – ${e.toLocaleDateString(undefined, opts)}${sameYear ? `, ${e.getFullYear()}` : ""}`;
+}
+
 export default function DashboardPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -44,7 +53,7 @@ export default function DashboardPage() {
             {openWeek ? (
               <span className="inline-flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                {openWeek.label} is currently open
+                {openWeek.label} is currently open · {formatDateRange(openWeek.start_date, openWeek.end_date)}
               </span>
             ) : (
               "No week is currently open for submissions"
