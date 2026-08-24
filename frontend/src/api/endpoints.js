@@ -49,15 +49,17 @@ export const complianceApi = {
 };
 
 export const analyticsApi = {
-  heatmap: (weekId) => api.get(`/analytics/heatmap/${weekId}`).then((r) => r.data),
-  sapa: (weekId) => api.get(`/analytics/sapa/${weekId}`).then((r) => r.data),
-  quadrant: (weekId) => api.get(`/analytics/quadrant/${weekId}`).then((r) => r.data),
-  parameterAlignment: (weekId) => api.get(`/analytics/parameter-alignment/${weekId}`).then((r) => r.data),
+  // All of these take one-or-more week IDs — a single week for that week's
+  // numbers, several (including "Cumulative") for an all-time combined view.
+  heatmap: (weekIds) => api.get(`/analytics/heatmap?weeks=${weekIds.join(",")}`).then((r) => r.data),
+  sapa: (weekIds) => api.get(`/analytics/sapa?weeks=${weekIds.join(",")}`).then((r) => r.data),
+  quadrant: (weekIds) => api.get(`/analytics/quadrant?weeks=${weekIds.join(",")}`).then((r) => r.data),
+  parameterAlignment: (weekIds) => api.get(`/analytics/parameter-alignment?weeks=${weekIds.join(",")}`).then((r) => r.data),
   parameterAlignmentTrend: (weekIds) => api.get(`/analytics/parameter-alignment-trend?weeks=${weekIds.join(",")}`).then((r) => r.data),
-  teamTags: (weekId) => api.get(`/analytics/team-tags/${weekId}`).then((r) => r.data),
+  teamTags: (weekIds) => api.get(`/analytics/team-tags?weeks=${weekIds.join(",")}`).then((r) => r.data),
   teamTagTrend: (weekIds) => api.get(`/analytics/team-tag-trend?weeks=${weekIds.join(",")}`).then((r) => r.data),
-  teamFocusSuggestions: (weekId) => api.get(`/analytics/team-focus-suggestions/${weekId}`).then((r) => r.data),
-  teamTrajectory: (weekId) => api.get(`/analytics/team-trajectory/${weekId}`).then((r) => r.data),
+  teamFocusSuggestions: (weekIds) => api.get(`/analytics/team-focus-suggestions?weeks=${weekIds.join(",")}`).then((r) => r.data),
+  teamTrajectory: (weekIds) => api.get(`/analytics/team-trajectory?weeks=${weekIds.join(",")}`).then((r) => r.data),
   rankings: (weekIds) => api.get(`/analytics/rankings?weeks=${weekIds.join(",")}`).then((r) => r.data),
   fieldStandings: (weekIds) => api.get(`/analytics/field-standings?weeks=${weekIds.join(",")}`).then((r) => r.data),
   fieldMembers: (weekIds, field) =>

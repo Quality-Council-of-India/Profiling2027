@@ -35,6 +35,12 @@ function parseWeekIdsParam(req, res) {
   return weekIds;
 }
 
+/**
+ * Shared access+week-range check for every Team-Wide Analytics card.
+ * ?weeks=1,2,3 — one week for that week's numbers, several (including a
+ * "Cumulative" selection of every closed week) for an all-time combined
+ * view — same "one-or-more week IDs" contract as rankings/fieldStandings.
+ */
 async function requireAggregateAccess(req, res) {
   const scope = analyticsScope(req.user);
   if (scope === "personal") {
@@ -43,43 +49,45 @@ async function requireAggregateAccess(req, res) {
     });
     return null;
   }
-  const weekId = Number(req.params.weekId);
-  const week = await prisma.week.findFirst({
-    where: { id: weekId, project_id: req.user.project_id },
+  const weekIds = parseWeekIdsParam(req, res);
+  if (!weekIds) return null;
+  const weeks = await prisma.week.findMany({
+    where: { id: { in: weekIds }, project_id: req.user.project_id },
+    orderBy: { week_number: "asc" },
   });
-  if (!week) {
-    res.status(404).json({ error: "Week not found" });
+  if (weeks.length === 0) {
+    res.status(404).json({ error: "No matching weeks found" });
     return null;
   }
-  return { scope, week };
+  return { scope, weeks, weekIds: weeks.map((w) => w.id) };
 }
 
 export async function heatmap(req, res) {
   const ctx = await requireAggregateAccess(req, res);
   if (!ctx) return;
-  const data = await getFieldHeatmap(req.user.project_id, ctx.week.id, ctx.scope);
-  res.json({ week: ctx.week, heatmap: data });
+  const data = await getFieldHeatmap(req.user.project_id, ctx.weekIds, ctx.scope);
+  res.json({ weeks: ctx.weeks, heatmap: data });
 }
 
 export async function sapaDistribution(req, res) {
   const ctx = await requireAggregateAccess(req, res);
   if (!ctx) return;
-  const data = await getSapaDistribution(req.user.project_id, ctx.week.id, ctx.scope);
-  res.json({ week: ctx.week, ...data });
+  const data = await getSapaDistribution(req.user.project_id, ctx.weekIds, ctx.scope);
+  res.json({ weeks: ctx.weeks, ...data });
 }
 
 export async function quadrant(req, res) {
   const ctx = await requireAggregateAccess(req, res);
   if (!ctx) return;
-  const data = await getQuadrantData(req.user.project_id, ctx.week.id, ctx.scope);
-  res.json({ week: ctx.week, points: data });
+  const data = await getQuadrantData(req.user.project_id, ctx.weekIds, ctx.scope);
+  res.json({ weeks: ctx.weeks, points: data });
 }
 
 export async function parameterAlignment(req, res) {
   const ctx = await requireAggregateAccess(req, res);
   if (!ctx) return;
-  const data = await getParameterAlignment(req.user.project_id, ctx.week.id, ctx.scope);
-  res.json({ week: ctx.week, alignment: data });
+  const data = await getParameterAlignment(req.user.project_id, ctx.weekIds, ctx.scope);
+  res.json({ weeks: ctx.weeks, alignment: data });
 }
 
 /** ?weeks=1,2,3 — % Aligned per parameter, one point per week, for the trend chart shown when multiple weeks are selected. */
@@ -108,8 +116,8 @@ export async function parameterAlignmentTrend(req, res, next) {
 export async function teamTags(req, res) {
   const ctx = await requireAggregateAccess(req, res);
   if (!ctx) return;
-  const data = await getTeamTagFrequency(req.user.project_id, ctx.week.id, ctx.scope);
-  res.json({ week: ctx.week, ...data });
+  const data = await getTeamTagFrequency(req.user.project_id, ctx.weekIds, ctx.scope);
+  res.json({ weeks: ctx.weeks, ...data });
 }
 
 /** ?weeks=1,2,3 — top strength/weakness tag counts per week, for the trend chart shown when multiple weeks are selected. */
@@ -138,15 +146,15 @@ export async function teamTagTrend(req, res, next) {
 export async function teamFocusSuggestions(req, res) {
   const ctx = await requireAggregateAccess(req, res);
   if (!ctx) return;
-  const data = await getTeamFocusSuggestions(req.user.project_id, ctx.week.id, ctx.scope);
-  res.json({ week: ctx.week, ...data });
+  const data = await getTeamFocusSuggestions(req.user.project_id, ctx.weekIds, ctx.scope);
+  res.json({ weeks: ctx.weeks, ...data });
 }
 
 export async function teamTrajectory(req, res) {
   const ctx = await requireAggregateAccess(req, res);
   if (!ctx) return;
-  const data = await getTeamTrajectory(req.user.project_id, ctx.week.id, ctx.scope);
-  res.json({ week: ctx.week, ...data });
+  const data = await getTeamTrajectory(req.user.project_id, ctx.weekIds, ctx.scope);
+  res.json({ weeks: ctx.weeks, ...data });
 }
 
 /**
