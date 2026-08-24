@@ -390,12 +390,18 @@ export default function AnalyticsPage() {
             )}
           </Card>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
-            <Card className="p-5">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <Card className="p-5 h-full flex flex-col">
               <h2 className="text-sm font-semibold text-slate-800 mb-4">SAPA Distribution by Role</h2>
-              {sapaQuery.isLoading ? <Spinner /> : sapaQuery.isError ? <ErrorBanner message="Failed to load SAPA distribution" /> : <SapaBars rows={sapaQuery.data.byRole} />}
+              {sapaQuery.isLoading ? (
+                <Spinner />
+              ) : sapaQuery.isError ? (
+                <ErrorBanner message="Failed to load SAPA distribution" />
+              ) : (
+                <SapaBars rows={sapaQuery.data.byRole} />
+              )}
             </Card>
-            <Card className="p-5">
+            <Card className="p-5 h-full flex flex-col">
               <h2 className="text-sm font-semibold text-slate-800 mb-4">Quadrant Analysis — Performance vs Sentiment</h2>
               {quadrantQuery.isLoading ? <Spinner /> : quadrantQuery.isError ? <ErrorBanner message="Failed to load quadrant data" /> : <QuadrantPlot points={quadrantQuery.data.points} />}
             </Card>
@@ -695,12 +701,12 @@ function TagRankBars({ items, color }) {
   }
   const top = items[0].count;
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       {items.map((t) => (
         <div key={t.tag}>
-          <div className="flex justify-between text-xs text-slate-600 mb-0.5 gap-2">
-            <span className="truncate">{t.tag}</span>
-            <span className="text-slate-400 flex-shrink-0">{t.count}</span>
+          <div className="flex items-start justify-between gap-2 mb-1">
+            <span className="text-xs text-slate-700 leading-snug">{t.tag}</span>
+            <span className="text-xs text-slate-400 flex-shrink-0">{t.count}</span>
           </div>
           <div className="w-full bg-slate-100 rounded-full h-1.5">
             <div className="h-1.5 rounded-full" style={{ width: `${top > 0 ? (t.count / top) * 100 : 0}%`, background: color }} />
@@ -743,36 +749,42 @@ function SapaBars({ rows }) {
   const [expandedKey, setExpandedKey] = useState(null);
   if (!rows.length) return <p className="text-sm text-slate-400">No SAPA data for this week yet.</p>;
   return (
-    <div className="space-y-5">
-      {rows.map((r) => {
-        const isOpen = expandedKey === r.key;
-        return (
-          <div key={r.key}>
-            <button
-              onClick={() => setExpandedKey(isOpen ? null : r.key)}
-              className="w-full text-left"
-            >
-              <div className="flex justify-between text-xs text-slate-600 mb-1">
-                <span className="capitalize">{ROLE_LABELS[r.key] || r.key.replace(/_/g, " ")}</span>
-                <span>avg {r.avg ?? "—"} {isOpen ? "▲" : "▼"}</span>
-              </div>
-              <div className="flex h-3 rounded-full overflow-hidden bg-slate-100">
-                <div style={{ width: `${r.over}%`, background: "#EF4444" }} title={`Over-raters ${r.over}%`} />
-                <div style={{ width: `${r.aligned}%`, background: "#22C55E" }} title={`Aligned ${r.aligned}%`} />
-                <div style={{ width: `${r.under}%`, background: "#3B82F6" }} title={`Under-raters ${r.under}%`} />
-              </div>
-            </button>
-            {isOpen && r.members && (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2">
-                <SapaMemberGroup label="Over-raters" color="#EF4444" members={r.members.over} />
-                <SapaMemberGroup label="Aligned" color="#22C55E" members={r.members.aligned} />
-                <SapaMemberGroup label="Under-raters" color="#3B82F6" members={r.members.under} />
-              </div>
-            )}
-          </div>
-        );
-      })}
-      <div className="flex gap-3 text-xs text-slate-500 pt-1">
+    // h-full + justify-between so the role rows spread out to fill whatever
+    // height the card ends up (matched to its taller Quadrant sibling by the
+    // grid), instead of stacking tight at a fixed gap and leaving dead space
+    // below — same content, no card-height mismatch.
+    <div className="h-full flex flex-col justify-between">
+      <div className="flex-1 flex flex-col justify-between gap-4">
+        {rows.map((r) => {
+          const isOpen = expandedKey === r.key;
+          return (
+            <div key={r.key}>
+              <button
+                onClick={() => setExpandedKey(isOpen ? null : r.key)}
+                className="w-full text-left"
+              >
+                <div className="flex justify-between text-xs text-slate-600 mb-1">
+                  <span className="capitalize">{ROLE_LABELS[r.key] || r.key.replace(/_/g, " ")}</span>
+                  <span>avg {r.avg ?? "—"} {isOpen ? "▲" : "▼"}</span>
+                </div>
+                <div className="flex h-3 rounded-full overflow-hidden bg-slate-100">
+                  <div style={{ width: `${r.over}%`, background: "#EF4444" }} title={`Over-raters ${r.over}%`} />
+                  <div style={{ width: `${r.aligned}%`, background: "#22C55E" }} title={`Aligned ${r.aligned}%`} />
+                  <div style={{ width: `${r.under}%`, background: "#3B82F6" }} title={`Under-raters ${r.under}%`} />
+                </div>
+              </button>
+              {isOpen && r.members && (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2">
+                  <SapaMemberGroup label="Over-raters" color="#EF4444" members={r.members.over} />
+                  <SapaMemberGroup label="Aligned" color="#22C55E" members={r.members.aligned} />
+                  <SapaMemberGroup label="Under-raters" color="#3B82F6" members={r.members.under} />
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <div className="flex gap-3 text-xs text-slate-500 pt-4">
         <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500 inline-block" /> Over-raters</span>
         <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500 inline-block" /> Aligned</span>
         <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500 inline-block" /> Under-raters</span>
