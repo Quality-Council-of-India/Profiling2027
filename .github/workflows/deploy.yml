@@ -1,6 +1,10 @@
 name: Deploy Profiling 2027 to EC2
 
 on:
+  push:
+    branches:
+      - main
+
   workflow_dispatch:
 
 jobs:
@@ -29,20 +33,16 @@ jobs:
             echo "PROFILING 2027 DEPLOYMENT STARTED"
             echo "======================================"
 
-            # ==========================================
-            # 1. Check current version
-            # ==========================================
-
             CURRENT_COMMIT=$(git rev-parse HEAD)
 
             echo "Current EC2 commit:"
             echo "$CURRENT_COMMIT"
 
             # ==========================================
-            # 2. Create backup
+            # 1. Backup current application
             # ==========================================
 
-            echo "Creating application backup..."
+            echo "Creating backup..."
 
             mkdir -p "$BACKUP_DIR"
 
@@ -50,77 +50,69 @@ jobs:
               "$BACKUP_DIR/Profiling2027-$TIMESTAMP.tar.gz" \
               backend \
               frontend \
-              docker-compose.yml
+              docker-compose.yml \
+              deploy/nginx/nginx.conf
 
             echo "$CURRENT_COMMIT" \
               > "$BACKUP_DIR/previous-commit-$TIMESTAMP.txt"
 
-            echo "Backup created:"
-            echo "$BACKUP_DIR/Profiling2027-$TIMESTAMP.tar.gz"
-
             # ==========================================
-            # 3. Fetch latest GitHub code
+            # 2. Fetch latest GitHub code
             # ==========================================
 
-            echo "======================================"
-            echo "Fetching latest GitHub code"
-            echo "======================================"
+            echo "Fetching latest GitHub code..."
 
             git fetch origin main
 
             NEW_COMMIT=$(git rev-parse origin/main)
 
-            echo "New GitHub commit:"
+            echo "GitHub commit:"
             echo "$NEW_COMMIT"
 
             # ==========================================
-            # 4. Update backend and frontend
+            # 3. Update application code ONLY
+            #
+            # Do NOT overwrite:
+            # docker-compose.yml
+            # deploy/nginx/nginx.conf
+            #
+            # These contain production configuration.
             # ==========================================
 
-            echo "======================================"
-            echo "Updating backend and frontend"
-            echo "======================================"
+            echo "Updating backend and frontend..."
 
             git checkout origin/main -- backend frontend
 
             # ==========================================
-            # 5. Build backend
+            # 4. Build backend
             # ==========================================
 
-            echo "======================================"
-            echo "Building backend Docker image"
-            echo "======================================"
+            echo "Building backend..."
 
             docker compose build backend
 
             # ==========================================
-            # 6. Build frontend
+            # 5. Build frontend
             # ==========================================
 
-            echo "======================================"
-            echo "Building frontend Docker image"
-            echo "======================================"
+            echo "Building frontend..."
 
             docker compose build frontend
 
             # ==========================================
-            # 7. Check Prisma migration status
+            # 6. Check Prisma migration status
             # ==========================================
 
-            echo "======================================"
-            echo "Checking Prisma migration status"
-            echo "======================================"
+            echo "Checking Prisma migrations..."
 
             docker compose run --rm backend \
               npx prisma migrate status
 
             # ==========================================
-            # 8. Apply Prisma migrations
+            # 7. Apply Prisma migrations
             # ==========================================
 
-            echo "======================================"
-            echo "Applying Prisma migrations"
-            echo "======================================"
+            echo "Applying Prisma migrations..."
 
             docker compose run --rm backend \
               npx prisma migrate deploy
@@ -128,17 +120,15 @@ jobs:
             echo "Prisma migration completed."
 
             # ==========================================
-            # 9. Start backend and frontend
+            # 8. Start application
             # ==========================================
 
-            echo "======================================"
-            echo "Starting backend and frontend"
-            echo "======================================"
+            echo "Starting backend and frontend..."
 
             docker compose up -d backend frontend
 
             # ==========================================
-            # 10. Wait for containers
+            # 9. Wait
             # ==========================================
 
             echo "Waiting for containers..."
@@ -146,89 +136,55 @@ jobs:
             sleep 15
 
             # ==========================================
-            # 11. Container status
-            # ==========================================
-
-            echo "======================================"
-            echo "Container status"
-            echo "======================================"
-
-            docker compose ps
-
-            # ==========================================
-            # 12. Check backend
+            # 10. Check backend
             # ==========================================
 
             BACKEND_STATUS=$(docker inspect \
               -f '{{.State.Status}}' \
               profiling2027-backend-1 2>/dev/null || echo "missing")
 
-            echo "Backend status:"
-            echo "$BACKEND_STATUS"
+            echo "Backend status: $BACKEND_STATUS"
 
             if [ "$BACKEND_STATUS" != "running" ]; then
 
               echo "======================================"
-              echo "DEPLOYMENT FAILED"
+              echo "BACKEND FAILED"
               echo "======================================"
 
-              echo "Backend logs:"
               docker logs profiling2027-backend-1 --tail=100 || true
 
-              echo "======================================"
-              echo "ROLLING BACK APPLICATION"
-              echo "======================================"
-
-              # Restore previous source
-              git checkout HEAD -- backend frontend
-
-              # Rebuild previous version
-              docker compose build backend frontend
-
-              # Start previous version
-              docker compose up -d backend frontend
-
-              echo "Rollback completed."
+              echo "Deployment failed."
 
               exit 1
             fi
 
             # ==========================================
-            # 13. Backend logs
-            # ==========================================
-
-            echo "======================================"
-            echo "Backend logs"
-            echo "======================================"
-
-            docker logs profiling2027-backend-1 --tail=50
-
-            # ==========================================
-            # 14. Check frontend
+            # 11. Check frontend
             # ==========================================
 
             FRONTEND_STATUS=$(docker inspect \
               -f '{{.State.Status}}' \
               profiling2027-frontend-1 2>/dev/null || echo "missing")
 
-            echo "Frontend status:"
-            echo "$FRONTEND_STATUS"
+            echo "Frontend status: $FRONTEND_STATUS"
 
             if [ "$FRONTEND_STATUS" != "running" ]; then
 
-              echo "Frontend is not running."
+              echo "======================================"
+              echo "FRONTEND FAILED"
+              echo "======================================"
 
-              docker logs profiling2027-frontend-1 --tail=50 || true
+              docker logs profiling2027-frontend-1 --tail=100 || true
 
               exit 1
             fi
 
             # ==========================================
-            # 15. Final status
+            # 12. Final status
             # ==========================================
 
             echo "======================================"
-            echo "FINAL DEPLOYMENT STATUS"
+            echo "CONTAINER STATUS"
             echo "======================================"
 
             docker compose ps
