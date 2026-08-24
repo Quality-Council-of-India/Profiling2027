@@ -22,7 +22,7 @@ import {
 } from "docx";
 import { prisma } from "../utils/prisma.js";
 import { getSubjectiveSummary } from "./evaluations.js";
-import { PARAM_FIELDS } from "../utils/constants.js";
+import { PARAM_FIELDS, TRAJECTORY_LABELS } from "../utils/constants.js";
 
 const ROLE_LABELS = {
   admin: "Admin (Core Team)",
@@ -118,6 +118,18 @@ function bulletList(items, emptyText) {
   return items.length
     ? items.map((text) => new Paragraph({ text: `•  ${text}`, spacing: { after: 50 }, indent: { left: 120 } }))
     : [new Paragraph({ text: emptyText, spacing: { after: 50 }, indent: { left: 120 }, italics: true })];
+}
+
+/** Renders a self-eval tag list, expanding the "Others" tag into its free-text detail. */
+function formatSelfTags(tags, otherText) {
+  return (tags || []).map((tag) => (tag === "Others" && otherText ? `Others — ${otherText}` : tag));
+}
+
+function subHeading(text) {
+  return new Paragraph({
+    children: [new TextRun({ text, bold: true, size: 20, color: NAV })],
+    spacing: { before: 140, after: 60 },
+  });
 }
 
 /** Builds the .docx buffer for one user's scorecard for one (closed) week. */
@@ -302,6 +314,39 @@ export async function buildScorecardDocx(projectId, user, weekId) {
               ),
             ],
           }),
+
+          sectionHeading("My Self-Evaluation"),
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: "What you submitted about yourself this week (Questionnaire Part II) — shown here for your own reference, alongside how peers saw you below.",
+                italics: true,
+                size: 18,
+                color: "666666",
+              }),
+            ],
+            spacing: { after: 40 },
+          }),
+          subHeading("How I Think My Performance Trended"),
+          ...bulletList(
+            subjective.self && subjective.self.trajectory ? [TRAJECTORY_LABELS[subjective.self.trajectory] || subjective.self.trajectory] : [],
+            "You did not submit a self-evaluation this week."
+          ),
+          subHeading("Strengths I Identified in Myself"),
+          ...bulletList(
+            subjective.self ? formatSelfTags(subjective.self.strengths_tags, subjective.self.strengths_other_text) : [],
+            "No self-evaluation submitted this week."
+          ),
+          subHeading("Areas I Identified for Improvement"),
+          ...bulletList(
+            subjective.self ? formatSelfTags(subjective.self.weakness_tags, subjective.self.weakness_other_text) : [],
+            "No self-evaluation submitted this week."
+          ),
+          subHeading("What I Said I'd Focus On"),
+          ...bulletList(
+            subjective.self && subjective.self.improvement_suggestion ? [subjective.self.improvement_suggestion] : [],
+            "No self-evaluation submitted this week."
+          ),
 
           sectionHeading("Feedback Received This Week"),
           new Paragraph({

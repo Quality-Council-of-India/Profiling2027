@@ -4,6 +4,10 @@ import {
   getFieldHeatmap,
   getSapaDistribution,
   getQuadrantData,
+  getParameterAlignment,
+  getTeamTagFrequency,
+  getTeamFocusWords,
+  getTeamTrajectory,
   getRankings,
   getFieldStandings,
   getFieldMemberStandings,
@@ -49,6 +53,34 @@ export async function quadrant(req, res) {
   if (!ctx) return;
   const data = await getQuadrantData(req.user.project_id, ctx.week.id, ctx.scope);
   res.json({ week: ctx.week, points: data });
+}
+
+export async function parameterAlignment(req, res) {
+  const ctx = await requireAggregateAccess(req, res);
+  if (!ctx) return;
+  const data = await getParameterAlignment(req.user.project_id, ctx.week.id, ctx.scope);
+  res.json({ week: ctx.week, alignment: data });
+}
+
+export async function teamTags(req, res) {
+  const ctx = await requireAggregateAccess(req, res);
+  if (!ctx) return;
+  const data = await getTeamTagFrequency(req.user.project_id, ctx.week.id, ctx.scope);
+  res.json({ week: ctx.week, ...data });
+}
+
+export async function teamFocusWords(req, res) {
+  const ctx = await requireAggregateAccess(req, res);
+  if (!ctx) return;
+  const words = await getTeamFocusWords(req.user.project_id, ctx.week.id, ctx.scope);
+  res.json({ week: ctx.week, words });
+}
+
+export async function teamTrajectory(req, res) {
+  const ctx = await requireAggregateAccess(req, res);
+  if (!ctx) return;
+  const data = await getTeamTrajectory(req.user.project_id, ctx.week.id, ctx.scope);
+  res.json({ week: ctx.week, ...data });
 }
 
 /**

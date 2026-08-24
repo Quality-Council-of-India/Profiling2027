@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { ROLE_COLORS, ROLE_LABELS } from "../../utils/constants.js";
 
 const PERFORMANCE_MIDPOINT = 24.5; // half of the 49-point max total peer score
@@ -11,6 +12,7 @@ const QUADRANTS = [
 
 // points: [{ id, name, role, field, performance (0-49), sentiment (-1..1) }]
 export default function QuadrantPlot({ points, height = 280 }) {
+  const [expandedKey, setExpandedKey] = useState(null);
   return (
     <div>
       <div className="relative border border-slate-200 rounded-lg" style={{ height }}>
@@ -60,21 +62,29 @@ export default function QuadrantPlot({ points, height = 280 }) {
           ))}
       </div>
 
-      {/* Named breakdown — hover tooltips alone don't tell you who's where at a glance. */}
+      {/* Named breakdown, collapsed by default — click a bucket to see who's
+          in it, same pattern as the SAPA Distribution role bars, so a large
+          team doesn't force everyone's name onto the page at once. */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
         {QUADRANTS.map((q) => {
           const members = points.filter(q.test).sort((a, b) => b.performance - a.performance);
+          const isOpen = expandedKey === q.key;
           return (
             <div key={q.key} className="border border-slate-200 rounded-lg p-3">
-              <div className="flex items-center gap-1.5 mb-2">
+              <button
+                onClick={() => setExpandedKey(isOpen ? null : q.key)}
+                className="w-full flex items-center gap-1.5 mb-0.5 text-left"
+                disabled={members.length === 0}
+              >
                 <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: q.accent }} />
                 <span className="text-xs font-semibold text-slate-700">{q.label}</span>
                 <span className="text-xs text-slate-400">({members.length})</span>
-              </div>
+                {members.length > 0 && <span className="text-slate-400 text-xs ml-auto">{isOpen ? "▲" : "▼"}</span>}
+              </button>
               {members.length === 0 ? (
-                <p className="text-xs text-slate-400">No one here.</p>
-              ) : (
-                <div className="flex flex-wrap gap-1.5">
+                <p className="text-xs text-slate-400 mt-1.5">No one here.</p>
+              ) : isOpen ? (
+                <div className="flex flex-wrap gap-1.5 mt-2">
                   {members.map((m) => (
                     <span
                       key={m.id}
@@ -85,7 +95,7 @@ export default function QuadrantPlot({ points, height = 280 }) {
                     </span>
                   ))}
                 </div>
-              )}
+              ) : null}
             </div>
           );
         })}

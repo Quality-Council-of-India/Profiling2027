@@ -117,6 +117,26 @@ export default function AnalyticsPage() {
     queryFn: () => analyticsApi.quadrant(aggregateWeekId),
     enabled: isAggregate && !!aggregateWeekId,
   });
+  const parameterAlignmentQuery = useQuery({
+    queryKey: ["parameterAlignment", aggregateWeekId],
+    queryFn: () => analyticsApi.parameterAlignment(aggregateWeekId),
+    enabled: isAggregate && !!aggregateWeekId,
+  });
+  const teamTagsQuery = useQuery({
+    queryKey: ["teamTags", aggregateWeekId],
+    queryFn: () => analyticsApi.teamTags(aggregateWeekId),
+    enabled: isAggregate && !!aggregateWeekId,
+  });
+  const teamFocusWordsQuery = useQuery({
+    queryKey: ["teamFocusWords", aggregateWeekId],
+    queryFn: () => analyticsApi.teamFocusWords(aggregateWeekId),
+    enabled: isAggregate && !!aggregateWeekId,
+  });
+  const teamTrajectoryQuery = useQuery({
+    queryKey: ["teamTrajectory", aggregateWeekId],
+    queryFn: () => analyticsApi.teamTrajectory(aggregateWeekId),
+    enabled: isAggregate && !!aggregateWeekId,
+  });
 
   if (weeksQuery.isLoading) return <Spinner />;
   if (weeksQuery.isError) return <ErrorBanner message="Failed to load weeks" />;
@@ -348,7 +368,184 @@ export default function AnalyticsPage() {
               {quadrantQuery.isLoading ? <Spinner /> : quadrantQuery.isError ? <ErrorBanner message="Failed to load quadrant data" /> : <QuadrantPlot points={quadrantQuery.data.points} />}
             </Card>
           </div>
+
+          <Card className="p-5">
+            <h2 className="text-sm font-semibold text-slate-800 mb-1">Per-Parameter Alignment — Self vs Peer</h2>
+            <p className="text-xs text-slate-500 mb-4">
+              For each parameter, what share of the team is Aligned, has Some Gap, or a Large Gap between their
+              self-rating and how peers rated them — the same comparison as the individual scorecard, rolled up
+              team-wide.
+            </p>
+            {parameterAlignmentQuery.isLoading ? (
+              <Spinner />
+            ) : parameterAlignmentQuery.isError ? (
+              <ErrorBanner message="Failed to load parameter alignment" />
+            ) : (
+              <ParameterAlignmentBars rows={parameterAlignmentQuery.data.alignment} />
+            )}
+          </Card>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <Card className="p-5">
+              <h2 className="text-sm font-semibold text-slate-800 mb-1">Team Strengths & Growth Areas</h2>
+              <p className="text-xs text-slate-500 mb-4">Most-selected Strength and Area of Improvement tags across every peer evaluation this week.</p>
+              {teamTagsQuery.isLoading ? (
+                <Spinner />
+              ) : teamTagsQuery.isError ? (
+                <ErrorBanner message="Failed to load team tags" />
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-xs font-medium text-green-700 uppercase tracking-wide mb-2">Top Strengths</p>
+                    <TagRankBars items={teamTagsQuery.data.strengths} color={ACCENT} />
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-red-700 uppercase tracking-wide mb-2">Top Areas of Improvement</p>
+                    <TagRankBars items={teamTagsQuery.data.weaknesses} color="#EF4444" />
+                  </div>
+                </div>
+              )}
+            </Card>
+
+            <Card className="p-5">
+              <h2 className="text-sm font-semibold text-slate-800 mb-1">What the Team Should Focus On</h2>
+              <p className="text-xs text-slate-500 mb-4">
+                The most common words from peers' answers to "What is the single most impactful action this person
+                could take to improve?" — bigger means mentioned more often.
+              </p>
+              {teamFocusWordsQuery.isLoading ? (
+                <Spinner />
+              ) : teamFocusWordsQuery.isError ? (
+                <ErrorBanner message="Failed to load focus words" />
+              ) : (
+                <FocusWordCloud words={teamFocusWordsQuery.data.words} />
+              )}
+            </Card>
+          </div>
+
+          <Card className="p-5">
+            <h2 className="text-sm font-semibold text-slate-800 mb-1">Team Momentum</h2>
+            <p className="text-xs text-slate-500 mb-4">
+              Share of peer Trajectory answers this week saying the person Improved, Stayed the Same, or Declined
+              compared to last week.
+            </p>
+            {teamTrajectoryQuery.isLoading ? (
+              <Spinner />
+            ) : teamTrajectoryQuery.isError ? (
+              <ErrorBanner message="Failed to load team momentum" />
+            ) : (
+              <TeamMomentum data={teamTrajectoryQuery.data} />
+            )}
+          </Card>
         </>
+      )}
+    </div>
+  );
+}
+
+function ParameterAlignmentBars({ rows }) {
+  if (!rows || rows.every((r) => r.total === 0)) {
+    return <p className="text-sm text-slate-400 text-center py-8">No scored data for this week yet.</p>;
+  }
+  return (
+    <div className="space-y-3">
+      {rows.map((r) => {
+        const total = r.total || 1;
+        const alignedPct = Math.round((r.aligned / total) * 100);
+        const someGapPct = Math.round((r.someGap / total) * 100);
+        const largeGapPct = Math.max(0, 100 - alignedPct - someGapPct);
+        return (
+          <div key={r.key}>
+            <div className="flex justify-between text-xs text-slate-600 mb-1">
+              <span>{r.label}</span>
+              <span className="text-slate-400">{r.total} scored</span>
+            </div>
+            <div className="w-full h-2.5 rounded-full overflow-hidden flex bg-slate-100">
+              {alignedPct > 0 && <div style={{ width: `${alignedPct}%`, background: "#22C55E" }} title={`Aligned ${alignedPct}%`} />}
+              {someGapPct > 0 && <div style={{ width: `${someGapPct}%`, background: "#F59E0B" }} title={`Some Gap ${someGapPct}%`} />}
+              {largeGapPct > 0 && <div style={{ width: `${largeGapPct}%`, background: "#EF4444" }} title={`Large Gap ${largeGapPct}%`} />}
+            </div>
+          </div>
+        );
+      })}
+      <div className="flex gap-4 justify-center pt-1 flex-wrap">
+        <span className="flex items-center gap-1 text-xs text-slate-500"><span className="w-2 h-2 rounded-full inline-block" style={{ background: "#22C55E" }} /> Aligned</span>
+        <span className="flex items-center gap-1 text-xs text-slate-500"><span className="w-2 h-2 rounded-full inline-block" style={{ background: "#F59E0B" }} /> Some Gap</span>
+        <span className="flex items-center gap-1 text-xs text-slate-500"><span className="w-2 h-2 rounded-full inline-block" style={{ background: "#EF4444" }} /> Large Gap</span>
+      </div>
+    </div>
+  );
+}
+
+function TagRankBars({ items, color }) {
+  if (!items || items.length === 0) {
+    return <p className="text-xs text-slate-400">No tags selected this week.</p>;
+  }
+  const top = items[0].count;
+  return (
+    <div className="space-y-2">
+      {items.map((t) => (
+        <div key={t.tag}>
+          <div className="flex justify-between text-xs text-slate-600 mb-0.5 gap-2">
+            <span className="truncate">{t.tag}</span>
+            <span className="text-slate-400 flex-shrink-0">{t.count}</span>
+          </div>
+          <div className="w-full bg-slate-100 rounded-full h-1.5">
+            <div className="h-1.5 rounded-full" style={{ width: `${top > 0 ? (t.count / top) * 100 : 0}%`, background: color }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FocusWordCloud({ words }) {
+  if (!words || words.length === 0) {
+    return <p className="text-sm text-slate-400 text-center py-8">No improvement suggestions yet this week.</p>;
+  }
+  const max = words[0].count;
+  const min = words[words.length - 1].count;
+  const scale = (count) => (max === min ? 16 : 12 + ((count - min) / (max - min)) * 20);
+  const fade = (count) => (max === min ? 1 : 0.55 + 0.45 * ((count - min) / (max - min)));
+  return (
+    <div className="flex flex-wrap gap-x-3 gap-y-2 items-center justify-center py-2">
+      {words.map((w) => (
+        <span
+          key={w.word}
+          title={`${w.word} — mentioned ${w.count} time${w.count === 1 ? "" : "s"}`}
+          style={{ fontSize: `${scale(w.count)}px`, color: NAV, opacity: fade(w.count) }}
+          className="font-medium leading-none"
+        >
+          {w.word}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function TeamMomentum({ data }) {
+  if (!data || data.scoredTotal === 0) {
+    return <p className="text-sm text-slate-400 text-center py-4">Not enough data yet — first scored week, or no prior week to compare against.</p>;
+  }
+  const { counts, scoredTotal } = data;
+  const pct = (n) => Math.round((n / scoredTotal) * 100);
+  const excluded = data.total - scoredTotal;
+  return (
+    <div>
+      <div className="w-full h-3 rounded-full overflow-hidden flex bg-slate-100 mb-2">
+        <div style={{ width: `${pct(counts.improved)}%`, background: "#22C55E" }} title={`Improved ${pct(counts.improved)}%`} />
+        <div style={{ width: `${pct(counts.stayed_same)}%`, background: "#94A3B8" }} title={`Stayed the Same ${pct(counts.stayed_same)}%`} />
+        <div style={{ width: `${pct(counts.declined)}%`, background: "#EF4444" }} title={`Declined ${pct(counts.declined)}%`} />
+      </div>
+      <div className="flex justify-center gap-4 text-xs text-slate-600 flex-wrap">
+        <span><span className="font-semibold text-green-700">{pct(counts.improved)}%</span> Improved</span>
+        <span><span className="font-semibold text-slate-500">{pct(counts.stayed_same)}%</span> Stayed the Same</span>
+        <span><span className="font-semibold text-red-600">{pct(counts.declined)}%</span> Declined</span>
+      </div>
+      {excluded > 0 && (
+        <p className="text-[11px] text-slate-400 text-center mt-2">
+          {excluded} response{excluded === 1 ? "" : "s"} excluded — first-time pairing, no prior week to compare.
+        </p>
       )}
     </div>
   );

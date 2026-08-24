@@ -107,6 +107,12 @@ export async function createWeek(req, res) {
   res.status(201).json({ week });
 }
 
+/**
+ * Opening (or reopening) a week lets Admin correct its date range to the
+ * real calendar dates at that moment — weeks aren't always opened exactly
+ * on the cadence auto-computed when they were created, and the Dashboard
+ * shows these dates to everyone.
+ */
 export async function openWeek(req, res) {
   const weekId = Number(req.params.id);
   const week = await prisma.week.findFirst({
@@ -114,7 +120,21 @@ export async function openWeek(req, res) {
   });
   if (!week) return res.status(404).json({ error: "Week not found" });
 
-  const updated = await prisma.week.update({ where: { id: weekId }, data: { status: "open" } });
+  const data = { status: "open" };
+  if (req.body.start_date || req.body.end_date) {
+    const start_date = req.body.start_date ? new Date(req.body.start_date) : week.start_date;
+    const end_date = req.body.end_date ? new Date(req.body.end_date) : week.end_date;
+    if (Number.isNaN(start_date.getTime()) || Number.isNaN(end_date.getTime())) {
+      return res.status(400).json({ error: "Invalid start_date or end_date" });
+    }
+    if (start_date > end_date) {
+      return res.status(400).json({ error: "start_date must be on or before end_date" });
+    }
+    data.start_date = start_date;
+    data.end_date = end_date;
+  }
+
+  const updated = await prisma.week.update({ where: { id: weekId }, data });
 
   const [recipientIds, adminIds] = await Promise.all([
     getActiveNonAdminIds(req.user.project_id),

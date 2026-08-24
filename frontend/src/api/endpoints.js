@@ -52,6 +52,10 @@ export const analyticsApi = {
   heatmap: (weekId) => api.get(`/analytics/heatmap/${weekId}`).then((r) => r.data),
   sapa: (weekId) => api.get(`/analytics/sapa/${weekId}`).then((r) => r.data),
   quadrant: (weekId) => api.get(`/analytics/quadrant/${weekId}`).then((r) => r.data),
+  parameterAlignment: (weekId) => api.get(`/analytics/parameter-alignment/${weekId}`).then((r) => r.data),
+  teamTags: (weekId) => api.get(`/analytics/team-tags/${weekId}`).then((r) => r.data),
+  teamFocusWords: (weekId) => api.get(`/analytics/team-focus-words/${weekId}`).then((r) => r.data),
+  teamTrajectory: (weekId) => api.get(`/analytics/team-trajectory/${weekId}`).then((r) => r.data),
   rankings: (weekIds) => api.get(`/analytics/rankings?weeks=${weekIds.join(",")}`).then((r) => r.data),
   fieldStandings: (weekIds) => api.get(`/analytics/field-standings?weeks=${weekIds.join(",")}`).then((r) => r.data),
   fieldMembers: (weekIds, field) =>
@@ -64,7 +68,7 @@ export const adminApi = {
   createWeek: () => api.post("/admin/weeks", {}).then((r) => r.data),
   impersonateUser: (userId) => api.post(`/admin/impersonate-user/${userId}`).then((r) => r.data),
   unlockEvaluation: (id) => api.patch(`/admin/evaluations/${id}/unlock`).then((r) => r.data),
-  openWeek: (weekId) => api.post(`/admin/weeks/${weekId}/open`).then((r) => r.data),
+  openWeek: (weekId, dates) => api.post(`/admin/weeks/${weekId}/open`, dates || {}).then((r) => r.data),
   closeWeek: (weekId) => api.post(`/admin/weeks/${weekId}/close`).then((r) => r.data),
   unlockAllForWeek: (weekId) => api.post(`/admin/weeks/${weekId}/unlock-all`).then((r) => r.data),
   importRoster: (file) => {

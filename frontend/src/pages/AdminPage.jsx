@@ -33,13 +33,16 @@ export default function AdminPage() {
   const [pickerRole, setPickerRole] = useState(null);
   const [switchingUserId, setSwitchingUserId] = useState(null);
   const [showGuide, setShowGuide] = useState(false);
+  const [dateModalWeek, setDateModalWeek] = useState(null);
+  const [startDateDraft, setStartDateDraft] = useState("");
+  const [endDateDraft, setEndDateDraft] = useState("");
 
   const createWeekMutation = useMutation({
     mutationFn: adminApi.createWeek,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["weeks"] }),
   });
   const openMutation = useMutation({
-    mutationFn: adminApi.openWeek,
+    mutationFn: ({ id, start_date, end_date }) => adminApi.openWeek(id, { start_date, end_date }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["weeks"] }),
   });
   const closeMutation = useMutation({
@@ -78,10 +81,14 @@ export default function AdminPage() {
     }
   }
 
+  function isoDate(d) {
+    return d ? String(d).slice(0, 10) : "";
+  }
+
   function handleOpenWeek(week) {
-    if (window.confirm(`Open ${week.label}? Every active professional will be emailed that it's open for submissions.`)) {
-      openMutation.mutate(week.id);
-    }
+    setDateModalWeek(week);
+    setStartDateDraft(isoDate(week.start_date));
+    setEndDateDraft(isoDate(week.end_date));
   }
 
   function handleCloseWeek(week) {
@@ -91,13 +98,15 @@ export default function AdminPage() {
   }
 
   function handleReopenWeek(week) {
-    if (
-      window.confirm(
-        `Reopen ${week.label}? Anyone whose evaluation is still locked stays locked until you unlock them individually (or use Unlock All). If another week is currently open, both will show as "open" — see the guide below.`
-      )
-    ) {
-      openMutation.mutate(week.id);
-    }
+    setDateModalWeek(week);
+    setStartDateDraft(isoDate(week.start_date));
+    setEndDateDraft(isoDate(week.end_date));
+  }
+
+  function confirmOpenWeek() {
+    if (!dateModalWeek) return;
+    openMutation.mutate({ id: dateModalWeek.id, start_date: startDateDraft, end_date: endDateDraft });
+    setDateModalWeek(null);
   }
 
   function handleRefreshAll() {
@@ -168,6 +177,57 @@ export default function AdminPage() {
               ))}
             </div>
           )}
+        </Modal>
+      )}
+
+      {dateModalWeek && (
+        <Modal
+          title={`${dateModalWeek.status === "closed" ? "Reopen" : "Open"} ${dateModalWeek.label}`}
+          onClose={() => setDateModalWeek(null)}
+          widthClass="max-w-sm"
+        >
+          <div className="p-5 space-y-3">
+            <p className="text-xs text-slate-500">
+              Confirm the real calendar dates for this week — everyone active will be emailed that it's open, and the
+              Dashboard will show this date range.
+            </p>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Start date</label>
+              <input
+                type="date"
+                value={startDateDraft}
+                onChange={(e) => setStartDateDraft(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-standard"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">End date</label>
+              <input
+                type="date"
+                value={endDateDraft}
+                onChange={(e) => setEndDateDraft(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-standard"
+              />
+            </div>
+            {startDateDraft && endDateDraft && startDateDraft > endDateDraft && (
+              <p className="text-xs text-red-600">Start date must be on or before the end date.</p>
+            )}
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                onClick={() => setDateModalWeek(null)}
+                className="px-3 py-1.5 rounded-md border border-slate-300 text-xs font-medium text-slate-600 hover:bg-slate-50 transition-standard"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmOpenWeek}
+                disabled={!startDateDraft || !endDateDraft || startDateDraft > endDateDraft || openMutation.isPending}
+                className="px-3 py-1.5 rounded-md text-white text-xs font-medium bg-nav hover:bg-nav-deep disabled:opacity-50 transition-standard"
+              >
+                {openMutation.isPending ? "Opening…" : dateModalWeek.status === "closed" ? "Confirm & Reopen" : "Confirm & Open"}
+              </button>
+            </div>
+          </div>
         </Modal>
       )}
 
@@ -250,8 +310,8 @@ export default function AdminPage() {
                         title={canManageWeeks ? undefined : "Ask the Master Admin for Week Management edit access"}
                         className="inline-flex items-center gap-1.5 text-xs font-medium text-nav hover:text-accent disabled:opacity-50 transition-standard"
                       >
-                        {openMutation.isPending && openMutation.variables === w.id && <ButtonSpinner />}
-                        {openMutation.isPending && openMutation.variables === w.id ? "Opening…" : "Open"}
+                        {openMutation.isPending && openMutation.variables?.id === w.id && <ButtonSpinner />}
+                        {openMutation.isPending && openMutation.variables?.id === w.id ? "Opening…" : "Open"}
                       </button>
                     )}
                     {w.status === "open" && (
@@ -272,8 +332,8 @@ export default function AdminPage() {
                         title={canManageWeeks ? "Reopens this week — anyone whose evaluation is still locked stays locked until you unlock them individually in Raw Data Browser." : "Ask the Master Admin for Week Management edit access"}
                         className="inline-flex items-center gap-1.5 text-xs font-medium text-nav hover:text-accent disabled:opacity-50 transition-standard"
                       >
-                        {openMutation.isPending && openMutation.variables === w.id && <ButtonSpinner />}
-                        {openMutation.isPending && openMutation.variables === w.id ? "Reopening…" : "Reopen"}
+                        {openMutation.isPending && openMutation.variables?.id === w.id && <ButtonSpinner />}
+                        {openMutation.isPending && openMutation.variables?.id === w.id ? "Reopening…" : "Reopen"}
                       </button>
                     )}
                     {(w.status === "closed" || w.status === "open") && (
