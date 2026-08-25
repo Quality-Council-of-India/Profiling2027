@@ -457,20 +457,19 @@ function avgSimilarityToCluster(tokens, cluster) {
   return cluster.members.reduce((sum, m) => sum + jaccardSimilarity(tokens, m.tokens), 0) / cluster.members.length;
 }
 
-const FOCUS_SUGGESTIONS_TOP_N = 10;
-
 /**
- * What the team should focus on — the most-repeated peer "single most
- * impactful action" suggestions, clustered by near-duplicate wording rather
- * than reduced to a bag of individual words (a word cloud strips exactly the
- * context that makes a short free-text answer actionable). Each returned
+ * What the team should focus on — every peer "single most impactful action"
+ * suggestion, grouped into clusters of near-duplicate wording rather than
+ * reduced to a bag of individual words (a word cloud strips exactly the
+ * context that makes a short free-text answer actionable), ranked by how
+ * many suggestions fell into each. Every cluster is returned (the frontend
+ * renders it as a scrollable list) — earlier this was capped to the top 10,
+ * which silently hid however much of the full set that left out. Each
  * cluster also reports how many SELF-evaluations raised a similarly-worded
  * suggestion about themselves, as a self-awareness signal — self answers
  * are matched against peer clusters, not clustered on their own. weekIds is
  * one-or-more: every selected week's suggestions (peer and self) are pooled
- * together before clustering. Only the top N clusters are returned — see
- * totalClusters/totalPeerSuggestions on the response for how much of the
- * full set that covers.
+ * together before clustering.
  */
 export async function getTeamFocusSuggestions(projectId, weekIds, scope) {
   const users = await prisma.user.findMany({
@@ -492,8 +491,7 @@ export async function getTeamFocusSuggestions(projectId, weekIds, scope) {
     }
   }
 
-  const allPeerClusters = clusterSuggestions(peerTexts);
-  const peerClusters = allPeerClusters.slice(0, FOCUS_SUGGESTIONS_TOP_N);
+  const peerClusters = clusterSuggestions(peerTexts);
   const selfTokenized = selfTexts.map(tokenizeSuggestion);
 
   const items = peerClusters.map((c) => {
@@ -507,13 +505,10 @@ export async function getTeamFocusSuggestions(projectId, weekIds, scope) {
     };
   });
 
-  const shownCount = items.reduce((a, it) => a + it.count, 0);
   return {
     items,
     totalPeerSuggestions: peerTexts.length,
     totalSelfSuggestions: selfTexts.length,
-    totalClusters: allPeerClusters.length,
-    coveragePct: peerTexts.length ? Math.round((shownCount / peerTexts.length) * 100) : 0,
   };
 }
 
