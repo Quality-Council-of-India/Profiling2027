@@ -573,6 +573,28 @@ function hasActionableSignal(text) {
 }
 
 /**
+ * Rounds each of `counts` (a {key: count} map) to a whole percentage of
+ * `total`, using largest-remainder allocation so the results always sum to
+ * exactly 100 (rather than each key rounding independently and landing a
+ * point or two short, e.g. 31/24/21/23 instead of summing to 100).
+ */
+function allocateWholePercentages(counts, total) {
+  const keys = Object.keys(counts);
+  if (!total) return Object.fromEntries(keys.map((k) => [k, 0]));
+  const raw = keys.map((k) => (counts[k] / total) * 100);
+  const floors = raw.map(Math.floor);
+  const shortfall = 100 - floors.reduce((a, b) => a + b, 0);
+  const byRemainderDesc = keys
+    .map((_, i) => i)
+    .sort((a, b) => raw[b] - floors[b] - (raw[a] - floors[a]));
+  const result = [...floors];
+  for (let i = 0; i < shortfall; i++) {
+    result[byRemainderDesc[i]] += 1;
+  }
+  return Object.fromEntries(keys.map((k, i) => [k, result[i]]));
+}
+
+/**
  * What the team should focus on — every peer "single most impactful action"
  * suggestion, sorted into four always-visible categories rather than
  * ranked as one undifferentiated list (an earlier version of this excluded
@@ -659,14 +681,24 @@ export async function getTeamFocusSuggestions(projectId, weekIds, scope) {
   const uniqueCount = sumCount(uniqueItems);
   const repetitiveCount = sumCount(repetitiveItems);
 
+  // Rounding each category's % independently (plain pct()) can leave the four
+  // labels a point or two short of 100 — e.g. 31/24/21/23 instead of summing
+  // to 100 — because each one rounds toward/away from its own nearest integer
+  // regardless of the others. Largest-remainder allocation instead rounds all
+  // four together so they always add up to exactly 100 (of a non-empty total).
+  const categoryPcts = allocateWholePercentages(
+    { unique: uniqueCount, repetitive: repetitiveCount, nonAnswer: nonAnswerTexts.length, positive: positiveTexts.length },
+    total
+  );
+
   return {
     totalPeerSuggestions: total,
     totalSelfSuggestions: selfTexts.length,
     categories: {
-      unique: { count: uniqueCount, pct: pct(uniqueCount), items: uniqueItems },
-      repetitive: { count: repetitiveCount, pct: pct(repetitiveCount), items: repetitiveItems },
-      nonAnswer: { count: nonAnswerTexts.length, pct: pct(nonAnswerTexts.length), texts: nonAnswerTexts },
-      positive: { count: positiveTexts.length, pct: pct(positiveTexts.length), texts: positiveTexts },
+      unique: { count: uniqueCount, pct: categoryPcts.unique, items: uniqueItems },
+      repetitive: { count: repetitiveCount, pct: categoryPcts.repetitive, items: repetitiveItems },
+      nonAnswer: { count: nonAnswerTexts.length, pct: categoryPcts.nonAnswer, texts: nonAnswerTexts },
+      positive: { count: positiveTexts.length, pct: categoryPcts.positive, texts: positiveTexts },
     },
   };
 }
