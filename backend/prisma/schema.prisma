@@ -93,7 +93,11 @@ model User {
   email         String   @unique @db.VarChar(150)
   password_hash String   @db.VarChar(255)
   role          Role
-  field         String?  @db.VarChar(50)
+  // VarChar(255), not a tighter fit to today's longest FIELDS entry (51
+  // chars): a CASU Anchor covering more than one field stores them
+  // comma-joined in this same column (see utils/fields.js), so it needs
+  // headroom for combinations, not just one name.
+  field         String?  @db.VarChar(255)
   // Org Employee ID from the team roster — nullable since not everyone has
   // one assigned yet (e.g. new hires pending HR onboarding).
   emp_id        String?  @unique @db.VarChar(20)
@@ -251,7 +255,7 @@ model ComputedScore {
   // moving fields) never silently relabels a past week's Heatmap/SAPA/
   // export row under their new field. Null on rows computed before this
   // column existed; those fall back to the user's current field.
-  field                             String?  @db.VarChar(50)
+  field                             String?  @db.VarChar(255) // same width as User.field — it's a snapshot of that column
 
   week Week @relation(fields: [week_id], references: [id], onDelete: Cascade)
   user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
