@@ -28,6 +28,12 @@ function tagLabel(tag, otherText) {
   return tag === "Others" && otherText ? `Others (${otherText})` : tag;
 }
 
+// A rounded 0% for a non-empty group reads as "nothing here," which is
+// misleading when it actually has a couple of entries — show "<1%" instead.
+function formatPct(pct, count) {
+  return pct === 0 && count > 0 ? "<1%" : `${pct}%`;
+}
+
 // Short forms for the x-axis ticks of the Per-Parameter Breakdown bar chart —
 // the full labels (e.g. "Work Quality & Attention to Detail") get clipped.
 const SHORT_PARAM_LABELS = {
@@ -761,7 +767,11 @@ function TeamFocusSuggestions({ data }) {
         {FOCUS_CATEGORIES.map(
           (c) =>
             data.categories[c.key].pct > 0 && (
-              <div key={c.key} style={{ width: `${data.categories[c.key].pct}%`, background: c.color }} title={`${c.label} ${data.categories[c.key].pct}%`} />
+              <div
+                key={c.key}
+                style={{ width: `${data.categories[c.key].pct}%`, background: c.color }}
+                title={`${c.label} ${formatPct(data.categories[c.key].pct, data.categories[c.key].count)}`}
+              />
             )
         )}
       </div>
@@ -769,7 +779,7 @@ function TeamFocusSuggestions({ data }) {
         {FOCUS_CATEGORIES.map((c) => (
           <span key={c.key} className="flex items-center gap-1 text-xs text-slate-500">
             <span className="w-2 h-2 rounded-full inline-block flex-shrink-0" style={{ background: c.color }} />
-            {c.label} ({data.categories[c.key].count} · {data.categories[c.key].pct}%)
+            {c.label} ({data.categories[c.key].count} · {formatPct(data.categories[c.key].pct, data.categories[c.key].count)})
           </span>
         ))}
       </div>
@@ -796,7 +806,7 @@ function FocusRankedGroup({ title, color, count, pct, items }) {
       <button onClick={() => setOpen((v) => !v)} className="w-full flex items-center gap-1.5 text-left" disabled={items.length === 0}>
         <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: color }} />
         <span className="text-xs font-semibold text-slate-700">{title}</span>
-        <span className="text-xs text-slate-400">({count} · {pct}%)</span>
+        <span className="text-xs text-slate-400">({count} · {formatPct(pct, count)})</span>
         {items.length > 0 && <span className="text-slate-400 text-xs ml-auto">{open ? "▲" : "▼"}</span>}
       </button>
       {items.length === 0 ? (
@@ -811,10 +821,12 @@ function FocusRankedGroup({ title, color, count, pct, items }) {
                 <div className="flex-1 bg-slate-100 rounded-full h-1.5">
                   <div className="h-1.5 rounded-full" style={{ width: `${top > 0 ? (item.count / top) * 100 : 0}%`, background: color }} />
                 </div>
-                <span className="text-[11px] text-slate-400 flex-shrink-0">{item.count} · {item.pct}%</span>
+                <span className="text-[11px] text-slate-400 flex-shrink-0">{item.count} · {formatPct(item.pct, item.count)}</span>
               </div>
               {item.selfOverlapCount > 0 && (
-                <p className="text-[11px] text-slate-400 mt-1">Also self-identified in {item.selfOverlapPct}% of self-evaluations.</p>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Also self-identified in {formatPct(item.selfOverlapPct, item.selfOverlapCount)} of self-evaluations.
+                </p>
               )}
             </div>
           ))}
@@ -832,7 +844,7 @@ function FocusRawGroup({ title, color, count, pct, texts }) {
       <button onClick={() => setOpen((v) => !v)} className="w-full flex items-center gap-1.5 text-left" disabled={texts.length === 0}>
         <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: color }} />
         <span className="text-xs font-semibold text-slate-700">{title}</span>
-        <span className="text-xs text-slate-400">({count} · {pct}%)</span>
+        <span className="text-xs text-slate-400">({count} · {formatPct(pct, count)})</span>
         {texts.length > 0 && <span className="text-slate-400 text-xs ml-auto">{open ? "▲" : "▼"}</span>}
       </button>
       {texts.length === 0 ? (
@@ -861,7 +873,7 @@ function TagRankBars({ items, color }) {
         <div key={t.tag}>
           <div className="flex items-start justify-between gap-2 mb-1">
             <span className="text-xs text-slate-700 leading-snug">{t.tag}</span>
-            <span className="text-xs text-slate-400 flex-shrink-0">{t.count} · {t.pct}%</span>
+            <span className="text-xs text-slate-400 flex-shrink-0">{t.count} · {formatPct(t.pct, t.count)}</span>
           </div>
           <div className="w-full bg-slate-100 rounded-full h-1.5">
             <div className="h-1.5 rounded-full" style={{ width: `${top > 0 ? (t.count / top) * 100 : 0}%`, background: color }} />
