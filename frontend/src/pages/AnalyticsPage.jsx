@@ -449,6 +449,12 @@ export default function AnalyticsPage() {
                 Large Gap.
               </p>
               <p>
+                |Self score − Peer score| — those vertical bars mean "absolute value," i.e., just the size of the
+                gap, ignoring which direction it points. If someone self-rated "Domain Knowledge" as 6 and peers
+                rated them 4, the gap is 2. If instead peers rated them 6 and they self-rated 4, the gap is still 2 —
+                same bucket either way. This measure only captures how big the disagreement is, not who rated higher.
+              </p>
+              <p>
                 Several weeks selected → every week someone was scored counts as its own data point (not averaged
                 together first), so someone scored in 3 of 5 selected weeks contributes 3 gap readings, one per week.
               </p>
@@ -534,9 +540,9 @@ export default function AnalyticsPage() {
             <Card className="p-5">
               <h2 className="text-sm font-semibold text-slate-800 mb-1">What the Team Should Focus On</h2>
               <p className="text-xs text-slate-500 mb-2">
-                Every peer suggestion to "What is the single most impactful action this person could take to
-                improve?", grouped by similarly-worded suggestions and ranked by how common each group is — scroll
-                for the full list. Peer-only.
+                Peer suggestions to "What is the single most impactful action this person could take to improve?",
+                grouped by similarly-worded suggestions and ranked by how common each group is — scroll for the full
+                list. Peer-only.
               </p>
               <CalcGuide>
                 <p>
@@ -545,9 +551,17 @@ export default function AnalyticsPage() {
                   differently might not group together even if they mean the same thing.
                 </p>
                 <p>
-                  Each group's count/% is its share of every peer suggestion in your selection. "Also
-                  self-identified" checks that same group's wording against every self-evaluation's own suggestion,
-                  as a self-awareness signal.
+                  Two groups of answers are filtered out before ranking, and counted separately rather than silently
+                  dropped: answers with no real content ("Nothing", "None", "All good", and similar — the note below
+                  reports how many), and answers that just restate one of the fixed Weakness tags already shown,
+                  structured, in Team Strengths & Growth Areas — those are only kept here if that same theme is so
+                  dominant (25%+ of substantive suggestions) that repeating it is still worth the emphasis, otherwise
+                  it'd be pure duplication.
+                </p>
+                <p>
+                  Each remaining group's count/% is its share of every substantive peer suggestion in your selection.
+                  "Also self-identified" checks that same group's wording against every self-evaluation's own
+                  suggestion, as a self-awareness signal.
                 </p>
               </CalcGuide>
               {teamFocusSuggestionsQuery.isLoading ? (
@@ -730,8 +744,16 @@ function HeatmapCallout({ rows }) {
 
 /** Ranked list of clustered peer "focus" suggestions, replacing the old word cloud. */
 function TeamFocusSuggestions({ data }) {
-  if (!data || !data.items || data.items.length === 0) {
+  if (!data || data.totalPeerSuggestions === 0) {
     return <p className="text-sm text-slate-400 text-center py-8">No suggestions submitted yet in this selection.</p>;
+  }
+  if (data.items.length === 0) {
+    return (
+      <p className="text-sm text-slate-400 text-center py-8">
+        Every suggestion this range was either non-substantive or already captured in Team Strengths & Growth Areas —
+        nothing distinct left to show.
+      </p>
+    );
   }
   const top = data.items[0].count;
   return (
@@ -756,6 +778,19 @@ function TeamFocusSuggestions({ data }) {
         All {data.items.length} distinct suggestion{data.items.length === 1 ? "" : "s"} from {data.totalPeerSuggestions} peer
         suggestion{data.totalPeerSuggestions === 1 ? "" : "s"}
         {data.totalSelfSuggestions > 0 ? ` · compared against ${data.totalSelfSuggestions} self-evaluations` : ""}.
+        {data.nonSubstantiveCount > 0 || data.dedupedCount > 0 ? (
+          <>
+            {" "}
+            Also not shown above:{" "}
+            {[
+              data.nonSubstantiveCount > 0 ? `${data.nonSubstantiveCount} with no specific suggestion` : null,
+              data.dedupedCount > 0 ? `${data.dedupedCount} already captured in Team Strengths & Growth Areas` : null,
+            ]
+              .filter(Boolean)
+              .join(", ")}
+            .
+          </>
+        ) : null}
       </p>
     </div>
   );

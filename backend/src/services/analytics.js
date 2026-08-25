@@ -2,7 +2,7 @@
 import { prisma } from "../utils/prisma.js";
 import { roleFilterForScope, analyticsScope } from "./access.js";
 import { ROLES } from "../utils/roles.js";
-import { PARAM_FIELDS } from "../utils/constants.js";
+import { PARAM_FIELDS, WEAKNESS_TAGS } from "../utils/constants.js";
 import { fieldList, sharesField } from "../utils/fields.js";
 
 function clamp(n, lo, hi) {
@@ -369,7 +369,7 @@ export async function getTeamTagTrend(projectId, weekIds, scope) {
 const SUGGESTION_STOPWORDS = new Set([
   "the", "a", "an", "to", "and", "of", "in", "on", "for", "is", "are", "be", "this", "that",
   "with", "should", "needs", "need", "more", "take", "can", "could", "would", "their", "them",
-  "he", "she", "they", "his", "her", "as", "yet", "some", "cases", "while", "working", "from",
+  "he", "she", "they", "his", "her", "my", "as", "yet", "some", "cases", "while", "working", "from",
   "it", "its", "at", "by", "or", "but", "not", "also", "you", "your", "i", "we", "our", "us",
   "has", "have", "had", "do", "does", "did", "been", "being", "was", "were", "will", "shall",
   "may", "might", "must", "than", "so", "if", "about", "into", "up", "down", "out", "over",
@@ -379,8 +379,50 @@ const SUGGESTION_STOPWORDS = new Set([
   "area", "areas", "things", "thing", "help", "work", "good", "well", "him", "one", "upon",
 ]);
 
+// Words that show up almost exclusively in "I have nothing to add" style
+// non-answers to the open-ended focus question — unlike SUGGESTION_STOPWORDS
+// (generic function words present in EVERY answer), these ARE content words,
+// but ones that only ever restate "no suggestion" rather than describe an
+// actual action. See isNonSubstantive below.
+const NON_SUBSTANTIVE_WORDS = new Set([
+  "nothing", "none", "nil", "na", "suggestion", "comment", "feedback", "everything",
+  "overall", "fine", "great", "doing", "keep", "job", "perfect", "excellent", "satisfied",
+  "happy", "awesome", "amazing", "wonderful", "superb", "ok", "okay", "fantastic",
+  "specific", "particular", "far", "concern", "issue",
+]);
+
+// Naive plural stripping (e.g. "suggestions" -> "suggestion", "deadlines" ->
+// "deadline") so a singular/plural mismatch alone doesn't stop two otherwise
+// identically-worded suggestions from clustering together. Only applied to
+// longer words, and never to words already ending "ss", to avoid mangling
+// short unrelated words.
+function stemWord(word) {
+  return word.length >= 5 && word.endsWith("s") && !word.endsWith("ss") ? word.slice(0, -1) : word;
+}
+
 function tokenizeSuggestion(text) {
-  return (text.toLowerCase().match(/[a-z']+/g) || []).filter((w) => w.length >= 3 && !SUGGESTION_STOPWORDS.has(w));
+  const words = text.toLowerCase().match(/[a-z']+/g) || [];
+  const tokens = [];
+  for (const w of words) {
+    if (w.length < 3 || SUGGESTION_STOPWORDS.has(w)) continue;
+    tokens.push(stemWord(w));
+  }
+  return tokens;
+}
+
+/**
+ * True when every remaining (non-filler) word in a suggestion is itself just
+ * a generic "nothing to add" word — "Nothing", "None", "No suggestions",
+ * "All good", "Everything is fine", and similar carry no actionable content,
+ * but they're too short and too different from EACH OTHER (no shared literal
+ * words) for the word-overlap clustering below to ever group them together
+ * on its own. These are filtered out before clustering entirely, rather than
+ * left to form their own confusing scatter of one-off clusters. This is a
+ * curated keyword list, not real language understanding — a genuinely
+ * unusual non-answer can still slip through as its own small cluster.
+ */
+function isNonSubstantive(tokens) {
+  return tokens.length === 0 || tokens.every((t) => NON_SUBSTANTIVE_WORDS.has(t));
 }
 
 function jaccardSimilarity(tokensA, tokensB) {
@@ -457,19 +499,46 @@ function avgSimilarityToCluster(tokens, cluster) {
   return cluster.members.reduce((sum, m) => sum + jaccardSimilarity(tokens, m.tokens), 0) / cluster.members.length;
 }
 
+// Pre-tokenized once — the fixed Weakness tag vocabulary a peer picks from
+// in the SAME evaluation, shown structured in Team Strengths & Growth Areas.
+const WEAKNESS_TAG_TOKENS = WEAKNESS_TAGS.map(tokenizeSuggestion);
+
+/** Highest similarity between a cluster's members and any fixed Weakness tag. */
+function maxSimilarityToWeaknessTags(cluster) {
+  let best = 0;
+  for (const tagTokens of WEAKNESS_TAG_TOKENS) {
+    const sim = cluster.members.reduce((sum, m) => sum + jaccardSimilarity(m.tokens, tagTokens), 0) / cluster.members.length;
+    if (sim > best) best = sim;
+  }
+  return best;
+}
+
+// A cluster that just restates one of the fixed Weakness tags (already
+// surfaced, structured, in Team Strengths & Growth Areas) is only worth
+// repeating here if it's an overwhelmingly dominant theme — otherwise it's
+// pure duplication with no added value.
+const TAG_ECHO_EMPHASIS_PCT = 25;
+
 /**
  * What the team should focus on — every peer "single most impactful action"
  * suggestion, grouped into clusters of near-duplicate wording rather than
  * reduced to a bag of individual words (a word cloud strips exactly the
  * context that makes a short free-text answer actionable), ranked by how
  * many suggestions fell into each. Every cluster is returned (the frontend
- * renders it as a scrollable list) — earlier this was capped to the top 10,
- * which silently hid however much of the full set that left out. Each
- * cluster also reports how many SELF-evaluations raised a similarly-worded
- * suggestion about themselves, as a self-awareness signal — self answers
- * are matched against peer clusters, not clustered on their own. weekIds is
- * one-or-more: every selected week's suggestions (peer and self) are pooled
- * together before clustering.
+ * renders it as a scrollable list). Two things are filtered out before
+ * ranking, both counted separately rather than silently dropped:
+ *  - Non-substantive answers ("Nothing", "None", "All good", ...) — see
+ *    isNonSubstantive.
+ *  - Clusters that just restate a fixed Weakness tag already shown,
+ *    structured, in Team Strengths & Growth Areas — see
+ *    maxSimilarityToWeaknessTags — unless that theme is so dominant
+ *    (>= TAG_ECHO_EMPHASIS_PCT of substantive suggestions) that repeating it
+ *    here is still worth the emphasis.
+ * Each remaining cluster also reports how many SELF-evaluations raised a
+ * similarly-worded suggestion about themselves, as a self-awareness signal —
+ * self answers are matched against peer clusters, not clustered on their
+ * own. weekIds is one-or-more: every selected week's suggestions (peer and
+ * self) are pooled together before clustering.
  */
 export async function getTeamFocusSuggestions(projectId, weekIds, scope) {
   const users = await prisma.user.findMany({
@@ -491,7 +560,16 @@ export async function getTeamFocusSuggestions(projectId, weekIds, scope) {
     }
   }
 
-  const peerClusters = clusterSuggestions(peerTexts);
+  const substantivePeerTexts = peerTexts.filter((t) => !isNonSubstantive(tokenizeSuggestion(t)));
+  const nonSubstantiveCount = peerTexts.length - substantivePeerTexts.length;
+
+  const allClusters = clusterSuggestions(substantivePeerTexts);
+  const tagEchoClusters = allClusters.filter(
+    (c) => maxSimilarityToWeaknessTags(c) >= CLUSTER_JACCARD_THRESHOLD && (c.count / substantivePeerTexts.length) * 100 < TAG_ECHO_EMPHASIS_PCT
+  );
+  const peerClusters = allClusters.filter((c) => !tagEchoClusters.includes(c));
+  const dedupedCount = tagEchoClusters.reduce((a, c) => a + c.count, 0);
+
   const selfTokenized = selfTexts.map(tokenizeSuggestion);
 
   const items = peerClusters.map((c) => {
@@ -499,7 +577,7 @@ export async function getTeamFocusSuggestions(projectId, weekIds, scope) {
     return {
       text: c.representative,
       count: c.count,
-      pct: peerTexts.length ? Math.round((c.count / peerTexts.length) * 100) : 0,
+      pct: substantivePeerTexts.length ? Math.round((c.count / substantivePeerTexts.length) * 100) : 0,
       selfOverlapCount,
       selfOverlapPct: selfTexts.length ? Math.round((selfOverlapCount / selfTexts.length) * 100) : 0,
     };
@@ -509,6 +587,8 @@ export async function getTeamFocusSuggestions(projectId, weekIds, scope) {
     items,
     totalPeerSuggestions: peerTexts.length,
     totalSelfSuggestions: selfTexts.length,
+    nonSubstantiveCount,
+    dedupedCount,
   };
 }
 
