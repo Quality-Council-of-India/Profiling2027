@@ -534,16 +534,21 @@ export default function AnalyticsPage() {
             <Card className="p-5">
               <h2 className="text-sm font-semibold text-slate-800 mb-1">What the Team Should Focus On</h2>
               <p className="text-xs text-slate-500 mb-2">
-                The most-repeated peer suggestions to "What is the single most impactful action this person could
-                take to improve?" — similarly-worded suggestions are grouped together, peer-only.
+                Every peer suggestion to "What is the single most impactful action this person could take to
+                improve?", grouped by similarly-worded suggestions and ranked by how common each group is — scroll
+                for the full list. Peer-only.
               </p>
               <CalcGuide>
                 <p>
-                  Peers' free-text answers are grouped by shared wording, not exact matches — there's no AI model in
-                  this stack, so two answers phrased quite differently might not group together even if they mean
-                  the same thing.
+                  Every peer suggestion is compared to every other one, and answers with enough shared (non-filler)
+                  words are grouped together — there's no AI model in this stack, so two answers phrased quite
+                  differently might not group together even if they mean the same thing.
                 </p>
-                <p>Only the top suggestions are shown; the note below tells you what share of all suggestions that covers.</p>
+                <p>
+                  Each group's count/% is its share of every peer suggestion in your selection. "Also
+                  self-identified" checks that same group's wording against every self-evaluation's own suggestion,
+                  as a self-awareness signal.
+                </p>
               </CalcGuide>
               {teamFocusSuggestionsQuery.isLoading ? (
                 <Spinner />
@@ -729,26 +734,27 @@ function TeamFocusSuggestions({ data }) {
     return <p className="text-sm text-slate-400 text-center py-8">No suggestions submitted yet in this selection.</p>;
   }
   const top = data.items[0].count;
-  const shownCount = data.items.length;
   return (
-    <div className="space-y-2.5">
-      {data.items.map((item, i) => (
-        <div key={i} className="border border-slate-100 rounded-lg p-2.5">
-          <p className="text-xs text-slate-700 mb-1.5">{item.text}</p>
-          <div className="flex items-center gap-2">
-            <div className="flex-1 bg-slate-100 rounded-full h-1.5">
-              <div className="h-1.5 rounded-full" style={{ width: `${top > 0 ? (item.count / top) * 100 : 0}%`, background: NAV }} />
+    <div>
+      <div className="space-y-2.5 max-h-[32rem] overflow-y-auto -mx-1 px-1">
+        {data.items.map((item, i) => (
+          <div key={i} className="border border-slate-100 rounded-lg p-2.5">
+            <p className="text-xs text-slate-700 mb-1.5">{item.text}</p>
+            <div className="flex items-center gap-2">
+              <div className="flex-1 bg-slate-100 rounded-full h-1.5">
+                <div className="h-1.5 rounded-full" style={{ width: `${top > 0 ? (item.count / top) * 100 : 0}%`, background: NAV }} />
+              </div>
+              <span className="text-[11px] text-slate-400 flex-shrink-0">{item.count} · {item.pct}%</span>
             </div>
-            <span className="text-[11px] text-slate-400 flex-shrink-0">{item.count} · {item.pct}%</span>
+            {item.selfOverlapCount > 0 && (
+              <p className="text-[11px] text-slate-400 mt-1">Also self-identified in {item.selfOverlapPct}% of self-evaluations.</p>
+            )}
           </div>
-          {item.selfOverlapCount > 0 && (
-            <p className="text-[11px] text-slate-400 mt-1">Also self-identified in {item.selfOverlapPct}% of self-evaluations.</p>
-          )}
-        </div>
-      ))}
-      <p className="text-[11px] text-slate-400 pt-1">
-        Top {shownCount} of {data.totalClusters} distinct suggestion{data.totalClusters === 1 ? "" : "s"} shown,
-        covering {data.coveragePct}% of {data.totalPeerSuggestions} peer suggestion{data.totalPeerSuggestions === 1 ? "" : "s"}
+        ))}
+      </div>
+      <p className="text-[11px] text-slate-400 pt-2">
+        All {data.items.length} distinct suggestion{data.items.length === 1 ? "" : "s"} from {data.totalPeerSuggestions} peer
+        suggestion{data.totalPeerSuggestions === 1 ? "" : "s"}
         {data.totalSelfSuggestions > 0 ? ` · compared against ${data.totalSelfSuggestions} self-evaluations` : ""}.
       </p>
     </div>
