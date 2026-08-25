@@ -540,29 +540,29 @@ export default function AnalyticsPage() {
             <Card className="p-5">
               <h2 className="text-sm font-semibold text-slate-800 mb-1">What the Team Should Focus On</h2>
               <p className="text-xs text-slate-500 mb-2">
-                Peer suggestions to "What is the single most impactful action this person could take to improve?",
-                grouped by similarly-worded suggestions and ranked by how common each group is — scroll for the full
-                list. Peer-only.
+                Every peer suggestion to "What is the single most impactful action this person could take to
+                improve?", sorted into four categories below — nothing is excluded. Peer-only.
               </p>
               <CalcGuide>
                 <p>
-                  Every peer suggestion is compared to every other one, and answers with enough shared (non-filler)
-                  words are grouped together — there's no AI model in this stack, so two answers phrased quite
-                  differently might not group together even if they mean the same thing.
+                  Every suggestion lands in exactly one category, so all four percentages are each a share of the
+                  same total (every peer suggestion in your selection) and add up to ~100%:
                 </p>
+                <ul className="list-disc list-inside space-y-0.5 pl-1">
+                  <li><strong>Unique</strong> — a genuine actionable suggestion not already captured by the fixed Weakness tags shown, structured, in Team Strengths & Growth Areas.</li>
+                  <li><strong>Repetitive</strong> — an actionable suggestion that just restates one of those fixed tags.</li>
+                  <li><strong>Non-answer</strong> — no real content ("Nothing", "None", "All good", and similar).</li>
+                  <li><strong>Positive</strong> — says something about the person but proposes no action ("Very calm nature", "Great team player").</li>
+                </ul>
                 <p>
-                  Two groups of answers are filtered out before ranking, and counted separately rather than silently
-                  dropped: answers with no real content ("Nothing", "None", "All good", and similar — the note below
-                  reports how many), and answers that just restate one of the fixed Weakness tags already shown,
-                  structured, in Team Strengths & Growth Areas — those are only kept here if that same theme is so
-                  dominant (25%+ of substantive suggestions) that repeating it is still worth the emphasis, otherwise
-                  it'd be pure duplication.
+                  Unique/Repetitive are grouped by shared wording (not exact matches) — there's no AI model in this
+                  stack, so two answers phrased quite differently might not group together even if they mean the
+                  same thing. Non-answer/Positive is judged by whether the text contains any actionable
+                  language ("should", "needs", "attend", "document", ...) — a curated keyword check, not real grammar
+                  understanding, so an unusually-phrased suggestion could occasionally land in the wrong category;
+                  it's still fully visible either way, just not where you'd expect it.
                 </p>
-                <p>
-                  Each remaining group's count/% is its share of every substantive peer suggestion in your selection.
-                  "Also self-identified" checks that same group's wording against every self-evaluation's own
-                  suggestion, as a self-awareness signal.
-                </p>
+                <p>"Also self-identified" checks a group's wording against every self-evaluation's own suggestion, as a self-awareness signal.</p>
               </CalcGuide>
               {teamFocusSuggestionsQuery.isLoading ? (
                 <Spinner />
@@ -742,56 +742,110 @@ function HeatmapCallout({ rows }) {
   );
 }
 
-/** Ranked list of clustered peer "focus" suggestions, replacing the old word cloud. */
+const FOCUS_CATEGORIES = [
+  { key: "unique", label: "Unique", color: NAV },
+  { key: "repetitive", label: "Repetitive", color: "#8B5CF6" },
+  { key: "nonAnswer", label: "Non-answer", color: "#94A3B8" },
+  { key: "positive", label: "Positive", color: ACCENT },
+];
+
+/** Every peer "focus" suggestion, sorted into four always-visible categories — replacing both the old word cloud and the later version that silently excluded some responses. */
 function TeamFocusSuggestions({ data }) {
   if (!data || data.totalPeerSuggestions === 0) {
     return <p className="text-sm text-slate-400 text-center py-8">No suggestions submitted yet in this selection.</p>;
   }
-  if (data.items.length === 0) {
-    return (
-      <p className="text-sm text-slate-400 text-center py-8">
-        Every suggestion this range was either non-substantive or already captured in Team Strengths & Growth Areas —
-        nothing distinct left to show.
-      </p>
-    );
-  }
-  const top = data.items[0].count;
+  const { unique, repetitive, nonAnswer, positive } = data.categories;
   return (
     <div>
-      <div className="space-y-2.5 max-h-[32rem] overflow-y-auto -mx-1 px-1">
-        {data.items.map((item, i) => (
-          <div key={i} className="border border-slate-100 rounded-lg p-2.5">
-            <p className="text-xs text-slate-700 mb-1.5">{item.text}</p>
-            <div className="flex items-center gap-2">
-              <div className="flex-1 bg-slate-100 rounded-full h-1.5">
-                <div className="h-1.5 rounded-full" style={{ width: `${top > 0 ? (item.count / top) * 100 : 0}%`, background: NAV }} />
-              </div>
-              <span className="text-[11px] text-slate-400 flex-shrink-0">{item.count} · {item.pct}%</span>
-            </div>
-            {item.selfOverlapCount > 0 && (
-              <p className="text-[11px] text-slate-400 mt-1">Also self-identified in {item.selfOverlapPct}% of self-evaluations.</p>
-            )}
-          </div>
+      <div className="w-full h-2.5 rounded-full overflow-hidden flex bg-slate-100 mb-2">
+        {FOCUS_CATEGORIES.map(
+          (c) =>
+            data.categories[c.key].pct > 0 && (
+              <div key={c.key} style={{ width: `${data.categories[c.key].pct}%`, background: c.color }} title={`${c.label} ${data.categories[c.key].pct}%`} />
+            )
+        )}
+      </div>
+      <div className="flex flex-wrap gap-x-3 gap-y-1 mb-4">
+        {FOCUS_CATEGORIES.map((c) => (
+          <span key={c.key} className="flex items-center gap-1 text-xs text-slate-500">
+            <span className="w-2 h-2 rounded-full inline-block flex-shrink-0" style={{ background: c.color }} />
+            {c.label} ({data.categories[c.key].count} · {data.categories[c.key].pct}%)
+          </span>
         ))}
       </div>
+      <div className="space-y-2.5">
+        <FocusRankedGroup title="Unique Suggestions" color={NAV} count={unique.count} pct={unique.pct} items={unique.items} />
+        <FocusRankedGroup title="Repetitive Suggestions" color="#8B5CF6" count={repetitive.count} pct={repetitive.pct} items={repetitive.items} />
+        <FocusRawGroup title="Non-answer Suggestions" color="#94A3B8" count={nonAnswer.count} pct={nonAnswer.pct} texts={nonAnswer.texts} />
+        <FocusRawGroup title="Positive Suggestions" color={ACCENT} count={positive.count} pct={positive.pct} texts={positive.texts} />
+      </div>
       <p className="text-[11px] text-slate-400 pt-2">
-        All {data.items.length} distinct suggestion{data.items.length === 1 ? "" : "s"} from {data.totalPeerSuggestions} peer
-        suggestion{data.totalPeerSuggestions === 1 ? "" : "s"}
+        Based on {data.totalPeerSuggestions} peer suggestion{data.totalPeerSuggestions === 1 ? "" : "s"}
         {data.totalSelfSuggestions > 0 ? ` · compared against ${data.totalSelfSuggestions} self-evaluations` : ""}.
-        {data.nonSubstantiveCount > 0 || data.dedupedCount > 0 ? (
-          <>
-            {" "}
-            Also not shown above:{" "}
-            {[
-              data.nonSubstantiveCount > 0 ? `${data.nonSubstantiveCount} with no specific suggestion` : null,
-              data.dedupedCount > 0 ? `${data.dedupedCount} already captured in Team Strengths & Growth Areas` : null,
-            ]
-              .filter(Boolean)
-              .join(", ")}
-            .
-          </>
-        ) : null}
       </p>
+    </div>
+  );
+}
+
+/** Click-to-expand ranked list for the Unique/Repetitive focus categories — same pattern as SapaBars. */
+function FocusRankedGroup({ title, color, count, pct, items }) {
+  const [open, setOpen] = useState(false);
+  const top = items.length ? items[0].count : 0;
+  return (
+    <div className="border border-slate-100 rounded-lg p-3">
+      <button onClick={() => setOpen((v) => !v)} className="w-full flex items-center gap-1.5 text-left" disabled={items.length === 0}>
+        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: color }} />
+        <span className="text-xs font-semibold text-slate-700">{title}</span>
+        <span className="text-xs text-slate-400">({count} · {pct}%)</span>
+        {items.length > 0 && <span className="text-slate-400 text-xs ml-auto">{open ? "▲" : "▼"}</span>}
+      </button>
+      {items.length === 0 ? (
+        <p className="text-xs text-slate-400 mt-1.5">None in this selection.</p>
+      ) : open ? (
+        <div className="space-y-2.5 max-h-[28rem] overflow-y-auto mt-2.5 -mx-1 px-1">
+          {items.map((item, i) => (
+            <div key={i} className="border border-slate-100 rounded-lg p-2.5">
+              <p className="text-xs text-slate-700 mb-1.5">{item.text}</p>
+              {item.matchedTag && <p className="text-[11px] text-purple-600 mb-1">Echoes tag: "{item.matchedTag}"</p>}
+              <div className="flex items-center gap-2">
+                <div className="flex-1 bg-slate-100 rounded-full h-1.5">
+                  <div className="h-1.5 rounded-full" style={{ width: `${top > 0 ? (item.count / top) * 100 : 0}%`, background: color }} />
+                </div>
+                <span className="text-[11px] text-slate-400 flex-shrink-0">{item.count} · {item.pct}%</span>
+              </div>
+              {item.selfOverlapCount > 0 && (
+                <p className="text-[11px] text-slate-400 mt-1">Also self-identified in {item.selfOverlapPct}% of self-evaluations.</p>
+              )}
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** Click-to-expand raw-quotes list for the Non-answer/Positive focus categories — these are collated as one group, not ranked individually. */
+function FocusRawGroup({ title, color, count, pct, texts }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="border border-slate-100 rounded-lg p-3">
+      <button onClick={() => setOpen((v) => !v)} className="w-full flex items-center gap-1.5 text-left" disabled={texts.length === 0}>
+        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: color }} />
+        <span className="text-xs font-semibold text-slate-700">{title}</span>
+        <span className="text-xs text-slate-400">({count} · {pct}%)</span>
+        {texts.length > 0 && <span className="text-slate-400 text-xs ml-auto">{open ? "▲" : "▼"}</span>}
+      </button>
+      {texts.length === 0 ? (
+        <p className="text-xs text-slate-400 mt-1.5">None in this selection.</p>
+      ) : open ? (
+        <div className="flex flex-wrap gap-1.5 mt-2.5 max-h-[16rem] overflow-y-auto">
+          {texts.map((t, i) => (
+            <span key={i} className="px-2 py-0.5 rounded-md text-[11px] bg-slate-50 border border-slate-100 text-slate-700">
+              {t}
+            </span>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
