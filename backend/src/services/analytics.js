@@ -503,42 +503,97 @@ function avgSimilarityToCluster(tokens, cluster) {
 // in the SAME evaluation, shown structured in Team Strengths & Growth Areas.
 const WEAKNESS_TAG_TOKENS = WEAKNESS_TAGS.map(tokenizeSuggestion);
 
-/** Highest similarity between a cluster's members and any fixed Weakness tag. */
-function maxSimilarityToWeaknessTags(cluster) {
-  let best = 0;
-  for (const tagTokens of WEAKNESS_TAG_TOKENS) {
+/** The fixed Weakness tag (if any) a cluster's wording most closely echoes, plus how closely. */
+function bestMatchingWeaknessTag(cluster) {
+  let best = null;
+  WEAKNESS_TAGS.forEach((tag, i) => {
+    const tagTokens = WEAKNESS_TAG_TOKENS[i];
     const sim = cluster.members.reduce((sum, m) => sum + jaccardSimilarity(m.tokens, tagTokens), 0) / cluster.members.length;
-    if (sim > best) best = sim;
-  }
+    if (!best || sim > best.sim) best = { tag, sim };
+  });
   return best;
 }
 
-// A cluster that just restates one of the fixed Weakness tags (already
-// surfaced, structured, in Team Strengths & Growth Areas) is only worth
-// repeating here if it's an overwhelmingly dominant theme — otherwise it's
-// pure duplication with no added value.
-const TAG_ECHO_EMPHASIS_PCT = 25;
+// Hedge/modal words that signal an actual improvement ask regardless of
+// where they appear in the sentence — largely the same vocabulary already
+// stripped as generic stopwords during clustering, but checked here on the
+// RAW words (before stripping), since stripping is exactly what would make
+// them invisible to this check.
+const ACTION_MARKERS = new Set([
+  "should", "could", "would", "must", "need", "needs", "improve", "increase",
+  "decrease", "reduce", "avoid", "focus", "try", "ensure", "recommend",
+  "suggest", "consider", "better", "more", "less", "stop", "start",
+]);
+
+// Imperative-style action verbs — catches a suggestion phrased as a bare
+// command with no hedge word at all ("Attend all meetings on time"), which
+// would otherwise be indistinguishable from a non-actionable remark.
+// Deliberately verbs that read as instructions in this context, not generic
+// verbs ("do", "make", "get") that show up in all kinds of sentences.
+const ACTION_VERBS = new Set([
+  "attend", "speak", "share", "document", "communicate", "ask", "check",
+  "follow", "complete", "submit", "respond", "coordinate", "plan", "prepare",
+  "review", "verify", "escalate", "delegate", "prioritize", "practice",
+  "apply", "learn", "adopt", "maintain", "continue", "provide", "offer",
+  "seek", "request", "raise", "flag", "report", "update", "track", "monitor",
+  "schedule", "organize", "contribute", "participate", "engage", "listen",
+  "collaborate", "use", "adhere", "proofread", "validate", "confirm",
+  "clarify", "discuss", "involve", "consult", "notify", "inform", "record",
+  "log", "note", "execute", "implement", "refine", "streamline", "simplify",
+  "automate", "mentor", "coach", "train",
+]);
+
+// "is/was/being + <verb>" reads as a description of the person ("he is
+// listening"), not an instruction ("listen more") — an ACTION_VERBS hit
+// directly after one of these is not treated as an actionable signal.
+const COPULA_WORDS = new Set(["is", "are", "was", "were", "has", "have", "being", "been", "be"]);
+
+/**
+ * True when a suggestion contains some signal that it's actually proposing
+ * an action: a hedge/modal word anywhere in the sentence, OR an imperative-
+ * style action verb not immediately preceded by a copula. There's no
+ * grammar parser in this stack, so this is a curated-keyword heuristic, not
+ * real imperative-mood detection — two honest failure modes remain: a bare
+ * command using a verb outside ACTION_VERBS can still read as non-
+ * actionable, and a descriptive sentence using an ACTION_VERB in a
+ * non-adjacent tense ("He always listens well") can still read as
+ * actionable. Both just mean a response lands in "Positive" vs "Unique/
+ * Repetitive" — nothing is ever hidden by this check.
+ */
+function hasActionableSignal(text) {
+  const words = text.toLowerCase().match(/[a-z']+/g) || [];
+  if (words.some((w) => ACTION_MARKERS.has(w))) return true;
+  for (let i = 0; i < words.length; i++) {
+    if (!ACTION_VERBS.has(stemWord(words[i])) && !ACTION_VERBS.has(words[i])) continue;
+    const prev = i > 0 ? words[i - 1] : null;
+    if (prev && COPULA_WORDS.has(prev)) continue;
+    return true;
+  }
+  return false;
+}
 
 /**
  * What the team should focus on — every peer "single most impactful action"
- * suggestion, grouped into clusters of near-duplicate wording rather than
- * reduced to a bag of individual words (a word cloud strips exactly the
- * context that makes a short free-text answer actionable), ranked by how
- * many suggestions fell into each. Every cluster is returned (the frontend
- * renders it as a scrollable list). Two things are filtered out before
- * ranking, both counted separately rather than silently dropped:
- *  - Non-substantive answers ("Nothing", "None", "All good", ...) — see
+ * suggestion, sorted into four always-visible categories rather than
+ * ranked as one undifferentiated list (an earlier version of this excluded
+ * some responses outright, which hid real data — nothing is excluded now):
+ *  - Unique: a genuine actionable suggestion not already captured by the
+ *    fixed Weakness tags shown, structured, in Team Strengths & Growth Areas.
+ *  - Repetitive: an actionable suggestion that just restates one of those
+ *    fixed tags — see bestMatchingWeaknessTag.
+ *  - Non-answer: no real content ("Nothing", "None", "All good", ...) — see
  *    isNonSubstantive.
- *  - Clusters that just restate a fixed Weakness tag already shown,
- *    structured, in Team Strengths & Growth Areas — see
- *    maxSimilarityToWeaknessTags — unless that theme is so dominant
- *    (>= TAG_ECHO_EMPHASIS_PCT of substantive suggestions) that repeating it
- *    here is still worth the emphasis.
- * Each remaining cluster also reports how many SELF-evaluations raised a
- * similarly-worded suggestion about themselves, as a self-awareness signal —
- * self answers are matched against peer clusters, not clustered on their
- * own. weekIds is one-or-more: every selected week's suggestions (peer and
- * self) are pooled together before clustering.
+ *  - Positive: says something about the person but proposes no action
+ *    ("Very calm nature", "Great team player") — see hasActionableSignal.
+ * Unique/Repetitive suggestions are further grouped into clusters of near-
+ * duplicate wording (word-overlap, not a bag of individual words — a word
+ * cloud strips exactly the context that makes a short free-text answer
+ * actionable) and each reports how many SELF-evaluations raised a similarly-
+ * worded suggestion about themselves, as a self-awareness signal. Every
+ * category's count/% is against the SAME total (every peer suggestion in
+ * the selection), so all four percentages sum to ~100%. weekIds is
+ * one-or-more: every selected week's suggestions (peer and self) are pooled
+ * together before classifying.
  */
 export async function getTeamFocusSuggestions(projectId, weekIds, scope) {
   const users = await prisma.user.findMany({
@@ -560,35 +615,59 @@ export async function getTeamFocusSuggestions(projectId, weekIds, scope) {
     }
   }
 
-  const substantivePeerTexts = peerTexts.filter((t) => !isNonSubstantive(tokenizeSuggestion(t)));
-  const nonSubstantiveCount = peerTexts.length - substantivePeerTexts.length;
+  const nonAnswerTexts = [];
+  const positiveTexts = [];
+  const actionableTexts = [];
+  for (const text of peerTexts) {
+    if (isNonSubstantive(tokenizeSuggestion(text))) {
+      nonAnswerTexts.push(text);
+    } else if (!hasActionableSignal(text)) {
+      positiveTexts.push(text);
+    } else {
+      actionableTexts.push(text);
+    }
+  }
 
-  const allClusters = clusterSuggestions(substantivePeerTexts);
-  const tagEchoClusters = allClusters.filter(
-    (c) => maxSimilarityToWeaknessTags(c) >= CLUSTER_JACCARD_THRESHOLD && (c.count / substantivePeerTexts.length) * 100 < TAG_ECHO_EMPHASIS_PCT
-  );
-  const peerClusters = allClusters.filter((c) => !tagEchoClusters.includes(c));
-  const dedupedCount = tagEchoClusters.reduce((a, c) => a + c.count, 0);
-
+  const clusters = clusterSuggestions(actionableTexts);
   const selfTokenized = selfTexts.map(tokenizeSuggestion);
+  const total = peerTexts.length;
+  const pct = (n) => (total ? Math.round((n / total) * 100) : 0);
 
-  const items = peerClusters.map((c) => {
+  const toItem = (c) => {
     const selfOverlapCount = selfTokenized.filter((tokens) => avgSimilarityToCluster(tokens, c) >= CLUSTER_JACCARD_THRESHOLD).length;
     return {
       text: c.representative,
       count: c.count,
-      pct: substantivePeerTexts.length ? Math.round((c.count / substantivePeerTexts.length) * 100) : 0,
+      pct: pct(c.count),
       selfOverlapCount,
       selfOverlapPct: selfTexts.length ? Math.round((selfOverlapCount / selfTexts.length) * 100) : 0,
     };
-  });
+  };
+
+  const uniqueItems = [];
+  const repetitiveItems = [];
+  for (const c of clusters) {
+    const match = bestMatchingWeaknessTag(c);
+    if (match && match.sim >= CLUSTER_JACCARD_THRESHOLD) {
+      repetitiveItems.push({ ...toItem(c), matchedTag: match.tag });
+    } else {
+      uniqueItems.push(toItem(c));
+    }
+  }
+
+  const sumCount = (items) => items.reduce((a, it) => a + it.count, 0);
+  const uniqueCount = sumCount(uniqueItems);
+  const repetitiveCount = sumCount(repetitiveItems);
 
   return {
-    items,
-    totalPeerSuggestions: peerTexts.length,
+    totalPeerSuggestions: total,
     totalSelfSuggestions: selfTexts.length,
-    nonSubstantiveCount,
-    dedupedCount,
+    categories: {
+      unique: { count: uniqueCount, pct: pct(uniqueCount), items: uniqueItems },
+      repetitive: { count: repetitiveCount, pct: pct(repetitiveCount), items: repetitiveItems },
+      nonAnswer: { count: nonAnswerTexts.length, pct: pct(nonAnswerTexts.length), texts: nonAnswerTexts },
+      positive: { count: positiveTexts.length, pct: pct(positiveTexts.length), texts: positiveTexts },
+    },
   };
 }
 
