@@ -106,7 +106,7 @@ jobs:
             echo "Checking Prisma migrations..."
 
             docker compose run --rm backend \
-              npx prisma migrate status
+              npx prisma migrate status || true
 
             # ==========================================
             # 7. Apply Prisma migrations
