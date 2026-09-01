@@ -12,7 +12,7 @@ export async function getCompliance(req, res) {
   });
   if (!week) return res.status(404).json({ error: "Week not found" });
 
-  const matrix = await buildComplianceMatrix(req.user.project_id, weekId);
+  const matrix = await buildComplianceMatrix(req.user.project_id, weekId, week.status);
   res.json({ week, ...matrix });
 }
 

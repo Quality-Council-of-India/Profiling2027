@@ -97,6 +97,12 @@ export default function CompliancePage() {
         <Spinner />
       ) : (
         <>
+          {data.mappingDataAvailable === false && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+              This week closed before per-peer mapping history was being frozen — self-evaluation completion below is
+              accurate, but peer-mapping detail (who was expected to evaluate whom) isn't available for it.
+            </p>
+          )}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard
               label="Overall Completion"

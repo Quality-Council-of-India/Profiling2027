@@ -8,7 +8,7 @@ generator client {
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL") // pooled connection (via PgBouncer/Neon's pooler) — used at runtime
-  directUrl = env("DIRECT_URL")   // unpooled connection — used for `prisma migrate deploy`
+  directUrl = env("DIRECT_URL") // unpooled connection — used for `prisma migrate deploy`
 }
 
 enum Role {
@@ -67,80 +67,83 @@ enum NotificationType {
 
 // 3.1.1 projects — one record per annual cycle (Padma 2027, Padma 2028, ...)
 model Project {
-  id          Int       @id @default(autoincrement())
-  name        String    @db.VarChar(100)
-  year        Int       @unique
-  start_date  DateTime  @db.Date
-  end_date    DateTime? @db.Date
-  is_active   Boolean   @default(true)
-  created_at  DateTime  @default(now())
+  id         Int       @id @default(autoincrement())
+  name       String    @db.VarChar(100)
+  year       Int       @unique
+  start_date DateTime  @db.Date
+  end_date   DateTime? @db.Date
+  is_active  Boolean   @default(true)
+  created_at DateTime  @default(now())
 
-  users            User[]
-  weeks            Week[]
-  peer_mappings    PeerMapping[]
-  tickets          Ticket[]
-  notifications    Notification[]
-  email_broadcasts EmailBroadcast[]
+  users                  User[]
+  weeks                  Week[]
+  peer_mappings          PeerMapping[]
+  peer_mapping_snapshots PeerMappingSnapshot[]
+  tickets                Ticket[]
+  notifications          Notification[]
+  email_broadcasts       EmailBroadcast[]
 
   @@map("projects")
 }
 
 // 3.1.2 users — every professional, lead, anchor, and admin
 model User {
-  id            Int      @id @default(autoincrement())
-  project_id    Int
-  name          String   @db.VarChar(100)
-  email         String   @unique @db.VarChar(150)
-  password_hash String   @db.VarChar(255)
-  role          Role
+  id                   Int       @id @default(autoincrement())
+  project_id           Int
+  name                 String    @db.VarChar(100)
+  email                String    @unique @db.VarChar(150)
+  password_hash        String    @db.VarChar(255)
+  role                 Role
   // VarChar(255), not a tighter fit to today's longest FIELDS entry (51
   // chars): a CASU Anchor covering more than one field stores them
   // comma-joined in this same column (see utils/fields.js), so it needs
   // headroom for combinations, not just one name.
-  field         String?  @db.VarChar(255)
+  field                String?   @db.VarChar(255)
   // Org Employee ID from the team roster — nullable since not everyone has
   // one assigned yet (e.g. new hires pending HR onboarding).
-  emp_id        String?  @unique @db.VarChar(20)
+  emp_id               String?   @unique @db.VarChar(20)
   // Text, not VarChar — holds a data: URI (base64) for admin-uploaded photos
   // in the common case, so needs to fit a small compressed image, not just a URL.
-  photo_url     String?  @db.Text
-  is_active     Boolean  @default(true)
-  created_at    DateTime @default(now())
+  photo_url            String?   @db.Text
+  is_active            Boolean   @default(true)
+  created_at           DateTime  @default(now())
   // Set the first (and only) time "Send Login Credentials to All" emails
   // this person — lets that bulk action target only people who've never
   // been sent real credentials yet, so adding one new user later doesn't
   // re-reset and re-email everyone who's already set their own password.
-  credentials_sent_at DateTime?
+  credentials_sent_at  DateTime?
   // Updated on every successful login — lets Admin see who's never signed
   // in at all versus who has.
-  last_login_at       DateTime?
+  last_login_at        DateTime?
   // Updated whenever the password actually changes away from whatever
   // Admin last issued (self-service reset, or Admin's own "Set Password") —
   // distinguishes "still on the temp password" from "has their own now".
-  password_changed_at DateTime?
+  password_changed_at  DateTime?
   // The informal "Master Admin" — always has full access to every Admin
   // Panel section, and is the only one who can grant the can_manage_*
   // flags below to other Admins. Never settable through the app itself
   // (only ever flipped directly in the database), so it can't be
   // escalated to from within the product.
-  is_master_admin      Boolean  @default(false)
+  is_master_admin      Boolean   @default(false)
   // Per-Admin edit access to the three sections a non-master Admin is
   // otherwise view-only in. Irrelevant for every other role, and always
   // implicitly true for is_master_admin regardless of these flags.
-  can_manage_weeks     Boolean  @default(false)
-  can_manage_passwords Boolean  @default(false)
-  can_manage_roster    Boolean  @default(false)
+  can_manage_weeks     Boolean   @default(false)
+  can_manage_passwords Boolean   @default(false)
+  can_manage_roster    Boolean   @default(false)
 
   project Project @relation(fields: [project_id], references: [id], onDelete: Cascade)
 
-  mappingsAsEvaluator PeerMapping[]    @relation("MappingEvaluator")
-  mappingsAsEvaluatee PeerMapping[]    @relation("MappingEvaluatee")
-  evaluationsGiven    Evaluation[]     @relation("EvalEvaluator")
-  evaluationsReceived Evaluation[]     @relation("EvalEvaluatee")
-  computedScores      ComputedScore[]
-  tickets             Ticket[]
-  notifications       Notification[]
-  emailBroadcastsSent EmailBroadcast[]
+  mappingsAsEvaluator         PeerMapping[]         @relation("MappingEvaluator")
+  mappingsAsEvaluatee         PeerMapping[]         @relation("MappingEvaluatee")
+  mappingSnapshotsAsEvaluator PeerMappingSnapshot[] @relation("MappingSnapshotEvaluator")
+  mappingSnapshotsAsEvaluatee PeerMappingSnapshot[] @relation("MappingSnapshotEvaluatee")
+  evaluationsGiven            Evaluation[]          @relation("EvalEvaluator")
+  evaluationsReceived         Evaluation[]          @relation("EvalEvaluatee")
+  computedScores              ComputedScore[]
+  tickets                     Ticket[]
+  notifications               Notification[]
+  emailBroadcastsSent         EmailBroadcast[]
 
   @@index([project_id])
   @@map("users")
@@ -148,19 +151,47 @@ model User {
 
 // 3.1.3 peer_mappings — who evaluates whom (digital 'Ideal Mapping' tab)
 model PeerMapping {
-  id            Int         @id @default(autoincrement())
-  project_id    Int
-  evaluator_id  Int
-  evaluatee_id  Int
-  mapping_type  MappingType @default(peer)
+  id           Int         @id @default(autoincrement())
+  project_id   Int
+  evaluator_id Int
+  evaluatee_id Int
+  mapping_type MappingType @default(peer)
 
-  project  Project @relation(fields: [project_id], references: [id], onDelete: Cascade)
-  evaluator User   @relation("MappingEvaluator", fields: [evaluator_id], references: [id], onDelete: Cascade)
-  evaluatee User   @relation("MappingEvaluatee", fields: [evaluatee_id], references: [id], onDelete: Cascade)
+  project   Project @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  evaluator User    @relation("MappingEvaluator", fields: [evaluator_id], references: [id], onDelete: Cascade)
+  evaluatee User    @relation("MappingEvaluatee", fields: [evaluatee_id], references: [id], onDelete: Cascade)
 
   @@unique([project_id, evaluator_id, evaluatee_id])
   @@index([evaluatee_id])
   @@map("peer_mappings")
+}
+
+// A frozen, week-scoped copy of peer_mappings, taken the moment a week
+// closes. peer_mappings itself is LIVE and global (fully deleted and
+// rebuilt on every roster import), so without this, a later reshuffle
+// silently rewrites who was ever expected to evaluate whom in an
+// already-closed week — exactly what happened to Week 1 here. Once a row
+// exists for a (week, evaluator, evaluatee), it's never touched again by a
+// later reshuffle; only an explicit Admin correction for that specific
+// week (reopen -> re-close) should ever refresh it. The currently OPEN
+// week has no rows here yet — reads for an open week still go straight to
+// the live peer_mappings table, since its mapping isn't finalized.
+model PeerMappingSnapshot {
+  id           Int         @id @default(autoincrement())
+  project_id   Int
+  week_id      Int
+  evaluator_id Int
+  evaluatee_id Int
+  mapping_type MappingType @default(peer)
+
+  project   Project @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  week      Week    @relation(fields: [week_id], references: [id], onDelete: Cascade)
+  evaluator User    @relation("MappingSnapshotEvaluator", fields: [evaluator_id], references: [id], onDelete: Cascade)
+  evaluatee User    @relation("MappingSnapshotEvaluatee", fields: [evaluatee_id], references: [id], onDelete: Cascade)
+
+  @@unique([week_id, evaluator_id, evaluatee_id])
+  @@index([week_id, evaluatee_id])
+  @@map("peer_mapping_snapshots")
 }
 
 // 3.1.4 weeks — each feedback cycle; admin opens/closes
@@ -177,9 +208,10 @@ model Week {
   // correction" (status alone can't, since both look like "open").
   closed_at   DateTime?
 
-  project     Project        @relation(fields: [project_id], references: [id], onDelete: Cascade)
-  evaluations Evaluation[]
-  scores      ComputedScore[]
+  project              Project               @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  evaluations          Evaluation[]
+  scores               ComputedScore[]
+  peerMappingSnapshots PeerMappingSnapshot[]
 
   @@unique([project_id, week_number])
   @@map("weeks")
@@ -187,30 +219,30 @@ model Week {
 
 // 3.1.5 evaluations — one row per form submission (self or single peer eval)
 model Evaluation {
-  id                          Int        @id @default(autoincrement())
-  week_id                     Int
-  evaluator_id                Int
-  evaluatee_id                Int
-  eval_type                   EvalType
-  ownership_discipline        Int        @db.SmallInt
-  team_spirit                 Int        @db.SmallInt
-  communication_clarity       Int        @db.SmallInt
-  domain_knowledge            Int        @db.SmallInt
-  timeliness_throughput       Int        @db.SmallInt
-  work_quality                Int        @db.SmallInt
-  problem_solving_initiative  Int        @db.SmallInt
-  strengths_tags              String[]
-  weakness_tags               String[]
+  id                         Int        @id @default(autoincrement())
+  week_id                    Int
+  evaluator_id               Int
+  evaluatee_id               Int
+  eval_type                  EvalType
+  ownership_discipline       Int        @db.SmallInt
+  team_spirit                Int        @db.SmallInt
+  communication_clarity      Int        @db.SmallInt
+  domain_knowledge           Int        @db.SmallInt
+  timeliness_throughput      Int        @db.SmallInt
+  work_quality               Int        @db.SmallInt
+  problem_solving_initiative Int        @db.SmallInt
+  strengths_tags             String[]
+  weakness_tags              String[]
   // Free-text detail behind the "Others" strengths/weakness tag — set only
   // when "Others" is among the tags above. "Others" doesn't count toward
   // the normal 3-tag cap, so it's tracked as its own optional add-on rather
   // than folded into the capped tag arrays.
-  strengths_other_text        String?    @db.VarChar(200)
-  weakness_other_text         String?    @db.VarChar(200)
-  improvement_suggestion      String?
-  trajectory                  Trajectory
-  submitted_at                DateTime   @default(now())
-  locked                      Boolean    @default(true)
+  strengths_other_text       String?    @db.VarChar(200)
+  weakness_other_text        String?    @db.VarChar(200)
+  improvement_suggestion     String?
+  trajectory                 Trajectory
+  submitted_at               DateTime   @default(now())
+  locked                     Boolean    @default(true)
 
   week      Week @relation(fields: [week_id], references: [id], onDelete: Cascade)
   evaluator User @relation("EvalEvaluator", fields: [evaluator_id], references: [id], onDelete: Cascade)
@@ -227,35 +259,35 @@ model Evaluation {
 
 // 3.1.6 computed_scores — materialised weekly scores, replaces 'Scores for Week XX' tabs
 model ComputedScore {
-  id                                Int      @id @default(autoincrement())
-  week_id                           Int
-  user_id                           Int
-  ownership_discipline_self         Decimal  @default(0) @db.Decimal(3, 2)
-  ownership_discipline_peer         Decimal  @default(0) @db.Decimal(3, 2)
-  team_spirit_self                  Decimal  @default(0) @db.Decimal(3, 2)
-  team_spirit_peer                  Decimal  @default(0) @db.Decimal(3, 2)
-  communication_clarity_self        Decimal  @default(0) @db.Decimal(3, 2)
-  communication_clarity_peer        Decimal  @default(0) @db.Decimal(3, 2)
-  domain_knowledge_self             Decimal  @default(0) @db.Decimal(3, 2)
-  domain_knowledge_peer             Decimal  @default(0) @db.Decimal(3, 2)
-  timeliness_throughput_self        Decimal  @default(0) @db.Decimal(3, 2)
-  timeliness_throughput_peer        Decimal  @default(0) @db.Decimal(3, 2)
-  work_quality_self                 Decimal  @default(0) @db.Decimal(3, 2)
-  work_quality_peer                 Decimal  @default(0) @db.Decimal(3, 2)
-  problem_solving_initiative_self   Decimal  @default(0) @db.Decimal(3, 2)
-  problem_solving_initiative_peer   Decimal  @default(0) @db.Decimal(3, 2)
-  total_self                        Decimal  @default(0) @db.Decimal(4, 2)
-  total_peer                        Decimal  @default(0) @db.Decimal(5, 2)
-  peer_count                        Int      @default(0)
-  expected_peer_count               Int      @default(0)
-  sapa_factor                       Decimal? @db.Decimal(4, 3)
-  computed_at                       DateTime @default(now())
+  id                              Int      @id @default(autoincrement())
+  week_id                         Int
+  user_id                         Int
+  ownership_discipline_self       Decimal  @default(0) @db.Decimal(3, 2)
+  ownership_discipline_peer       Decimal  @default(0) @db.Decimal(3, 2)
+  team_spirit_self                Decimal  @default(0) @db.Decimal(3, 2)
+  team_spirit_peer                Decimal  @default(0) @db.Decimal(3, 2)
+  communication_clarity_self      Decimal  @default(0) @db.Decimal(3, 2)
+  communication_clarity_peer      Decimal  @default(0) @db.Decimal(3, 2)
+  domain_knowledge_self           Decimal  @default(0) @db.Decimal(3, 2)
+  domain_knowledge_peer           Decimal  @default(0) @db.Decimal(3, 2)
+  timeliness_throughput_self      Decimal  @default(0) @db.Decimal(3, 2)
+  timeliness_throughput_peer      Decimal  @default(0) @db.Decimal(3, 2)
+  work_quality_self               Decimal  @default(0) @db.Decimal(3, 2)
+  work_quality_peer               Decimal  @default(0) @db.Decimal(3, 2)
+  problem_solving_initiative_self Decimal  @default(0) @db.Decimal(3, 2)
+  problem_solving_initiative_peer Decimal  @default(0) @db.Decimal(3, 2)
+  total_self                      Decimal  @default(0) @db.Decimal(4, 2)
+  total_peer                      Decimal  @default(0) @db.Decimal(5, 2)
+  peer_count                      Int      @default(0)
+  expected_peer_count             Int      @default(0)
+  sapa_factor                     Decimal? @db.Decimal(4, 3)
+  computed_at                     DateTime @default(now())
   // Snapshot of the user's field AT THE TIME this week's score was computed
   // — frozen forever once written, so a later team reshuffle (someone
   // moving fields) never silently relabels a past week's Heatmap/SAPA/
   // export row under their new field. Null on rows computed before this
   // column existed; those fall back to the user's current field.
-  field                             String?  @db.VarChar(255) // same width as User.field — it's a snapshot of that column
+  field                           String?  @db.VarChar(255) // same width as User.field — it's a snapshot of that column
 
   week Week @relation(fields: [week_id], references: [id], onDelete: Cascade)
   user User @relation(fields: [user_id], references: [id], onDelete: Cascade)

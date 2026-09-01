@@ -64,6 +64,33 @@ export function teamViewFilter(requester) {
   }
 }
 
+/**
+ * Same membership rules as teamViewFilter, but as a plain predicate over
+ * already-resolved (role, field) values on both sides, usable when the
+ * data source is a historical per-week snapshot rather than a live Prisma
+ * query (see getTeamScores) — the target's field there comes from a
+ * ComputedScore row, not the live User table, so it can't be pushed into a
+ * `where` clause the way teamViewFilter's result can.
+ */
+export function teamViewMatches(requester, target) {
+  switch (requester.role) {
+    case ROLES.GROUP_ANCHOR:
+      return target.role === ROLES.PROFILER && sharesField(requester, target);
+    case ROLES.CASU_ANCHOR:
+      return [ROLES.PROFILER, ROLES.GROUP_ANCHOR].includes(target.role) && sharesField(requester, target);
+    case ROLES.PROJECT_LEAD:
+      return (
+        [ROLES.PROFILER, ROLES.GROUP_ANCHOR].includes(target.role) ||
+        (target.role === ROLES.PROJECT_LEAD && target.id !== requester.id)
+      );
+    case ROLES.CASU_LEAD:
+    case ROLES.ADMIN:
+      return target.role !== ROLES.ADMIN;
+    default:
+      return false;
+  }
+}
+
 /** Can `requester` open the compliance tracker / send reminders? */
 export function canViewCompliance(requester) {
   return [ROLES.ADMIN, ROLES.CASU_LEAD, ROLES.PROJECT_LEAD].includes(requester.role);

@@ -10,20 +10,51 @@ function clamp(n, lo, hi) {
 }
 
 /**
+ * Who counts for a week-scoped analytics query: anyone currently active
+ * (as before), PLUS anyone who has since been deactivated/reshuffled away
+ * but has at least one ComputedScore row in the selected week(s) — a
+ * closed week's stats shouldn't lose someone's contribution just because
+ * they're no longer on the team today. Someone with no ComputedScore row
+ * in range (e.g. a brand-new hire viewing a week before they joined) is
+ * still correctly excluded by each function's own "scores.length === 0 ->
+ * skip" check, unchanged.
+ */
+function activeOrScoredWhere(weekIds) {
+  return { OR: [{ is_active: true }, { computedScores: { some: { week_id: { in: weekIds } } } }] };
+}
+
+/**
+ * A user's field for a week-scoped display: for a SINGLE selected week,
+ * the field frozen on that week's ComputedScore row (accurate even after a
+ * later reshuffle) if one was recorded, falling back to the user's current
+ * field for rows computed before that snapshot column existed. For
+ * multiple selected weeks (including "Cumulative"), deliberately still the
+ * user's CURRENT field — same reconciliation tradeoff getFieldStandings
+ * has always used: a multi-week average doesn't have to decide which of
+ * several historical field names to file one person's blended score under.
+ */
+function effectiveField(user, weekIds) {
+  if (weekIds.length === 1) {
+    const score = user.computedScores.find((s) => s.week_id === weekIds[0]);
+    if (score?.field) return score.field;
+  }
+  return user.field;
+}
+
+/**
  * §4.6.01 Field-Wise Heatmap: 10 fields x 7 parameters, avg peer scores.
  * weekIds is one-or-more — same "averaged across the selection" rule as
  * getFieldStandings/getRankings: each person's own per-parameter peer score
  * is averaged across their scored weeks in the selection FIRST, then those
- * per-person averages are averaged again within each field. Grouped by the
- * user's CURRENT field (not a per-week snapshot) so a multi-week/cumulative
- * selection doesn't have to reconcile someone appearing under different
- * field names across a reshuffle — same convention getFieldStandings uses.
+ * per-person averages are averaged again within each field. Grouped by
+ * effectiveField() — the frozen per-week snapshot for a single closed week,
+ * current field for a multi-week/cumulative selection (see effectiveField).
  */
 export async function getFieldHeatmap(projectId, weekIds, scope) {
   const users = await prisma.user.findMany({
     where: {
       project_id: projectId,
-      is_active: true,
+      ...activeOrScoredWhere(weekIds),
       field: { not: null },
       ...roleFilterForScope(scope),
     },
@@ -37,7 +68,7 @@ export async function getFieldHeatmap(projectId, weekIds, scope) {
     const avgByParam = Object.fromEntries(
       PARAM_FIELDS.map((p) => [p.label, scores.reduce((a, s) => a + Number(s[`${p.key}_peer`]), 0) / scores.length])
     );
-    for (const field of fieldList(u.field)) {
+    for (const field of fieldList(effectiveField(u, weekIds))) {
       byField[field] ??= { count: 0, sums: Object.fromEntries(PARAM_FIELDS.map((p) => [p.label, 0])) };
       byField[field].count += 1;
       for (const p of PARAM_FIELDS) {
@@ -76,7 +107,7 @@ function sapaBucket(sapa) {
  */
 export async function getSapaDistribution(projectId, weekIds, scope) {
   const users = await prisma.user.findMany({
-    where: { project_id: projectId, is_active: true, ...roleFilterForScope(scope) },
+    where: { project_id: projectId, ...activeOrScoredWhere(weekIds), ...roleFilterForScope(scope) },
     include: { computedScores: { where: { week_id: { in: weekIds } } } },
   });
 
@@ -112,8 +143,10 @@ export async function getSapaDistribution(projectId, weekIds, scope) {
 
   return {
     byRole: distribute((u) => [u.role]),
-    // Current field, not a per-week snapshot — see getFieldHeatmap above.
-    byField: distribute((u) => (u.field ? fieldList(u.field) : ["—"])),
+    byField: distribute((u) => {
+      const field = effectiveField(u, weekIds);
+      return field ? fieldList(field) : ["—"];
+    }),
   };
 }
 
@@ -130,7 +163,7 @@ export async function getSapaDistribution(projectId, weekIds, scope) {
  */
 export async function getQuadrantData(projectId, weekIds, scope) {
   const users = await prisma.user.findMany({
-    where: { project_id: projectId, is_active: true, ...roleFilterForScope(scope) },
+    where: { project_id: projectId, ...activeOrScoredWhere(weekIds), ...roleFilterForScope(scope) },
     include: {
       computedScores: { where: { week_id: { in: weekIds } } },
       evaluationsReceived: {
@@ -166,7 +199,7 @@ export async function getQuadrantData(projectId, weekIds, scope) {
         id: u.id,
         name: u.name,
         role: u.role,
-        field: u.field, // current field, not a per-week snapshot — see getFieldHeatmap
+        field: effectiveField(u, weekIds),
         performance: Math.round(avgPerformance * 100) / 100, // X axis, out of 49
         sentiment: Math.round(sentiment * 100) / 100, // Y axis, -1..1
       };
@@ -197,7 +230,7 @@ function gapBucket(diff) {
  */
 export async function getParameterAlignment(projectId, weekIds, scope) {
   const users = await prisma.user.findMany({
-    where: { project_id: projectId, is_active: true, role: { not: ROLES.ADMIN }, ...roleFilterForScope(scope) },
+    where: { project_id: projectId, ...activeOrScoredWhere(weekIds), role: { not: ROLES.ADMIN }, ...roleFilterForScope(scope) },
     include: { computedScores: { where: { week_id: { in: weekIds } } } },
   });
 
@@ -227,7 +260,7 @@ export async function getParameterAlignmentTrend(projectId, weekIds, scope) {
     orderBy: { week_number: "asc" },
   });
   const users = await prisma.user.findMany({
-    where: { project_id: projectId, is_active: true, role: { not: ROLES.ADMIN }, ...roleFilterForScope(scope) },
+    where: { project_id: projectId, ...activeOrScoredWhere(weekIds), role: { not: ROLES.ADMIN }, ...roleFilterForScope(scope) },
     include: { computedScores: { where: { week_id: { in: weekIds } } } },
   });
 
@@ -264,7 +297,7 @@ const TEAM_TAGS_TOP_N = 10;
  */
 export async function getTeamTagFrequency(projectId, weekIds, scope) {
   const users = await prisma.user.findMany({
-    where: { project_id: projectId, is_active: true, role: { not: ROLES.ADMIN }, ...roleFilterForScope(scope) },
+    where: { project_id: projectId, ...activeOrScoredWhere(weekIds), role: { not: ROLES.ADMIN }, ...roleFilterForScope(scope) },
     include: {
       evaluationsReceived: {
         where: { week_id: { in: weekIds }, eval_type: "peer" },
@@ -307,7 +340,7 @@ export async function getTeamTagTrend(projectId, weekIds, scope) {
     orderBy: { week_number: "asc" },
   });
   const users = await prisma.user.findMany({
-    where: { project_id: projectId, is_active: true, role: { not: ROLES.ADMIN }, ...roleFilterForScope(scope) },
+    where: { project_id: projectId, ...activeOrScoredWhere(weekIds), role: { not: ROLES.ADMIN }, ...roleFilterForScope(scope) },
     include: {
       evaluationsReceived: {
         where: { week_id: { in: weekIds }, eval_type: "peer" },
@@ -619,7 +652,7 @@ function allocateWholePercentages(counts, total) {
  */
 export async function getTeamFocusSuggestions(projectId, weekIds, scope) {
   const users = await prisma.user.findMany({
-    where: { project_id: projectId, is_active: true, role: { not: ROLES.ADMIN }, ...roleFilterForScope(scope) },
+    where: { project_id: projectId, ...activeOrScoredWhere(weekIds), role: { not: ROLES.ADMIN }, ...roleFilterForScope(scope) },
     include: {
       evaluationsReceived: {
         where: { week_id: { in: weekIds }, eval_type: { in: ["peer", "self"] } },
@@ -713,7 +746,7 @@ export async function getTeamFocusSuggestions(projectId, weekIds, scope) {
  */
 export async function getTeamTrajectory(projectId, weekIds, scope) {
   const users = await prisma.user.findMany({
-    where: { project_id: projectId, is_active: true, role: { not: ROLES.ADMIN }, ...roleFilterForScope(scope) },
+    where: { project_id: projectId, ...activeOrScoredWhere(weekIds), role: { not: ROLES.ADMIN }, ...roleFilterForScope(scope) },
     include: {
       evaluationsReceived: {
         where: { week_id: { in: weekIds }, eval_type: "peer" },
@@ -764,7 +797,7 @@ function averageScoresByUser(users, weekIds) {
       id: u.id,
       name: u.name,
       role: u.role,
-      field: u.field,
+      field: effectiveField(u, weekIds),
       totalPeer: totalPeer === null ? null : Math.round(totalPeer * 100) / 100,
       totalSelf: totalSelf === null ? null : Math.round(totalSelf * 100) / 100,
       weeksCounted: scores.length,
@@ -774,7 +807,7 @@ function averageScoresByUser(users, weekIds) {
 
 export async function getRankings(projectId, requester, weekIds) {
   const users = await prisma.user.findMany({
-    where: { project_id: projectId, is_active: true, role: { not: ROLES.ADMIN } },
+    where: { project_id: projectId, ...activeOrScoredWhere(weekIds), role: { not: ROLES.ADMIN } },
     include: { computedScores: { where: { week_id: { in: weekIds } } } },
   });
 
@@ -878,7 +911,7 @@ export async function getFieldStandings(projectId, weekIds, scope) {
   const users = await prisma.user.findMany({
     where: {
       project_id: projectId,
-      is_active: true,
+      ...activeOrScoredWhere(weekIds),
       role: { not: ROLES.ADMIN },
       field: { not: null },
       ...roleFilterForScope(scope),
@@ -892,7 +925,7 @@ export async function getFieldStandings(projectId, weekIds, scope) {
     if (scores.length === 0) continue;
     const avgTotalPeer = scores.reduce((a, s) => a + Number(s.total_peer), 0) / scores.length;
     // A CASU Anchor covering more than one field counts toward each of them.
-    for (const field of fieldList(u.field)) {
+    for (const field of fieldList(effectiveField(u, weekIds))) {
       if (!byField.has(field)) byField.set(field, { sum: 0, count: 0 });
       const entry = byField.get(field);
       entry.sum += avgTotalPeer;
@@ -922,7 +955,7 @@ export async function getFieldMemberStandings(projectId, weekIds, field, scope) 
   const users = await prisma.user.findMany({
     where: {
       project_id: projectId,
-      is_active: true,
+      ...activeOrScoredWhere(weekIds),
       role: { not: ROLES.ADMIN },
       field: { not: null },
       ...roleFilterForScope(scope),
@@ -932,7 +965,7 @@ export async function getFieldMemberStandings(projectId, weekIds, field, scope) 
 
   // A CASU Anchor's `field` may be comma-joined (covers more than one field),
   // so this can't be a plain Prisma equality filter — filter in application code.
-  const inField = users.filter((u) => fieldList(u.field).includes(field));
+  const inField = users.filter((u) => fieldList(effectiveField(u, weekIds)).includes(field));
   return rankByTotalPeer(averageScoresByUser(inField, weekIds));
 }
 
