@@ -100,3 +100,32 @@ export async function regeneratePeerMappings(projectId) {
 
   return { mappingsCreated: rows.length };
 }
+
+/**
+ * Freezes a copy of the current LIVE peer_mappings into peer_mapping_snapshots
+ * for one week — called by closeWeek so that a later roster reshuffle can
+ * never again silently rewrite who was expected to evaluate whom in an
+ * already-closed week (see PeerMappingSnapshot's schema doc comment).
+ * Idempotent — safe to call again if a week is reopened for a correction
+ * and re-closed, in which case it replaces that week's frozen copy with
+ * whatever the mappings look like at this new close time.
+ */
+export async function snapshotPeerMappingsForWeek(projectId, weekId) {
+  const live = await prisma.peerMapping.findMany({ where: { project_id: projectId } });
+
+  await prisma.$transaction([
+    prisma.peerMappingSnapshot.deleteMany({ where: { project_id: projectId, week_id: weekId } }),
+    prisma.peerMappingSnapshot.createMany({
+      data: live.map((m) => ({
+        project_id: projectId,
+        week_id: weekId,
+        evaluator_id: m.evaluator_id,
+        evaluatee_id: m.evaluatee_id,
+        mapping_type: m.mapping_type,
+      })),
+      skipDuplicates: true,
+    }),
+  ]);
+
+  return { snapshotCount: live.length };
+}

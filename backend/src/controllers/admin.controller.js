@@ -4,7 +4,7 @@ import { z } from "zod";
 import { prisma } from "../utils/prisma.js";
 import { importRoster } from "../services/roster.js";
 import { computeScoresForWeek } from "../services/scoreEngine.js";
-import { regeneratePeerMappings } from "../services/peerMapping.js";
+import { regeneratePeerMappings, snapshotPeerMappingsForWeek } from "../services/peerMapping.js";
 import { queryTable, TABLES } from "../services/rawData.js";
 import { buildEvaluationsExportWorkbook } from "../services/export.js";
 import { streamWorkbook } from "./export.controller.js";
@@ -180,6 +180,8 @@ export async function closeWeek(req, res) {
   const updated = await prisma.week.update({ where: { id: weekId }, data: { status: "closed", closed_at: new Date() } });
   // Final recompute on close so every professional (even non-responders) has a row.
   await computeScoresForWeek(weekId, req.user.project_id);
+  // Freeze this week's mappings — see PeerMappingSnapshot's schema doc comment.
+  await snapshotPeerMappingsForWeek(req.user.project_id, weekId);
 
   const [recipientIds, adminIds] = await Promise.all([
     getActiveNonAdminIds(req.user.project_id),

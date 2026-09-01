@@ -16,12 +16,36 @@ const DIGEST_ROLE_LABELS = {
  * Batch-oriented: 3 queries total regardless of roster size, rather than
  * looping getPendingForUserWeek() per user (which was 2-3 queries per
  * person — fine at ~60 users, ~2-3000 round trips at ~1000).
+ *
+ * weekStatus matters: peer_mappings is a LIVE, global table (fully deleted
+ * and rebuilt on every roster import), so it only reflects "who's expected
+ * to evaluate whom" for the CURRENTLY open week. Pass weekStatus === "closed"
+ * to instead read the frozen peer_mapping_snapshots row for that week (see
+ * its schema doc comment) and to base the roster itself on everyone who has
+ * a ComputedScore row for that week — not today's active roster — so a
+ * later reshuffle can never again silently rewrite an already-closed week's
+ * numbers. Callers that need LIVE data regardless of the week's actual
+ * status (sendComplianceReminders, sendEndOfDayDigest — nagging people NOW
+ * only makes sense against the current mapping) simply don't pass "closed".
  */
-export async function buildComplianceMatrix(projectId, weekId) {
-  const users = await prisma.user.findMany({
-    where: { project_id: projectId, is_active: true, role: { not: "admin" } },
-    orderBy: [{ field: "asc" }, { role: "asc" }, { name: "asc" }],
-  });
+export async function buildComplianceMatrix(projectId, weekId, weekStatus) {
+  const isClosed = weekStatus === "closed";
+
+  const users = isClosed
+    ? (
+        await prisma.computedScore.findMany({
+          where: { week_id: weekId, user: { project_id: projectId, role: { not: "admin" } } },
+          include: { user: { select: { id: true, name: true, email: true, role: true, field: true } } },
+        })
+      )
+        .map((s) => ({ ...s.user, field: s.field ?? s.user.field }))
+        .sort(
+          (a, b) => (a.field || "").localeCompare(b.field || "") || a.role.localeCompare(b.role) || a.name.localeCompare(b.name)
+        )
+    : await prisma.user.findMany({
+        where: { project_id: projectId, is_active: true, role: { not: "admin" } },
+        orderBy: [{ field: "asc" }, { role: "asc" }, { name: "asc" }],
+      });
   const userIds = users.map((u) => u.id);
 
   const [selfEvals, mappings, peerEvalsGiven] = await Promise.all([
@@ -29,15 +53,26 @@ export async function buildComplianceMatrix(projectId, weekId) {
       where: { week_id: weekId, eval_type: "self", evaluator_id: { in: userIds } },
       select: { evaluator_id: true },
     }),
-    prisma.peerMapping.findMany({
-      where: { evaluator_id: { in: userIds } },
-      include: { evaluatee: { select: { id: true, name: true } } },
-    }),
+    isClosed
+      ? prisma.peerMappingSnapshot.findMany({
+          where: { week_id: weekId, evaluator_id: { in: userIds } },
+          include: { evaluatee: { select: { id: true, name: true } } },
+        })
+      : prisma.peerMapping.findMany({
+          where: { evaluator_id: { in: userIds } },
+          include: { evaluatee: { select: { id: true, name: true } } },
+        }),
     prisma.evaluation.findMany({
       where: { week_id: weekId, eval_type: "peer", evaluator_id: { in: userIds } },
       select: { evaluator_id: true, evaluatee_id: true },
     }),
   ]);
+
+  // A closed week with no frozen snapshot at all (shouldn't happen going
+  // forward — closeWeek always writes one — but could for a week closed
+  // before this snapshot mechanism existed) has no trustworthy mapping data
+  // to fall back to; flag it rather than silently showing 0-expected rows.
+  const mappingDataAvailable = !isClosed || mappings.length > 0 || userIds.length === 0;
 
   const selfDoneSet = new Set(selfEvals.map((e) => e.evaluator_id));
 
@@ -83,6 +118,7 @@ export async function buildComplianceMatrix(projectId, weekId) {
 
   return {
     rows,
+    mappingDataAvailable,
     summary: {
       totalProfessionals: rows.length,
       fullyCompliant: rows.filter((r) => r.isCompliant).length,
