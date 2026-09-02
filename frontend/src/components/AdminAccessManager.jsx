@@ -9,12 +9,20 @@ const SECTIONS = [
   { key: "can_manage_roster", label: "Team Roster" },
 ];
 
+// Separate from SECTIONS above: those three gate EDIT access to sections
+// every Admin can already see. This one gates VIEW access itself — a
+// non-master Admin can't see Compliance Tracker's Trajectory Mismatches at
+// all until granted this.
+const VIEW_ONLY_PERMISSION = { key: "can_view_trajectory_mismatches", label: "Trajectory Mismatches (Compliance Tracker)" };
+
 /**
  * Master-Admin-only: grants/revokes each other Admin's edit access to Week
  * Management, Password Management, and Team Roster — the three sections
- * every non-master Admin is otherwise view-only in. Everything else in the
- * Admin Panel (View Portal As, Export Scoresheets, Raw Data Browser) is
- * unrestricted for every Admin already and isn't controlled here.
+ * every non-master Admin is otherwise view-only in — plus VIEW access to
+ * Compliance Tracker's Trajectory Mismatches section, which a non-master
+ * Admin can't see at all by default. Everything else in the Admin Panel
+ * (View Portal As, Export Scoresheets, Raw Data Browser) is unrestricted
+ * for every Admin already and isn't controlled here.
  */
 export default function AdminAccessManager() {
   const queryClient = useQueryClient();
@@ -41,6 +49,7 @@ export default function AdminAccessManager() {
         can_manage_weeks: u.can_manage_weeks,
         can_manage_passwords: u.can_manage_passwords,
         can_manage_roster: u.can_manage_roster,
+        can_view_trajectory_mismatches: u.can_view_trajectory_mismatches,
       }
     );
   }
@@ -76,8 +85,9 @@ export default function AdminAccessManager() {
       <p className="text-xs text-slate-500 mb-4">
         As Master Admin, grant each other Admin edit access to Week Management, Password Management, and Team
         Roster — any mix, full or partial. Everyone below can already see all three sections and use View Portal
-        As, Export Scoresheets, and Raw Data Browser without restriction; these toggles only control who can make
-        changes.
+        As, Export Scoresheets, and Raw Data Browser without restriction; those three toggles only control who can
+        make changes. Trajectory Mismatches is different: it's hidden from a non-master Admin entirely until
+        granted below, since it surfaces judgment calls about specific people's submissions.
       </p>
       <div className="space-y-3">
         {otherAdmins.map((u) => {
@@ -86,6 +96,7 @@ export default function AdminAccessManager() {
             can_manage_weeks: u.can_manage_weeks,
             can_manage_passwords: u.can_manage_passwords,
             can_manage_roster: u.can_manage_roster,
+            can_view_trajectory_mismatches: u.can_view_trajectory_mismatches,
           });
           return (
             <div key={u.id} className="flex flex-col gap-2 px-3 py-2.5 rounded-lg border border-slate-200">
@@ -109,6 +120,16 @@ export default function AdminAccessManager() {
                     {s.label}
                   </label>
                 ))}
+              </div>
+              <div className="flex flex-wrap gap-4 pt-2 border-t border-slate-100">
+                <label className="flex items-center gap-1.5 text-xs text-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={draft[VIEW_ONLY_PERMISSION.key]}
+                    onChange={() => toggle(u, VIEW_ONLY_PERMISSION.key)}
+                  />
+                  {VIEW_ONLY_PERMISSION.label}
+                </label>
               </div>
               {rowMessage[u.id] && (
                 <p className={`text-[11px] ${rowMessage[u.id].type === "success" ? "text-green-700" : "text-red-600"}`}>

@@ -311,18 +311,20 @@ export default function CompliancePage() {
 function TrajectoryMismatchCard({ mismatches }) {
   const [open, setOpen] = useState(true);
   if (!mismatches) return null;
+  const significantCount = mismatches.filter((m) => m.significant).length;
   return (
     <Card className="p-5">
       <button onClick={() => setOpen((v) => !v)} className="w-full flex items-center gap-2 text-left">
         <h2 className="text-sm font-semibold text-slate-800">Trajectory Mismatches</h2>
-        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${mismatches.length > 0 ? "bg-amber-100 text-amber-800" : "bg-green-100 text-green-700"}`}>
-          {mismatches.length}
+        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${significantCount > 0 ? "bg-amber-100 text-amber-800" : "bg-green-100 text-green-700"}`}>
+          {significantCount}
         </span>
         <span className="text-slate-400 text-xs ml-auto">{open ? "▲" : "▼"}</span>
       </button>
       <p className="text-xs text-slate-500 mt-1">
         Submissions where the score given this week moved the opposite way from the Trajectory answer, compared to
         that same evaluator's own scores for that person last week. Worth a spot-check, not necessarily a mistake.
+        Only a large gap (7+ points out of 49) is highlighted — a point or two is normal week-to-week noise.
       </p>
       {open && (
         mismatches.length === 0 ? (
@@ -330,15 +332,21 @@ function TrajectoryMismatchCard({ mismatches }) {
         ) : (
           <div className="mt-3 space-y-2">
             {mismatches.map((m, i) => (
-              <div key={i} className="flex items-center justify-between gap-3 border border-amber-100 bg-amber-50 rounded-lg px-3 py-2 text-sm">
+              <div
+                key={i}
+                className={`flex items-center justify-between gap-3 rounded-lg px-3 py-2 text-sm ${
+                  m.significant ? "border border-amber-200 bg-amber-50" : "border border-slate-100 bg-slate-50/60"
+                }`}
+              >
                 <div>
-                  <span className="font-medium text-slate-800">{m.evaluator.name}</span>
+                  <span className={`font-medium ${m.significant ? "text-slate-800" : "text-slate-600"}`}>{m.evaluator.name}</span>
                   <span className="text-slate-400"> → </span>
-                  <span className="font-medium text-slate-800">{m.evaluatee.name}</span>
-                  <span className="text-xs text-slate-500 ml-2">({m.evalType === "self" ? "Self-Eval" : "Peer Eval"})</span>
+                  <span className={`font-medium ${m.significant ? "text-slate-800" : "text-slate-600"}`}>{m.evaluatee.name}</span>
+                  <span className="text-xs text-slate-400 ml-2">({m.evalType === "self" ? "Self-Eval" : "Peer Eval"})</span>
                 </div>
-                <div className="text-xs text-slate-600 flex-shrink-0">
-                  {m.prevTotal} → {m.currentTotal}, marked <span className="font-medium">{m.trajectory === "improved" ? "Improved" : "Declined"}</span>
+                <div className={`text-xs flex-shrink-0 ${m.significant ? "text-slate-700" : "text-slate-400"}`}>
+                  {m.prevTotal} → {m.currentTotal} (gap {m.gap}), marked{" "}
+                  <span className="font-medium">{m.trajectory === "improved" ? "Improved" : "Declined"}</span>
                 </div>
               </div>
             ))}

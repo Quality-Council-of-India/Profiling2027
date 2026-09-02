@@ -131,6 +131,14 @@ model User {
   can_manage_weeks     Boolean   @default(false)
   can_manage_passwords Boolean   @default(false)
   can_manage_roster    Boolean   @default(false)
+  // Unlike the three flags above (view already granted, only edit is
+  // gated), this one gates VIEW access itself: the Compliance Tracker's
+  // "Trajectory Mismatches" section (evaluator-vs-scores contradictions)
+  // is master-Admin-only by default, since it surfaces judgment calls
+  // about specific people's submissions — a non-master Admin only sees it
+  // once explicitly granted here. Project Leads and CASU Leads never see
+  // it regardless of this flag; it only ever applies to Admin accounts.
+  can_view_trajectory_mismatches Boolean @default(false)
 
   project Project @relation(fields: [project_id], references: [id], onDelete: Cascade)
 
