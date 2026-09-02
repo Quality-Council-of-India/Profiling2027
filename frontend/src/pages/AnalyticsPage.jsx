@@ -393,7 +393,7 @@ export default function AnalyticsPage() {
                 than one.
               </p>
             </div>
-            <div className="flex flex-col items-start sm:items-end gap-1">
+            <div className="flex flex-col items-start sm:items-end gap-1 sm:ml-auto">
               <select
                 value={analyticsField}
                 onChange={(e) => setAnalyticsField(e.target.value)}
