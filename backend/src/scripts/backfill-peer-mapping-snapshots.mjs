@@ -2,7 +2,12 @@
 // PeerMappingSnapshot model's schema doc comment for why this table exists.
 //
 // Run ONCE, after the "add_peer_mapping_snapshot" migration has been applied:
-//   docker compose run --rm backend node scripts/backfill-peer-mapping-snapshots.mjs
+//   docker compose run --rm backend node src/scripts/backfill-peer-mapping-snapshots.mjs
+//
+// Lives under src/, not a top-level scripts/ folder, because the Dockerfile
+// only COPYs prisma/, src/, and docker-entrypoint.sh into the image — a
+// sibling scripts/ folder exists on disk after `git checkout` but is never
+// actually present inside the running container.
 //
 // Safe to re-run: it replaces (not adds to) whatever snapshot rows already
 // exist for Week 1 / Week 2, and aborts with NO partial writes if any name
@@ -32,7 +37,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { prisma } from "../src/utils/prisma.js";
+import { prisma } from "../utils/prisma.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
