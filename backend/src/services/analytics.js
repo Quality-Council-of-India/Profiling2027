@@ -872,6 +872,16 @@ function round2(n) {
  * Field/overall averages only count users who already have a
  * computed_scores row for that week (mirrors getFieldHeatmap) — a week
  * nobody's been scored in yet simply produces a null average, not a 0.
+ *
+ * Each week's field grouping is resolved from THAT WEEK's own frozen
+ * computed_scores.field snapshot (falling back to the live user.field only
+ * when no snapshot exists, e.g. a user who has never been scored) — never
+ * from the target's current/live field. Without this, a roster reshuffle
+ * after a week closes would silently repaint which field group an
+ * already-closed week's point was compared against. Every row here already
+ * comes from a computed_scores join scoped to this exact week, so — unlike
+ * most other analytics functions — there's no separate is_active filter:
+ * having a score for the week IS the membership test for that week.
  */
 export async function getPeerScoreTrendComparison(projectId, targetUser) {
   const weeks = await prisma.week.findMany({
@@ -884,9 +894,9 @@ export async function getPeerScoreTrendComparison(projectId, targetUser) {
   const scores = await prisma.computedScore.findMany({
     where: {
       week_id: { in: weekIds },
-      user: { project_id: projectId, is_active: true, role: { not: ROLES.ADMIN } },
+      user: { project_id: projectId, role: { not: ROLES.ADMIN } },
     },
-    select: { week_id: true, user_id: true, total_peer: true, user: { select: { field: true } } },
+    select: { week_id: true, user_id: true, total_peer: true, field: true, user: { select: { field: true } } },
   });
 
   const byWeek = new Map();
@@ -898,7 +908,10 @@ export async function getPeerScoreTrendComparison(projectId, targetUser) {
   return weeks.map((w) => {
     const rows = byWeek.get(w.id) || [];
     const mine = rows.find((r) => r.user_id === targetUser.id);
-    const fieldRows = targetUser.field ? rows.filter((r) => sharesField(targetUser, r.user)) : [];
+    const myFieldThisWeek = mine ? mine.field ?? mine.user.field : targetUser.field;
+    const fieldRows = myFieldThisWeek
+      ? rows.filter((r) => sharesField({ field: myFieldThisWeek }, { field: r.field ?? r.user.field }))
+      : [];
     const fieldAvg = fieldRows.length
       ? round2(fieldRows.reduce((a, r) => a + Number(r.total_peer), 0) / fieldRows.length)
       : null;
@@ -909,6 +922,7 @@ export async function getPeerScoreTrendComparison(projectId, targetUser) {
       week: { id: w.id, label: w.label, week_number: w.week_number },
       selfTotalPeer: mine ? Number(mine.total_peer) : null,
       fieldAvgTotalPeer: fieldAvg,
+      fieldLabel: myFieldThisWeek,
       overallAvgTotalPeer: overallAvg,
     };
   });
@@ -1003,10 +1017,15 @@ export async function getHallOfRecognition(projectId) {
   if (closedWeeks.length === 0) return { weeks: [] };
 
   const weekIds = closedWeeks.map((w) => w.id);
+  // No is_active filter: every row here already comes from a computed_scores
+  // join scoped to a specific closed week, so having a score IS the
+  // membership test for that week (mirrors getPeerScoreTrendComparison) —
+  // someone who left the project after being that week's top scorer must
+  // still show up in that week's already-published Hall of Recognition.
   const scores = await prisma.computedScore.findMany({
     where: {
       week_id: { in: weekIds },
-      user: { project_id: projectId, is_active: true, role: { not: ROLES.ADMIN } },
+      user: { project_id: projectId, role: { not: ROLES.ADMIN } },
     },
     include: { user: { select: { id: true, name: true, role: true, field: true, photo_url: true } } },
   });
