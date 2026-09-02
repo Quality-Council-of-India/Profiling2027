@@ -138,13 +138,12 @@ export async function buildComplianceMatrix(projectId, weekId, weekStatus) {
 
 // Total is a sum of 7 params each 1-7 (range 7-49). A 1-2 point wobble
 // between two weeks is well within normal week-to-week noise — the same
-// person can easily drift a point or two on a couple of parameters without
-// any real change in trajectory. A gap this size (an average of a full
-// point across all 7 parameters) is far more likely to reflect a genuine
-// contradiction worth an Admin's attention, rather than rounding/rater
-// noise, so only gaps at or above it are visually flagged as significant —
-// smaller ones still show up in the list, just without the same emphasis.
-const SIGNIFICANT_TRAJECTORY_GAP = 7;
+// person can easily drift a point on a single parameter without any real
+// change in trajectory. A gap of 3+ is harder to explain away as simple
+// rounding/rater noise, so only gaps at or above it are visually flagged
+// as significant — smaller ones still show up in the list, just without
+// the same emphasis.
+const SIGNIFICANT_TRAJECTORY_GAP = 3;
 
 /**
  * Evaluations in a week whose Trajectory answer (Improved/Declined)
