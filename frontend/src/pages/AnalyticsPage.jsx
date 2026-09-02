@@ -67,6 +67,13 @@ export default function AnalyticsPage() {
 
   const [selectedWeekIds, setSelectedWeekIds] = useState([]);
   const isMulti = selectedWeekIds.length > 1;
+
+  // Narrows 5 of the Team-Wide Analytics cards (SAPA Distribution, Quadrant,
+  // Per-Parameter Alignment, Team Strengths & Growth Areas, Focus
+  // Suggestions) to one field at a time — "" means every field. The Heatmap
+  // and Team Momentum cards are unaffected: they already show every field
+  // (Heatmap) or don't break down by field at all (Team Momentum).
+  const [analyticsField, setAnalyticsField] = useState("");
   useEffect(() => {
     if (weeks.length && selectedWeekIds.length === 0) {
       // Prefer the currently open week — falling back to the most recently
@@ -123,38 +130,38 @@ export default function AnalyticsPage() {
     enabled: isAggregate && selectedWeekIds.length > 0,
   });
   const sapaQuery = useQuery({
-    queryKey: ["sapa", selectedWeekIds],
-    queryFn: () => analyticsApi.sapa(selectedWeekIds),
+    queryKey: ["sapa", selectedWeekIds, analyticsField],
+    queryFn: () => analyticsApi.sapa(selectedWeekIds, analyticsField),
     enabled: isAggregate && selectedWeekIds.length > 0,
   });
   const quadrantQuery = useQuery({
-    queryKey: ["quadrant", selectedWeekIds],
-    queryFn: () => analyticsApi.quadrant(selectedWeekIds),
+    queryKey: ["quadrant", selectedWeekIds, analyticsField],
+    queryFn: () => analyticsApi.quadrant(selectedWeekIds, analyticsField),
     enabled: isAggregate && selectedWeekIds.length > 0,
   });
   const parameterAlignmentQuery = useQuery({
-    queryKey: ["parameterAlignment", selectedWeekIds],
-    queryFn: () => analyticsApi.parameterAlignment(selectedWeekIds),
+    queryKey: ["parameterAlignment", selectedWeekIds, analyticsField],
+    queryFn: () => analyticsApi.parameterAlignment(selectedWeekIds, analyticsField),
     enabled: isAggregate && selectedWeekIds.length > 0,
   });
   const parameterAlignmentTrendQuery = useQuery({
-    queryKey: ["parameterAlignmentTrend", selectedWeekIds],
-    queryFn: () => analyticsApi.parameterAlignmentTrend(selectedWeekIds),
+    queryKey: ["parameterAlignmentTrend", selectedWeekIds, analyticsField],
+    queryFn: () => analyticsApi.parameterAlignmentTrend(selectedWeekIds, analyticsField),
     enabled: isAggregate && isMulti,
   });
   const teamTagsQuery = useQuery({
-    queryKey: ["teamTags", selectedWeekIds],
-    queryFn: () => analyticsApi.teamTags(selectedWeekIds),
+    queryKey: ["teamTags", selectedWeekIds, analyticsField],
+    queryFn: () => analyticsApi.teamTags(selectedWeekIds, analyticsField),
     enabled: isAggregate && selectedWeekIds.length > 0,
   });
   const teamTagTrendQuery = useQuery({
-    queryKey: ["teamTagTrend", selectedWeekIds],
-    queryFn: () => analyticsApi.teamTagTrend(selectedWeekIds),
+    queryKey: ["teamTagTrend", selectedWeekIds, analyticsField],
+    queryFn: () => analyticsApi.teamTagTrend(selectedWeekIds, analyticsField),
     enabled: isAggregate && isMulti,
   });
   const teamFocusSuggestionsQuery = useQuery({
-    queryKey: ["teamFocusSuggestions", selectedWeekIds],
-    queryFn: () => analyticsApi.teamFocusSuggestions(selectedWeekIds),
+    queryKey: ["teamFocusSuggestions", selectedWeekIds, analyticsField],
+    queryFn: () => analyticsApi.teamFocusSuggestions(selectedWeekIds, analyticsField),
     enabled: isAggregate && selectedWeekIds.length > 0,
   });
   const teamTrajectoryQuery = useQuery({
@@ -376,14 +383,32 @@ export default function AnalyticsPage() {
       {/* ── Leads/Admin: full aggregate views, honoring the full week selection ── */}
       {isAggregate && (
         <>
-          <div>
-            <h2 className="text-base font-semibold text-slate-800 mt-2">Team-Wide Analytics — {rangeLabel}</h2>
-            <p className="text-xs text-slate-500">
-              Every card below reflects your full week selection above — pick one week for that week's numbers, or
-              several (including "Cumulative") for an all-time combined view. Per-Parameter Alignment and Team
-              Strengths & Growth Areas additionally show a trend line across the selected weeks once you pick more
-              than one.
-            </p>
+          <div className="flex items-start justify-between flex-wrap gap-3">
+            <div>
+              <h2 className="text-base font-semibold text-slate-800 mt-2">Team-Wide Analytics — {rangeLabel}</h2>
+              <p className="text-xs text-slate-500">
+                Every card below reflects your full week selection above — pick one week for that week's numbers, or
+                several (including "Cumulative") for an all-time combined view. Per-Parameter Alignment and Team
+                Strengths & Growth Areas additionally show a trend line across the selected weeks once you pick more
+                than one.
+              </p>
+            </div>
+            <div className="flex flex-col items-start sm:items-end gap-1">
+              <select
+                value={analyticsField}
+                onChange={(e) => setAnalyticsField(e.target.value)}
+                className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-standard"
+              >
+                <option value="">All Fields</option>
+                {(fieldStandingsQuery.data?.standings || []).map((s) => (
+                  <option key={s.field} value={s.field}>{s.field}</option>
+                ))}
+              </select>
+              <p className="text-[11px] text-slate-400 max-w-[16rem] text-right">
+                Narrows SAPA Distribution, Quadrant, Per-Parameter Alignment, Team Strengths, and Focus Suggestions to
+                one field.
+              </p>
+            </div>
           </div>
 
           <Card className="p-5">

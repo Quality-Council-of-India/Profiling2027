@@ -69,28 +69,34 @@ export async function heatmap(req, res) {
   res.json({ weeks: ctx.weeks, heatmap: data });
 }
 
+/** ?field=Arts — optional, narrows to just that field (see filterByField in analytics.js). Unset/empty means every field. */
+function parseFieldParam(req) {
+  const field = req.query.field ? String(req.query.field).trim() : "";
+  return field || null;
+}
+
 export async function sapaDistribution(req, res) {
   const ctx = await requireAggregateAccess(req, res);
   if (!ctx) return;
-  const data = await getSapaDistribution(req.user.project_id, ctx.weekIds, ctx.scope);
+  const data = await getSapaDistribution(req.user.project_id, ctx.weekIds, ctx.scope, parseFieldParam(req));
   res.json({ weeks: ctx.weeks, ...data });
 }
 
 export async function quadrant(req, res) {
   const ctx = await requireAggregateAccess(req, res);
   if (!ctx) return;
-  const data = await getQuadrantData(req.user.project_id, ctx.weekIds, ctx.scope);
+  const data = await getQuadrantData(req.user.project_id, ctx.weekIds, ctx.scope, parseFieldParam(req));
   res.json({ weeks: ctx.weeks, points: data });
 }
 
 export async function parameterAlignment(req, res) {
   const ctx = await requireAggregateAccess(req, res);
   if (!ctx) return;
-  const data = await getParameterAlignment(req.user.project_id, ctx.weekIds, ctx.scope);
+  const data = await getParameterAlignment(req.user.project_id, ctx.weekIds, ctx.scope, parseFieldParam(req));
   res.json({ weeks: ctx.weeks, alignment: data });
 }
 
-/** ?weeks=1,2,3 — % Aligned per parameter, one point per week, for the trend chart shown when multiple weeks are selected. */
+/** ?weeks=1,2,3&field=Arts — % Aligned per parameter, one point per week, for the trend chart shown when multiple weeks are selected. */
 export async function parameterAlignmentTrend(req, res, next) {
   try {
     const scope = analyticsScope(req.user);
@@ -105,7 +111,8 @@ export async function parameterAlignmentTrend(req, res, next) {
     const trend = await getParameterAlignmentTrend(
       req.user.project_id,
       weeks.map((w) => w.id),
-      scope
+      scope,
+      parseFieldParam(req)
     );
     res.json({ trend });
   } catch (err) {
@@ -116,11 +123,11 @@ export async function parameterAlignmentTrend(req, res, next) {
 export async function teamTags(req, res) {
   const ctx = await requireAggregateAccess(req, res);
   if (!ctx) return;
-  const data = await getTeamTagFrequency(req.user.project_id, ctx.weekIds, ctx.scope);
+  const data = await getTeamTagFrequency(req.user.project_id, ctx.weekIds, ctx.scope, parseFieldParam(req));
   res.json({ weeks: ctx.weeks, ...data });
 }
 
-/** ?weeks=1,2,3 — top strength/weakness tag counts per week, for the trend chart shown when multiple weeks are selected. */
+/** ?weeks=1,2,3&field=Arts — top strength/weakness tag counts per week, for the trend chart shown when multiple weeks are selected. */
 export async function teamTagTrend(req, res, next) {
   try {
     const scope = analyticsScope(req.user);
@@ -135,7 +142,8 @@ export async function teamTagTrend(req, res, next) {
     const data = await getTeamTagTrend(
       req.user.project_id,
       weeks.map((w) => w.id),
-      scope
+      scope,
+      parseFieldParam(req)
     );
     res.json(data);
   } catch (err) {
@@ -146,7 +154,7 @@ export async function teamTagTrend(req, res, next) {
 export async function teamFocusSuggestions(req, res) {
   const ctx = await requireAggregateAccess(req, res);
   if (!ctx) return;
-  const data = await getTeamFocusSuggestions(req.user.project_id, ctx.weekIds, ctx.scope);
+  const data = await getTeamFocusSuggestions(req.user.project_id, ctx.weekIds, ctx.scope, parseFieldParam(req));
   res.json({ weeks: ctx.weeks, ...data });
 }
 
