@@ -121,11 +121,16 @@ export async function buildComplianceMatrix(projectId, weekId, weekStatus) {
     mappingDataAvailable,
     summary: {
       totalProfessionals: rows.length,
-      fullyCompliant: rows.filter((r) => r.isCompliant).length,
+      // Without peer-mapping data, "fully compliant" can only ever mean
+      // "submitted their self-eval" (every row's `total` collapses to 1) —
+      // reporting that as real compliance numbers would silently hide that
+      // peer evaluations were never checked at all. null here, not a
+      // misleadingly-complete-looking 100%/count — the frontend shows "—".
+      fullyCompliant: mappingDataAvailable ? rows.filter((r) => r.isCompliant).length : null,
       selfDone: rows.filter((r) => r.selfDone).length,
-      totalExpected,
-      totalReceived,
-      completionPct: totalExpected > 0 ? Math.round((totalReceived / totalExpected) * 100) : 100,
+      totalExpected: mappingDataAvailable ? totalExpected : null,
+      totalReceived: mappingDataAvailable ? totalReceived : null,
+      completionPct: mappingDataAvailable ? (totalExpected > 0 ? Math.round((totalReceived / totalExpected) * 100) : 100) : null,
     },
   };
 }
