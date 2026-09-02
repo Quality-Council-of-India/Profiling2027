@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../context/AuthContext.jsx";
 import { scoresApi, weeksApi } from "../api/endpoints.js";
@@ -35,10 +36,10 @@ function selfAwarenessGaps(subjective) {
 }
 
 /**
- * My Scores — the ongoing week's score card only (open week if one exists,
- * else the most recently closed one). Multi-week exploration, cumulative
- * views, and rankings live in Analytics instead — this tab mirrors what the
- * demo prototype showed: "what does my current week look like."
+ * My Scores — defaults to the ongoing week (open week if one exists, else
+ * the most recently closed one), but a week selector lets you pull up any
+ * past week's score card too. Multi-week/cumulative trends and rankings
+ * still live in Analytics instead — this tab is about one week at a time.
  */
 export default function ScoresPage({ userId, userLabel }) {
   const { user } = useAuth();
@@ -48,10 +49,18 @@ export default function ScoresPage({ userId, userLabel }) {
 
   const weeksQuery = useQuery({ queryKey: ["weeks"], queryFn: weeksApi.list });
   const weeks = weeksQuery.data || [];
-  // Prefer the currently open week over just the highest week_number — an
-  // older week reopened for corrections should take over here, not stay
-  // shadowed by a newer week that's merely still closed.
-  const currentWeek = weeks.find((w) => w.status === "open") || [...weeks].reverse().find((w) => w.status === "closed");
+  const [selectedWeekId, setSelectedWeekId] = useState(null);
+  useEffect(() => {
+    // Prefer the currently open week over just the highest week_number — an
+    // older week reopened for corrections should take over here, not stay
+    // shadowed by a newer week that's merely still closed. Only picks a
+    // default once; after that, the dropdown is fully in the user's control.
+    if (weeks.length && selectedWeekId === null) {
+      const current = weeks.find((w) => w.status === "open") || [...weeks].reverse().find((w) => w.status === "closed");
+      setSelectedWeekId(current?.id ?? weeks[weeks.length - 1].id);
+    }
+  }, [weeks, selectedWeekId]);
+  const currentWeek = weeks.find((w) => w.id === selectedWeekId);
 
   const detailQuery = useQuery({
     queryKey: ["score", targetId, currentWeek?.id],
@@ -61,7 +70,8 @@ export default function ScoresPage({ userId, userLabel }) {
 
   if (weeksQuery.isLoading) return <Spinner />;
   if (weeksQuery.isError) return <ErrorBanner message="Failed to load weeks" />;
-  if (!currentWeek) return <p className="text-sm text-slate-400">No scored weeks yet.</p>;
+  if (weeks.length === 0) return <p className="text-sm text-slate-400">No scored weeks yet.</p>;
+  if (!currentWeek) return <Spinner />;
   if (detailQuery.isLoading) return <Spinner />;
   if (detailQuery.isError) return <ErrorBanner message="Failed to load this week's score" />;
 
@@ -85,13 +95,24 @@ export default function ScoresPage({ userId, userLabel }) {
             label="Refresh My Scores"
           />
         </div>
-        <span
-          className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full"
-          style={{ background: currentWeek.status === "open" ? "#DCFCE7" : "#F3F4F6", color: currentWeek.status === "open" ? "#166534" : "#4B5563" }}
-        >
-          {currentWeek.status === "open" && <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />}
-          {currentWeek.label} · {currentWeek.status === "open" ? "Open now" : "Last closed week"}
-        </span>
+        <div className="flex items-center gap-2">
+          <select
+            value={selectedWeekId ?? ""}
+            onChange={(e) => setSelectedWeekId(Number(e.target.value))}
+            className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-standard"
+          >
+            {weeks.map((w) => (
+              <option key={w.id} value={w.id}>{w.label}</option>
+            ))}
+          </select>
+          <span
+            className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full"
+            style={{ background: currentWeek.status === "open" ? "#DCFCE7" : "#F3F4F6", color: currentWeek.status === "open" ? "#166534" : "#4B5563" }}
+          >
+            {currentWeek.status === "open" && <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />}
+            {currentWeek.status === "open" ? "Open now" : currentWeek.status === "closed" ? "Closed" : "Upcoming"}
+          </span>
+        </div>
       </div>
 
       {!computed ? (
