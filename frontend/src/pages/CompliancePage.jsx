@@ -324,7 +324,7 @@ function TrajectoryMismatchCard({ mismatches }) {
       <p className="text-xs text-slate-500 mt-1">
         Submissions where the score given this week moved the opposite way from the Trajectory answer, compared to
         that same evaluator's own scores for that person last week. Worth a spot-check, not necessarily a mistake.
-        Only a large gap (7+ points out of 49) is highlighted — a point or two is normal week-to-week noise.
+        Only a large gap (3+ points out of 49) is highlighted — a point or two is normal week-to-week noise.
       </p>
       {open && (
         mismatches.length === 0 ? (
