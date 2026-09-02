@@ -74,7 +74,7 @@ export default function CompliancePage() {
           </select>
           <button
             onClick={() => remindMutation.mutate()}
-            disabled={remindMutation.isPending || !data || data.summary.completionPct === 100}
+            disabled={remindMutation.isPending || !data || data.week.status === "closed" || data.summary.completionPct === 100}
             className="px-4 py-2 rounded-lg text-white text-sm font-medium flex items-center gap-1.5 disabled:opacity-50 transition-standard hover:shadow-md"
             style={{ background: ACCENT }}
           >
@@ -82,7 +82,9 @@ export default function CompliancePage() {
               <rect x="2.5" y="4.5" width="15" height="11" rx="1.5" />
               <path d="M3 5.5l7 5.5 7-5.5" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
-            {remindMutation.isPending ? "Sending…" : `Send Reminders (${data ? data.summary.totalProfessionals - data.summary.fullyCompliant : 0} pending)`}
+            {remindMutation.isPending
+              ? "Sending…"
+              : `Send Reminders (${data?.mappingDataAvailable === false ? 0 : data ? data.summary.totalProfessionals - data.summary.fullyCompliant : 0} pending)`}
           </button>
         </div>
       </div>
@@ -106,9 +108,9 @@ export default function CompliancePage() {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard
               label="Overall Completion"
-              value={`${data.summary.completionPct}%`}
-              sub={`${data.summary.totalReceived} of ${data.summary.totalExpected} submissions`}
-              tone={data.summary.completionPct >= 90 ? "success" : data.summary.completionPct >= 60 ? "warning" : "danger"}
+              value={data.summary.completionPct === null ? "—" : `${data.summary.completionPct}%`}
+              sub={data.summary.completionPct === null ? "Peer-mapping data unavailable" : `${data.summary.totalReceived} of ${data.summary.totalExpected} submissions`}
+              tone={data.summary.completionPct === null ? "warning" : data.summary.completionPct >= 90 ? "success" : data.summary.completionPct >= 60 ? "warning" : "danger"}
             />
             <StatCard
               label="Self-Eval Done"
@@ -116,8 +118,18 @@ export default function CompliancePage() {
               sub={`${data.summary.totalProfessionals - data.summary.selfDone} yet to fill`}
               tone={data.summary.selfDone < data.summary.totalProfessionals ? "warning" : "success"}
             />
-            <StatCard label="Fully Complete" value={data.summary.fullyCompliant} sub={`of ${data.summary.totalProfessionals} professionals`} tone="success" />
-            <StatCard label="Non-Compliant" value={data.summary.totalProfessionals - data.summary.fullyCompliant} sub="Need follow-up" tone={data.summary.totalProfessionals - data.summary.fullyCompliant > 0 ? "danger" : "success"} />
+            <StatCard
+              label="Fully Complete"
+              value={data.summary.fullyCompliant === null ? "—" : data.summary.fullyCompliant}
+              sub={data.summary.fullyCompliant === null ? "Peer-mapping data unavailable" : `of ${data.summary.totalProfessionals} professionals`}
+              tone="success"
+            />
+            <StatCard
+              label="Non-Compliant"
+              value={data.summary.fullyCompliant === null ? "—" : data.summary.totalProfessionals - data.summary.fullyCompliant}
+              sub={data.summary.fullyCompliant === null ? "Peer-mapping data unavailable" : "Need follow-up"}
+              tone={data.summary.fullyCompliant === null ? "warning" : data.summary.totalProfessionals - data.summary.fullyCompliant > 0 ? "danger" : "success"}
+            />
           </div>
 
           <Card className="p-0 overflow-hidden">
