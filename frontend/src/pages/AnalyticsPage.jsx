@@ -247,7 +247,7 @@ export default function AnalyticsPage() {
                 ) : peerTrendRows.length === 0 ? (
                   <p className="text-sm text-slate-400 text-center py-8">No weeks have opened yet.</p>
                 ) : (
-                  <PeerScoreTrendChart trend={peerTrendRows} fieldLabel={user.field} />
+                  <PeerScoreTrendChart trend={peerTrendRows} />
                 )}
               </Card>
 
