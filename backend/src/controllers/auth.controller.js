@@ -22,6 +22,7 @@ export function publicUser(user) {
     can_manage_weeks: user.can_manage_weeks,
     can_manage_passwords: user.can_manage_passwords,
     can_manage_roster: user.can_manage_roster,
+    can_view_trajectory_mismatches: user.can_view_trajectory_mismatches,
   };
 }
 

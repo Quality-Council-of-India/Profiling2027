@@ -136,6 +136,16 @@ export async function buildComplianceMatrix(projectId, weekId, weekStatus) {
   };
 }
 
+// Total is a sum of 7 params each 1-7 (range 7-49). A 1-2 point wobble
+// between two weeks is well within normal week-to-week noise — the same
+// person can easily drift a point or two on a couple of parameters without
+// any real change in trajectory. A gap this size (an average of a full
+// point across all 7 parameters) is far more likely to reflect a genuine
+// contradiction worth an Admin's attention, rather than rounding/rater
+// noise, so only gaps at or above it are visually flagged as significant —
+// smaller ones still show up in the list, just without the same emphasis.
+const SIGNIFICANT_TRAJECTORY_GAP = 7;
+
 /**
  * Evaluations in a week whose Trajectory answer (Improved/Declined)
  * contradicts the direction the SAME evaluator's OWN scores for the SAME
@@ -147,7 +157,8 @@ export async function buildComplianceMatrix(projectId, weekId, weekStatus) {
  * error — a genuine one-off dip alongside real overall improvement is
  * possible — so it's a review list, not an automatic penalty.
  * Self-evaluations and peer evaluations both included (eval_type on each row
- * says which). Returns [] if there's no prior week to compare against.
+ * says which). Sorted with the largest, most-worth-a-look gaps first.
+ * Returns [] if there's no prior week to compare against.
  */
 export async function getTrajectoryMismatches(projectId, weekId) {
   const week = await prisma.week.findUnique({ where: { id: weekId } });
@@ -186,6 +197,7 @@ export async function getTrajectoryMismatches(projectId, weekId) {
       (ev.trajectory === "improved" && currentTotal < prevTotal) ||
       (ev.trajectory === "declined" && currentTotal > prevTotal);
     if (!isMismatch) continue;
+    const gap = Math.abs(currentTotal - prevTotal);
     mismatches.push({
       evalType: ev.eval_type,
       evaluator: ev.evaluator,
@@ -193,8 +205,11 @@ export async function getTrajectoryMismatches(projectId, weekId) {
       trajectory: ev.trajectory,
       prevTotal,
       currentTotal,
+      gap,
+      significant: gap >= SIGNIFICANT_TRAJECTORY_GAP,
     });
   }
+  mismatches.sort((a, b) => b.gap - a.gap);
   return mismatches;
 }
 

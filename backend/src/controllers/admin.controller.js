@@ -23,6 +23,7 @@ const setPermissionsSchema = z.object({
   can_manage_weeks: z.boolean(),
   can_manage_passwords: z.boolean(),
   can_manage_roster: z.boolean(),
+  can_view_trajectory_mismatches: z.boolean(),
 });
 const broadcastSchema = z.object({
   subject: z.string().trim().min(1).max(200),
@@ -250,6 +251,7 @@ export async function listUsers(req, res) {
       can_manage_weeks: true,
       can_manage_passwords: true,
       can_manage_roster: true,
+      can_view_trajectory_mismatches: true,
     },
   });
   res.json({ users });
@@ -258,15 +260,18 @@ export async function listUsers(req, res) {
 /**
  * Master-Admin-only: grants/revokes another Admin's edit access to Week
  * Management, Password Management, and Team Roster (any mix — "full or
- * half access"). Every other Admin panel section (View Portal As, Export
- * Scoresheets, Raw Data Browser) is unrestricted for every Admin and isn't
- * touched here. is_master_admin itself is never settable through this
- * endpoint — only ever changed directly in the database.
+ * half access"), plus VIEW access to Compliance Tracker's Trajectory
+ * Mismatches section (master-Admin-only otherwise). Every other Admin
+ * panel section (View Portal As, Export Scoresheets, Raw Data Browser) is
+ * unrestricted for every Admin and isn't touched here. is_master_admin
+ * itself is never settable through this endpoint — only ever changed
+ * directly in the database.
  */
 export async function setAdminPermissions(req, res, next) {
   try {
     const userId = Number(req.params.id);
-    const { can_manage_weeks, can_manage_passwords, can_manage_roster } = setPermissionsSchema.parse(req.body);
+    const { can_manage_weeks, can_manage_passwords, can_manage_roster, can_view_trajectory_mismatches } =
+      setPermissionsSchema.parse(req.body);
 
     const user = await prisma.user.findFirst({ where: { id: userId, project_id: req.user.project_id } });
     if (!user) return res.status(404).json({ error: "User not found" });
@@ -276,7 +281,7 @@ export async function setAdminPermissions(req, res, next) {
 
     const updated = await prisma.user.update({
       where: { id: userId },
-      data: { can_manage_weeks, can_manage_passwords, can_manage_roster },
+      data: { can_manage_weeks, can_manage_passwords, can_manage_roster, can_view_trajectory_mismatches },
     });
     res.json({
       user: {
@@ -284,11 +289,15 @@ export async function setAdminPermissions(req, res, next) {
         can_manage_weeks: updated.can_manage_weeks,
         can_manage_passwords: updated.can_manage_passwords,
         can_manage_roster: updated.can_manage_roster,
+        can_view_trajectory_mismatches: updated.can_view_trajectory_mismatches,
       },
     });
   } catch (err) {
     if (err.name === "ZodError") {
-      return res.status(400).json({ error: "Body must include can_manage_weeks, can_manage_passwords, can_manage_roster as booleans" });
+      return res.status(400).json({
+        error:
+          "Body must include can_manage_weeks, can_manage_passwords, can_manage_roster, can_view_trajectory_mismatches as booleans",
+      });
     }
     next(err);
   }

@@ -96,6 +96,17 @@ export function canViewCompliance(requester) {
   return [ROLES.ADMIN, ROLES.CASU_LEAD, ROLES.PROJECT_LEAD].includes(requester.role);
 }
 
+/**
+ * Can `requester` see the Compliance Tracker's "Trajectory Mismatches"
+ * section? Master-Admin-only by default; a non-master Admin needs the
+ * can_view_trajectory_mismatches flag granted via Manage Admin Access.
+ * Project Lead and CASU Lead never see it, regardless of that flag — it
+ * only ever applies to Admin accounts.
+ */
+export function canViewTrajectoryMismatches(requester) {
+  return requester.role === ROLES.ADMIN && (requester.is_master_admin || requester.can_view_trajectory_mismatches);
+}
+
 /** Can `requester` open/close weeks or manage the roster? */
 export function isAdmin(requester) {
   return requester.role === ROLES.ADMIN;

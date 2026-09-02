@@ -1,5 +1,5 @@
 import { prisma } from "../utils/prisma.js";
-import { canViewCompliance } from "../services/access.js";
+import { canViewCompliance, canViewTrajectoryMismatches } from "../services/access.js";
 import { buildComplianceMatrix, sendComplianceReminders, getTrajectoryMismatches } from "../services/compliance.js";
 
 export async function getCompliance(req, res) {
@@ -12,9 +12,11 @@ export async function getCompliance(req, res) {
   });
   if (!week) return res.status(404).json({ error: "Week not found" });
 
+  // null (not []) for anyone without access — the frontend tells "not
+  // permitted" apart from "permitted, zero mismatches this week" by that.
   const [matrix, trajectoryMismatches] = await Promise.all([
     buildComplianceMatrix(req.user.project_id, weekId, week.status),
-    getTrajectoryMismatches(req.user.project_id, weekId),
+    canViewTrajectoryMismatches(req.user) ? getTrajectoryMismatches(req.user.project_id, weekId) : null,
   ]);
   res.json({ week, ...matrix, trajectoryMismatches });
 }
