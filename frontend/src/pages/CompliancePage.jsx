@@ -1,8 +1,14 @@
 import { Fragment, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { weeksApi, complianceApi } from "../api/endpoints.js";
-import { Card, StatCard, Spinner, ErrorBanner, EmptyState, Badge, RefreshButton } from "../components/ui.jsx";
+import { Card, StatCard, Spinner, ErrorBanner, EmptyState, Badge, RefreshButton, Modal } from "../components/ui.jsx";
 import { ROLE_LABELS, ROLE_COLORS, ACCENT } from "../utils/constants.js";
+
+const STATUS_FILTERS = [
+  { key: "all", label: "All" },
+  { key: "compliant", label: "Compliant" },
+  { key: "non_compliant", label: "Non-Compliant" },
+];
 
 export default function CompliancePage() {
   const queryClient = useQueryClient();
@@ -18,6 +24,9 @@ export default function CompliancePage() {
       return next;
     });
   }
+
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [showNonCompliantModal, setShowNonCompliantModal] = useState(false);
 
   const [weekId, setWeekId] = useState(null);
   useEffect(() => {
@@ -127,9 +136,30 @@ export default function CompliancePage() {
             <StatCard
               label="Non-Compliant"
               value={data.summary.fullyCompliant === null ? "—" : data.summary.totalProfessionals - data.summary.fullyCompliant}
-              sub={data.summary.fullyCompliant === null ? "Peer-mapping data unavailable" : "Need follow-up"}
+              sub={data.summary.fullyCompliant === null ? "Peer-mapping data unavailable" : "Need follow-up · click to see names"}
               tone={data.summary.fullyCompliant === null ? "warning" : data.summary.totalProfessionals - data.summary.fullyCompliant > 0 ? "danger" : "success"}
+              onClick={data.summary.fullyCompliant === null ? undefined : () => setShowNonCompliantModal(true)}
             />
+          </div>
+
+          {showNonCompliantModal && (
+            <NonCompliantModal rows={data.rows.filter((r) => !r.isCompliant)} onClose={() => setShowNonCompliantModal(false)} />
+          )}
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Filter by status:</span>
+            {STATUS_FILTERS.map((f) => (
+              <button
+                key={f.key}
+                onClick={() => setStatusFilter(f.key)}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition-standard ${
+                  statusFilter === f.key ? "text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
+                style={statusFilter === f.key ? { background: ACCENT } : undefined}
+              >
+                {f.label}
+              </button>
+            ))}
           </div>
 
           <Card className="p-0 overflow-hidden">
@@ -148,7 +178,20 @@ export default function CompliancePage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {data.rows.map((r, i) => {
+                  {(() => {
+                    const filteredRows = data.rows.filter((r) =>
+                      statusFilter === "all" ? true : statusFilter === "compliant" ? r.isCompliant : !r.isCompliant
+                    );
+                    if (filteredRows.length === 0) {
+                      return (
+                        <tr>
+                          <td colSpan={8} className="px-4 py-8 text-center text-sm text-slate-400">
+                            No one matches this filter.
+                          </td>
+                        </tr>
+                      );
+                    }
+                    return filteredRows.map((r, i) => {
                     const pct = Math.round((r.completed / r.total) * 100);
                     const isExpanded = expandedIds.has(r.id);
                     const donePeers = (r.peers || []).filter((p) => p.done);
@@ -244,7 +287,8 @@ export default function CompliancePage() {
                         )}
                       </Fragment>
                     );
-                  })}
+                    });
+                  })()}
                 </tbody>
               </table>
             </div>
@@ -252,5 +296,49 @@ export default function CompliancePage() {
         </>
       )}
     </div>
+  );
+}
+
+/** Triggered by clicking the Non-Compliant stat card — the full list of names behind that count, grouped by field so a large team is easier to scan. */
+function NonCompliantModal({ rows, onClose }) {
+  const byField = new Map();
+  for (const r of rows) {
+    const key = r.field || "—";
+    if (!byField.has(key)) byField.set(key, []);
+    byField.get(key).push(r);
+  }
+  const groups = [...byField.entries()].sort(([a], [b]) => a.localeCompare(b));
+
+  return (
+    <Modal title={`Non-Compliant (${rows.length})`} onClose={onClose}>
+      {rows.length === 0 ? (
+        <p className="text-sm text-slate-400 text-center py-4">Everyone's compliant for this week.</p>
+      ) : (
+        <div className="space-y-4">
+          {groups.map(([field, members]) => (
+            <div key={field}>
+              <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1.5">
+                {field} ({members.length})
+              </p>
+              <ul className="space-y-1.5">
+                {members.map((m) => (
+                  <li key={m.id} className="flex items-center justify-between gap-2 text-sm">
+                    <span className="flex items-center gap-1.5">
+                      <span className="text-slate-700">{m.name}</span>
+                      <Badge text={ROLE_LABELS[m.role]} color={ROLE_COLORS[m.role]} />
+                    </span>
+                    <span className="text-xs text-slate-400 flex-shrink-0">
+                      {!m.selfDone && "Self-Eval pending"}
+                      {!m.selfDone && m.peersExpected - m.peersDone > 0 && " · "}
+                      {m.peersExpected - m.peersDone > 0 && `${m.peersExpected - m.peersDone} peer eval(s) pending`}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )}
+    </Modal>
   );
 }

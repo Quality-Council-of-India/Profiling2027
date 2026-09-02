@@ -48,17 +48,28 @@ export const complianceApi = {
   remind: (weekId) => api.post(`/compliance/${weekId}/remind`).then((r) => r.data),
 };
 
+// Appends &field=... when a field filter is set — used by the Team-Wide
+// Analytics cards that support narrowing to one field (SAPA Distribution,
+// Quadrant, Per-Parameter Alignment, Team Strengths, Focus Suggestions).
+function fieldParam(field) {
+  return field ? `&field=${encodeURIComponent(field)}` : "";
+}
+
 export const analyticsApi = {
   // All of these take one-or-more week IDs — a single week for that week's
   // numbers, several (including "Cumulative") for an all-time combined view.
   heatmap: (weekIds) => api.get(`/analytics/heatmap?weeks=${weekIds.join(",")}`).then((r) => r.data),
-  sapa: (weekIds) => api.get(`/analytics/sapa?weeks=${weekIds.join(",")}`).then((r) => r.data),
-  quadrant: (weekIds) => api.get(`/analytics/quadrant?weeks=${weekIds.join(",")}`).then((r) => r.data),
-  parameterAlignment: (weekIds) => api.get(`/analytics/parameter-alignment?weeks=${weekIds.join(",")}`).then((r) => r.data),
-  parameterAlignmentTrend: (weekIds) => api.get(`/analytics/parameter-alignment-trend?weeks=${weekIds.join(",")}`).then((r) => r.data),
-  teamTags: (weekIds) => api.get(`/analytics/team-tags?weeks=${weekIds.join(",")}`).then((r) => r.data),
-  teamTagTrend: (weekIds) => api.get(`/analytics/team-tag-trend?weeks=${weekIds.join(",")}`).then((r) => r.data),
-  teamFocusSuggestions: (weekIds) => api.get(`/analytics/team-focus-suggestions?weeks=${weekIds.join(",")}`).then((r) => r.data),
+  sapa: (weekIds, field) => api.get(`/analytics/sapa?weeks=${weekIds.join(",")}${fieldParam(field)}`).then((r) => r.data),
+  quadrant: (weekIds, field) => api.get(`/analytics/quadrant?weeks=${weekIds.join(",")}${fieldParam(field)}`).then((r) => r.data),
+  parameterAlignment: (weekIds, field) =>
+    api.get(`/analytics/parameter-alignment?weeks=${weekIds.join(",")}${fieldParam(field)}`).then((r) => r.data),
+  parameterAlignmentTrend: (weekIds, field) =>
+    api.get(`/analytics/parameter-alignment-trend?weeks=${weekIds.join(",")}${fieldParam(field)}`).then((r) => r.data),
+  teamTags: (weekIds, field) => api.get(`/analytics/team-tags?weeks=${weekIds.join(",")}${fieldParam(field)}`).then((r) => r.data),
+  teamTagTrend: (weekIds, field) =>
+    api.get(`/analytics/team-tag-trend?weeks=${weekIds.join(",")}${fieldParam(field)}`).then((r) => r.data),
+  teamFocusSuggestions: (weekIds, field) =>
+    api.get(`/analytics/team-focus-suggestions?weeks=${weekIds.join(",")}${fieldParam(field)}`).then((r) => r.data),
   teamTrajectory: (weekIds) => api.get(`/analytics/team-trajectory?weeks=${weekIds.join(",")}`).then((r) => r.data),
   rankings: (weekIds) => api.get(`/analytics/rankings?weeks=${weekIds.join(",")}`).then((r) => r.data),
   fieldStandings: (weekIds) => api.get(`/analytics/field-standings?weeks=${weekIds.join(",")}`).then((r) => r.data),

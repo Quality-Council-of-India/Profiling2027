@@ -34,14 +34,28 @@ const STAT_TONES = {
   neutral: { bar: "#A5C9EB", text: "text-slate-900" },
 };
 
-export function StatCard({ label, value, sub, accent = false, tone }) {
+export function StatCard({ label, value, sub, accent = false, tone, onClick }) {
   const resolved = STAT_TONES[tone] || (accent ? STAT_TONES.accent : STAT_TONES.neutral);
-  return (
-    <Card className="p-4 relative overflow-hidden">
+  const content = (
+    <>
       <div className="absolute left-0 top-0 bottom-0 w-1" style={{ background: resolved.bar }} />
       <p className="text-xs uppercase tracking-wide text-slate-500 mb-1 pl-1.5">{label}</p>
       <p className={`font-display text-2xl font-bold tabular-nums pl-1.5 ${resolved.text}`}>{value}</p>
       {sub && <p className="text-xs text-slate-400 mt-1 pl-1.5">{sub}</p>}
+    </>
+  );
+  if (onClick) {
+    return (
+      <button onClick={onClick} className="w-full text-left">
+        <Card interactive className="p-4 relative overflow-hidden h-full">
+          {content}
+        </Card>
+      </button>
+    );
+  }
+  return (
+    <Card className="p-4 relative overflow-hidden">
+      {content}
     </Card>
   );
 }

@@ -42,6 +42,19 @@ function effectiveField(user, weekIds) {
 }
 
 /**
+ * Optional field narrowing for the Team-Wide Analytics cards that support
+ * it — an Admin/Lead picking one field out of the dropdown. Filtered on
+ * each user's effectiveField() (the same historical-vs-live resolution
+ * every other per-week field lookup uses), not a raw Prisma `where`,
+ * since a CASU Anchor's field can be a comma-joined multi-field string.
+ * `field` falsy (unset/"All Fields") is a no-op.
+ */
+function filterByField(users, weekIds, field) {
+  if (!field) return users;
+  return users.filter((u) => fieldList(effectiveField(u, weekIds)).includes(field));
+}
+
+/**
  * §4.6.01 Field-Wise Heatmap: 10 fields x 7 parameters, avg peer scores.
  * weekIds is one-or-more — same "averaged across the selection" rule as
  * getFieldStandings/getRankings: each person's own per-parameter peer score
@@ -78,7 +91,7 @@ export async function getFieldHeatmap(projectId, weekIds, scope) {
   }
 
   return Object.entries(byField).map(([field, { count, sums }]) => {
-    const row = { field };
+    const row = { field, count };
     let total = 0;
     for (const p of PARAM_FIELDS) {
       const avg = count > 0 ? sums[p.label] / count : 0;
@@ -105,11 +118,15 @@ function sapaBucket(sapa) {
  * over/aligned/under — same two-step-averaging convention as the heatmap,
  * so a person's classification doesn't wobble between weeks.
  */
-export async function getSapaDistribution(projectId, weekIds, scope) {
-  const users = await prisma.user.findMany({
-    where: { project_id: projectId, ...activeOrScoredWhere(weekIds), ...roleFilterForScope(scope) },
-    include: { computedScores: { where: { week_id: { in: weekIds } } } },
-  });
+export async function getSapaDistribution(projectId, weekIds, scope, field) {
+  const users = filterByField(
+    await prisma.user.findMany({
+      where: { project_id: projectId, ...activeOrScoredWhere(weekIds), ...roleFilterForScope(scope) },
+      include: { computedScores: { where: { week_id: { in: weekIds } } } },
+    }),
+    weekIds,
+    field
+  );
 
   function distribute(groupKeysFn) {
     const groups = {};
@@ -161,17 +178,21 @@ export async function getSapaDistribution(projectId, weekIds, scope) {
  * computed from every peer submission POOLED across the selection, not just
  * the latest week.
  */
-export async function getQuadrantData(projectId, weekIds, scope) {
-  const users = await prisma.user.findMany({
-    where: { project_id: projectId, ...activeOrScoredWhere(weekIds), ...roleFilterForScope(scope) },
-    include: {
-      computedScores: { where: { week_id: { in: weekIds } } },
-      evaluationsReceived: {
-        where: { week_id: { in: weekIds }, eval_type: "peer" },
-        select: { trajectory: true, strengths_tags: true, weakness_tags: true },
+export async function getQuadrantData(projectId, weekIds, scope, field) {
+  const users = filterByField(
+    await prisma.user.findMany({
+      where: { project_id: projectId, ...activeOrScoredWhere(weekIds), ...roleFilterForScope(scope) },
+      include: {
+        computedScores: { where: { week_id: { in: weekIds } } },
+        evaluationsReceived: {
+          where: { week_id: { in: weekIds }, eval_type: "peer" },
+          select: { trajectory: true, strengths_tags: true, weakness_tags: true },
+        },
       },
-    },
-  });
+    }),
+    weekIds,
+    field
+  );
 
   return users
     .map((u) => {
@@ -228,11 +249,15 @@ function gapBucket(diff) {
  * data points, not one averaged point — this pools every week's evaluation
  * instances together rather than pre-averaging a person's gap across weeks.
  */
-export async function getParameterAlignment(projectId, weekIds, scope) {
-  const users = await prisma.user.findMany({
-    where: { project_id: projectId, ...activeOrScoredWhere(weekIds), role: { not: ROLES.ADMIN }, ...roleFilterForScope(scope) },
-    include: { computedScores: { where: { week_id: { in: weekIds } } } },
-  });
+export async function getParameterAlignment(projectId, weekIds, scope, field) {
+  const users = filterByField(
+    await prisma.user.findMany({
+      where: { project_id: projectId, ...activeOrScoredWhere(weekIds), role: { not: ROLES.ADMIN }, ...roleFilterForScope(scope) },
+      include: { computedScores: { where: { week_id: { in: weekIds } } } },
+    }),
+    weekIds,
+    field
+  );
 
   const buckets = Object.fromEntries(PARAM_FIELDS.map((p) => [p.key, { aligned: 0, someGap: 0, largeGap: 0 }]));
   for (const u of users) {
@@ -254,15 +279,19 @@ export async function getParameterAlignment(projectId, weekIds, scope) {
  * Same as getParameterAlignment, but one row per week — feeds the "% Aligned
  * over time" trend chart shown when more than one week is selected.
  */
-export async function getParameterAlignmentTrend(projectId, weekIds, scope) {
+export async function getParameterAlignmentTrend(projectId, weekIds, scope, field) {
   const weeks = await prisma.week.findMany({
     where: { id: { in: weekIds }, project_id: projectId },
     orderBy: { week_number: "asc" },
   });
-  const users = await prisma.user.findMany({
-    where: { project_id: projectId, ...activeOrScoredWhere(weekIds), role: { not: ROLES.ADMIN }, ...roleFilterForScope(scope) },
-    include: { computedScores: { where: { week_id: { in: weekIds } } } },
-  });
+  const users = filterByField(
+    await prisma.user.findMany({
+      where: { project_id: projectId, ...activeOrScoredWhere(weekIds), role: { not: ROLES.ADMIN }, ...roleFilterForScope(scope) },
+      include: { computedScores: { where: { week_id: { in: weekIds } } } },
+    }),
+    weekIds,
+    field
+  );
 
   return weeks.map((week) => {
     const buckets = Object.fromEntries(PARAM_FIELDS.map((p) => [p.key, { aligned: 0, someGap: 0, largeGap: 0 }]));
@@ -295,16 +324,21 @@ const TEAM_TAGS_TOP_N = 10;
  * peer evaluation response in the selection (not of total tag-selections,
  * so multi-tag responses don't inflate the denominator).
  */
-export async function getTeamTagFrequency(projectId, weekIds, scope) {
-  const users = await prisma.user.findMany({
-    where: { project_id: projectId, ...activeOrScoredWhere(weekIds), role: { not: ROLES.ADMIN }, ...roleFilterForScope(scope) },
-    include: {
-      evaluationsReceived: {
-        where: { week_id: { in: weekIds }, eval_type: "peer" },
-        select: { strengths_tags: true, weakness_tags: true },
+export async function getTeamTagFrequency(projectId, weekIds, scope, field) {
+  const users = filterByField(
+    await prisma.user.findMany({
+      where: { project_id: projectId, ...activeOrScoredWhere(weekIds), role: { not: ROLES.ADMIN }, ...roleFilterForScope(scope) },
+      include: {
+        computedScores: { where: { week_id: { in: weekIds } } },
+        evaluationsReceived: {
+          where: { week_id: { in: weekIds }, eval_type: "peer" },
+          select: { strengths_tags: true, weakness_tags: true },
+        },
       },
-    },
-  });
+    }),
+    weekIds,
+    field
+  );
 
   const strengthFreq = {};
   const weaknessFreq = {};
@@ -334,20 +368,25 @@ const TAG_TREND_TOP_N = 5;
  * range) so the trend lines track the same tags week to week, rather than
  * whichever tags happened to be #1-5 in any single week.
  */
-export async function getTeamTagTrend(projectId, weekIds, scope) {
+export async function getTeamTagTrend(projectId, weekIds, scope, field) {
   const weeks = await prisma.week.findMany({
     where: { id: { in: weekIds }, project_id: projectId },
     orderBy: { week_number: "asc" },
   });
-  const users = await prisma.user.findMany({
-    where: { project_id: projectId, ...activeOrScoredWhere(weekIds), role: { not: ROLES.ADMIN }, ...roleFilterForScope(scope) },
-    include: {
-      evaluationsReceived: {
-        where: { week_id: { in: weekIds }, eval_type: "peer" },
-        select: { week_id: true, strengths_tags: true, weakness_tags: true },
+  const users = filterByField(
+    await prisma.user.findMany({
+      where: { project_id: projectId, ...activeOrScoredWhere(weekIds), role: { not: ROLES.ADMIN }, ...roleFilterForScope(scope) },
+      include: {
+        computedScores: { where: { week_id: { in: weekIds } } },
+        evaluationsReceived: {
+          where: { week_id: { in: weekIds }, eval_type: "peer" },
+          select: { week_id: true, strengths_tags: true, weakness_tags: true },
+        },
       },
-    },
-  });
+    }),
+    weekIds,
+    field
+  );
 
   const perWeekStrength = new Map(weeks.map((w) => [w.id, {}]));
   const perWeekWeakness = new Map(weeks.map((w) => [w.id, {}]));
@@ -650,16 +689,21 @@ function allocateWholePercentages(counts, total) {
  * one-or-more: every selected week's suggestions (peer and self) are pooled
  * together before classifying.
  */
-export async function getTeamFocusSuggestions(projectId, weekIds, scope) {
-  const users = await prisma.user.findMany({
-    where: { project_id: projectId, ...activeOrScoredWhere(weekIds), role: { not: ROLES.ADMIN }, ...roleFilterForScope(scope) },
-    include: {
-      evaluationsReceived: {
-        where: { week_id: { in: weekIds }, eval_type: { in: ["peer", "self"] } },
-        select: { eval_type: true, improvement_suggestion: true },
+export async function getTeamFocusSuggestions(projectId, weekIds, scope, field) {
+  const users = filterByField(
+    await prisma.user.findMany({
+      where: { project_id: projectId, ...activeOrScoredWhere(weekIds), role: { not: ROLES.ADMIN }, ...roleFilterForScope(scope) },
+      include: {
+        computedScores: { where: { week_id: { in: weekIds } } },
+        evaluationsReceived: {
+          where: { week_id: { in: weekIds }, eval_type: { in: ["peer", "self"] } },
+          select: { eval_type: true, improvement_suggestion: true },
+        },
       },
-    },
-  });
+    }),
+    weekIds,
+    field
+  );
 
   const peerTexts = [];
   const selfTexts = [];
