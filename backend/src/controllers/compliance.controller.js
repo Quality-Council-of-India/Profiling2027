@@ -1,6 +1,6 @@
 import { prisma } from "../utils/prisma.js";
 import { canViewCompliance } from "../services/access.js";
-import { buildComplianceMatrix, sendComplianceReminders } from "../services/compliance.js";
+import { buildComplianceMatrix, sendComplianceReminders, getTrajectoryMismatches } from "../services/compliance.js";
 
 export async function getCompliance(req, res) {
   if (!canViewCompliance(req.user)) {
@@ -12,8 +12,11 @@ export async function getCompliance(req, res) {
   });
   if (!week) return res.status(404).json({ error: "Week not found" });
 
-  const matrix = await buildComplianceMatrix(req.user.project_id, weekId, week.status);
-  res.json({ week, ...matrix });
+  const [matrix, trajectoryMismatches] = await Promise.all([
+    buildComplianceMatrix(req.user.project_id, weekId, week.status),
+    getTrajectoryMismatches(req.user.project_id, weekId),
+  ]);
+  res.json({ week, ...matrix, trajectoryMismatches });
 }
 
 export async function remindNonCompliant(req, res) {

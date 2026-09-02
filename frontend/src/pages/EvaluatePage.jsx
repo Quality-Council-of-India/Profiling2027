@@ -71,6 +71,23 @@ export default function EvaluatePage() {
   // submissions skip it entirely and send "not_applicable" automatically.
   const needsTrajectory = !!week && week.week_number >= 2;
 
+  // Soft, non-blocking sanity check: does the Trajectory answer being
+  // entered now actually match which way the scores just moved, compared
+  // to this same evaluator's own total for this same person last week?
+  // Null prevTotal (no prior week, or this evaluator didn't score this
+  // person last week) means there's nothing to compare against, so no
+  // warning is shown either way.
+  const currentTotal = PARAM_FIELDS.reduce((sum, p) => sum + ratings[p.key], 0);
+  const prevTotal = evalType === "self" ? pending?.prevOwnTotalSelf ?? null : selectedPeer?.prevOwnTotal ?? null;
+  const trajectoryMismatch =
+    needsTrajectory && prevTotal !== null && trajectory
+      ? trajectory === "improved" && currentTotal < prevTotal
+        ? { direction: "lower", claim: "Improved" }
+        : trajectory === "declined" && currentTotal > prevTotal
+        ? { direction: "higher", claim: "Declined" }
+        : null
+      : null;
+
   const toggleTag = (tag, list, setter) => {
     if (list.includes(tag)) {
       setter(list.filter((t) => t !== tag));
@@ -436,6 +453,12 @@ export default function EvaluatePage() {
                 </button>
               ))}
             </div>
+            {trajectoryMismatch && (
+              <p className="mt-2 text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                {evalType === "self" ? "Your" : "Their"} scores are {trajectoryMismatch.direction} than last week (
+                {prevTotal} → {currentTotal}), but you marked {trajectoryMismatch.claim} — are you sure?
+              </p>
+            )}
           </div>
         )}
       </Card>

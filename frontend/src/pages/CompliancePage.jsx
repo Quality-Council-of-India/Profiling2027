@@ -293,9 +293,59 @@ export default function CompliancePage() {
               </table>
             </div>
           </Card>
+
+          <TrajectoryMismatchCard mismatches={data.trajectoryMismatches} />
         </>
       )}
     </div>
+  );
+}
+
+/**
+ * Evaluations where the Trajectory answer (Improved/Declined) contradicts
+ * the direction that evaluator's own scores for that person actually moved
+ * vs. their own submission last week — e.g. marking "Improved" while giving
+ * a lower total than last time. A soft signal to spot-check, not proof of
+ * an error, so this is a review list rather than a compliance failure.
+ */
+function TrajectoryMismatchCard({ mismatches }) {
+  const [open, setOpen] = useState(true);
+  if (!mismatches) return null;
+  return (
+    <Card className="p-5">
+      <button onClick={() => setOpen((v) => !v)} className="w-full flex items-center gap-2 text-left">
+        <h2 className="text-sm font-semibold text-slate-800">Trajectory Mismatches</h2>
+        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${mismatches.length > 0 ? "bg-amber-100 text-amber-800" : "bg-green-100 text-green-700"}`}>
+          {mismatches.length}
+        </span>
+        <span className="text-slate-400 text-xs ml-auto">{open ? "▲" : "▼"}</span>
+      </button>
+      <p className="text-xs text-slate-500 mt-1">
+        Submissions where the score given this week moved the opposite way from the Trajectory answer, compared to
+        that same evaluator's own scores for that person last week. Worth a spot-check, not necessarily a mistake.
+      </p>
+      {open && (
+        mismatches.length === 0 ? (
+          <p className="text-sm text-slate-400 text-center py-6">No mismatches this week.</p>
+        ) : (
+          <div className="mt-3 space-y-2">
+            {mismatches.map((m, i) => (
+              <div key={i} className="flex items-center justify-between gap-3 border border-amber-100 bg-amber-50 rounded-lg px-3 py-2 text-sm">
+                <div>
+                  <span className="font-medium text-slate-800">{m.evaluator.name}</span>
+                  <span className="text-slate-400"> → </span>
+                  <span className="font-medium text-slate-800">{m.evaluatee.name}</span>
+                  <span className="text-xs text-slate-500 ml-2">({m.evalType === "self" ? "Self-Eval" : "Peer Eval"})</span>
+                </div>
+                <div className="text-xs text-slate-600 flex-shrink-0">
+                  {m.prevTotal} → {m.currentTotal}, marked <span className="font-medium">{m.trajectory === "improved" ? "Improved" : "Declined"}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )
+      )}
+    </Card>
   );
 }
 

@@ -239,6 +239,28 @@ function gapBucket(diff) {
   return "largeGap";
 }
 
+// "Aligned" only measures self-vs-peer AGREEMENT, not performance level —
+// self=3/peer=3 (both saying "this is weak") counts as Aligned exactly like
+// self=6/peer=6 does, since the person's self-perception matches how peers
+// see them either way. That's a real blind spot for a team-wide view: an
+// "Aligned" bar reads as reassuring even when it's hiding agreed-weak
+// scores. This sub-splits Aligned by performance level so both are still
+// visible. Threshold checked against real Week 1 + Week 2 data before
+// picking a number: this team's ratings cluster tightly high (peer scores
+// are 5 or 6 98%+ of the time), so a literal "below the 1-7 scale's
+// midpoint (4)" cutoff never fires at all — 0 of 714 real Aligned pairs
+// had both self and peer below 4. 5 is the lowest cutoff that actually
+// separates out a real (if small — about 1%) "agreed-weak" group given how
+// this team actually rates.
+const ALIGNED_NEEDS_ATTENTION_THRESHOLD = 5;
+
+/** Aligned pairs only: "needs attention" when BOTH self and peer are below the threshold, else "strong". */
+function alignedSubBucket(selfV, peerV) {
+  return selfV < ALIGNED_NEEDS_ATTENTION_THRESHOLD && peerV < ALIGNED_NEEDS_ATTENTION_THRESHOLD
+    ? "alignedNeedsAttention"
+    : "alignedStrong";
+}
+
 /**
  * Per-Parameter Alignment — team-wide self-vs-peer gap distribution for
  * each of the 7 parameters. Complements the heatmap (which only shows
@@ -259,19 +281,24 @@ export async function getParameterAlignment(projectId, weekIds, scope, field) {
     field
   );
 
-  const buckets = Object.fromEntries(PARAM_FIELDS.map((p) => [p.key, { aligned: 0, someGap: 0, largeGap: 0 }]));
+  const buckets = Object.fromEntries(
+    PARAM_FIELDS.map((p) => [p.key, { alignedStrong: 0, alignedNeedsAttention: 0, someGap: 0, largeGap: 0 }])
+  );
   for (const u of users) {
     for (const score of u.computedScores) {
       for (const p of PARAM_FIELDS) {
-        const diff = Math.abs(Number(score[`${p.key}_self`]) - Number(score[`${p.key}_peer`]));
-        buckets[p.key][gapBucket(diff)] += 1;
+        const selfV = Number(score[`${p.key}_self`]);
+        const peerV = Number(score[`${p.key}_peer`]);
+        const bucket = gapBucket(Math.abs(selfV - peerV));
+        buckets[p.key][bucket === "aligned" ? alignedSubBucket(selfV, peerV) : bucket] += 1;
       }
     }
   }
 
   return PARAM_FIELDS.map((p) => {
     const b = buckets[p.key];
-    return { key: p.key, label: p.label, ...b, total: b.aligned + b.someGap + b.largeGap };
+    const aligned = b.alignedStrong + b.alignedNeedsAttention;
+    return { key: p.key, label: p.label, ...b, aligned, total: aligned + b.someGap + b.largeGap };
   });
 }
 
