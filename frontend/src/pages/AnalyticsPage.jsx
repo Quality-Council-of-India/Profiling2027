@@ -344,7 +344,7 @@ export default function AnalyticsPage() {
           <>
             {user.field ? (
               <RankingCard
-                title={`Standing in ${user.field} — ${rangeLabel}`}
+                title={`Standing in ${rankingsQuery.data.field?.fieldLabel ?? user.field} — ${rangeLabel}`}
                 myRank={rankingsQuery.data.field?.myRank}
                 total={rankingsQuery.data.field?.totalInField}
                 list={rankingsQuery.data.field?.list}
