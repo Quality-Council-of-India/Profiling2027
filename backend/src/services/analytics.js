@@ -816,7 +816,17 @@ export async function getRankings(projectId, requester, weekIds) {
 
   let field = null;
   if (requester.field) {
-    const fieldPool = rank(withAvg.filter((u) => sharesField(requester, u)));
+    // For a single closed week, use the requester's OWN historically-frozen
+    // field (myRecord.field, already resolved via effectiveField inside
+    // averageScoresByUser) rather than their current live field —
+    // otherwise someone who's since moved fields would see "not enough
+    // data" for a past week (their live field shares nothing with anyone's
+    // historical one), and the card title would show today's field name
+    // instead of what was actually true back then. Falls back to the live
+    // field for the rare case they have no record in this selection at all.
+    const myRecord = withAvg.find((u) => u.id === requester.id);
+    const myEffectiveField = myRecord?.field ?? requester.field;
+    const fieldPool = rank(withAvg.filter((u) => sharesField({ field: myEffectiveField }, u)));
     const mine = fieldPool.find((u) => u.id === requester.id);
     const canSeeFieldList = [ROLES.GROUP_ANCHOR, ROLES.CASU_ANCHOR, ROLES.CASU_LEAD, ROLES.ADMIN].includes(
       requester.role
@@ -825,6 +835,10 @@ export async function getRankings(projectId, requester, weekIds) {
       myRank: mine?.rank ?? null,
       totalInField: fieldPool.length,
       list: canSeeFieldList ? fieldPool : null,
+      // The field name the card title should show for this week selection
+      // — see the comment above on why this can differ from the
+      // requester's live/current field.
+      fieldLabel: myEffectiveField,
     };
   }
 
