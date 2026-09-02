@@ -486,6 +486,16 @@ export default function AnalyticsPage() {
                 same bucket either way. This measure only captures how big the disagreement is, not who rated higher.
               </p>
               <p>
+                <strong>Aligned only measures agreement, not performance</strong> — a self-rating of 3 and a peer
+                rating of 3 counts as "Aligned" exactly like a 6-and-6 does, since the point is that self-perception
+                matches how peers see them, not whether the score itself is good. To keep a weak-but-agreed score
+                from hiding inside a reassuring-looking "Aligned" bar, Aligned is split into two shades: "Aligned
+                (Needs Attention)" when BOTH self and peer are below 5 on the 1–7 scale, otherwise "Aligned
+                (Strong)". 5 (not the scale's arithmetic midpoint of 4) is the cutoff because this team's real
+                ratings cluster tightly high — a plain "below 4" split checked against Week 1 and Week 2 data would
+                never fire at all.
+              </p>
+              <p>
                 Several weeks selected → every week someone was scored counts as its own data point (not averaged
                 together first), so someone scored in 3 of 5 selected weeks contributes 3 gap readings, one per week.
               </p>
@@ -642,6 +652,9 @@ function widestGapParameter(rows) {
   return best;
 }
 
+const ALIGNED_STRONG_COLOR = "#16A34A";
+const ALIGNED_NEEDS_ATTENTION_COLOR = "#84CC16";
+
 function ParameterAlignmentBars({ rows }) {
   if (!rows || rows.every((r) => r.total === 0)) {
     return <p className="text-sm text-slate-400 text-center py-8">No scored data for this week yet.</p>;
@@ -659,14 +672,28 @@ function ParameterAlignmentBars({ rows }) {
       )}
       {rows.map((r) => {
         const total = r.total || 1;
+        // Needs-Attention's % is computed directly, and Strong is the
+        // remainder of the total Aligned share — so the two always sum to
+        // exactly the same "% Aligned" this card has always reported,
+        // instead of two independently-rounded numbers drifting apart.
         const alignedPct = Math.round((r.aligned / total) * 100);
+        const needsAttentionPct = Math.round((r.alignedNeedsAttention / total) * 100);
+        const strongPct = alignedPct - needsAttentionPct;
         const someGapPct = Math.round((r.someGap / total) * 100);
         const largeGapPct = Math.max(0, 100 - alignedPct - someGapPct);
         return (
           <div key={r.key}>
             <div className="text-xs text-slate-600 mb-1">{r.label}</div>
             <div className="w-full h-2.5 rounded-full overflow-hidden flex bg-slate-100">
-              {alignedPct > 0 && <div style={{ width: `${alignedPct}%`, background: "#22C55E" }} title={`Aligned ${alignedPct}%`} />}
+              {strongPct > 0 && (
+                <div style={{ width: `${strongPct}%`, background: ALIGNED_STRONG_COLOR }} title={`Aligned (Strong) ${strongPct}%`} />
+              )}
+              {needsAttentionPct > 0 && (
+                <div
+                  style={{ width: `${needsAttentionPct}%`, background: ALIGNED_NEEDS_ATTENTION_COLOR }}
+                  title={`Aligned (Needs Attention) ${needsAttentionPct}%`}
+                />
+              )}
               {someGapPct > 0 && <div style={{ width: `${someGapPct}%`, background: "#F59E0B" }} title={`Some Gap ${someGapPct}%`} />}
               {largeGapPct > 0 && <div style={{ width: `${largeGapPct}%`, background: "#EF4444" }} title={`Large Gap ${largeGapPct}%`} />}
             </div>
@@ -674,7 +701,8 @@ function ParameterAlignmentBars({ rows }) {
         );
       })}
       <div className="flex gap-4 justify-center pt-1 flex-wrap">
-        <span className="flex items-center gap-1 text-xs text-slate-500"><span className="w-2 h-2 rounded-full inline-block" style={{ background: "#22C55E" }} /> Aligned</span>
+        <span className="flex items-center gap-1 text-xs text-slate-500"><span className="w-2 h-2 rounded-full inline-block" style={{ background: ALIGNED_STRONG_COLOR }} /> Aligned (Strong)</span>
+        <span className="flex items-center gap-1 text-xs text-slate-500"><span className="w-2 h-2 rounded-full inline-block" style={{ background: ALIGNED_NEEDS_ATTENTION_COLOR }} /> Aligned (Needs Attention)</span>
         <span className="flex items-center gap-1 text-xs text-slate-500"><span className="w-2 h-2 rounded-full inline-block" style={{ background: "#F59E0B" }} /> Some Gap</span>
         <span className="flex items-center gap-1 text-xs text-slate-500"><span className="w-2 h-2 rounded-full inline-block" style={{ background: "#EF4444" }} /> Large Gap</span>
       </div>

@@ -1,5 +1,10 @@
 import { prisma } from "../utils/prisma.js";
-import { TRAJECTORY_LABELS } from "../utils/constants.js";
+import { TRAJECTORY_LABELS, PARAMS } from "../utils/constants.js";
+
+/** Sum of an evaluation row's 7 raw 1-7 parameter scores — its "total", before any cross-evaluator averaging. */
+export function evalTotal(evaluation) {
+  return PARAMS.reduce((sum, p) => sum + evaluation[p], 0);
+}
 
 function tagFrequency(evals, field) {
   const freq = {};
@@ -162,9 +167,26 @@ export async function getSubjectiveSummaryBatch(weekId, userIds) {
  * Builds the "pending evaluations" view for one user in one week:
  * self-eval status + which mapped peers still need to be evaluated.
  * Backs both GET /api/weeks/:id/status and GET /api/evaluations/pending.
+ *
+ * Also carries each PREVIOUS week's total (this same evaluator's own
+ * self-eval total, and this same evaluator's own peer-eval total for each
+ * mapped peer, if either exists) — the frontend uses these to show a soft,
+ * non-blocking warning when the Trajectory answer being entered now
+ * ("Improved"/"Declined") contradicts the direction the scores actually
+ * moved, e.g. lower scores than last week paired with "Improved". Null
+ * when there's no prior week, or this evaluator didn't evaluate that
+ * person last week — no comparison is possible, so nothing is flagged.
  */
 export async function getPendingForUserWeek(userId, weekId) {
-  const [selfEval, mappings, peerEvalsGiven] = await Promise.all([
+  const week = await prisma.week.findUnique({ where: { id: weekId } });
+  const prevWeek = week
+    ? await prisma.week.findFirst({
+        where: { project_id: week.project_id, week_number: { lt: week.week_number } },
+        orderBy: { week_number: "desc" },
+      })
+    : null;
+
+  const [selfEval, mappings, peerEvalsGiven, prevSelfEval, prevPeerEvals] = await Promise.all([
     prisma.evaluation.findUnique({
       where: {
         week_id_evaluator_id_evaluatee_id_eval_type: {
@@ -183,9 +205,25 @@ export async function getPendingForUserWeek(userId, weekId) {
       where: { week_id: weekId, evaluator_id: userId, eval_type: "peer" },
       select: { evaluatee_id: true, locked: true },
     }),
+    prevWeek
+      ? prisma.evaluation.findUnique({
+          where: {
+            week_id_evaluator_id_evaluatee_id_eval_type: {
+              week_id: prevWeek.id,
+              evaluator_id: userId,
+              evaluatee_id: userId,
+              eval_type: "self",
+            },
+          },
+        })
+      : null,
+    prevWeek
+      ? prisma.evaluation.findMany({ where: { week_id: prevWeek.id, evaluator_id: userId, eval_type: "peer" } })
+      : [],
   ]);
 
   const lockedByEvaluatee = new Map(peerEvalsGiven.map((e) => [e.evaluatee_id, e.locked]));
+  const prevPeerTotalByEvaluatee = new Map(prevPeerEvals.map((e) => [e.evaluatee_id, evalTotal(e)]));
   const peers = mappings.map((m) => ({
     id: m.evaluatee.id,
     name: m.evaluatee.name,
@@ -193,11 +231,13 @@ export async function getPendingForUserWeek(userId, weekId) {
     field: m.evaluatee.field,
     done: lockedByEvaluatee.has(m.evaluatee.id),
     locked: lockedByEvaluatee.get(m.evaluatee.id) ?? false,
+    prevOwnTotal: prevPeerTotalByEvaluatee.get(m.evaluatee.id) ?? null,
   }));
 
   return {
     selfDone: !!selfEval,
     selfLocked: selfEval?.locked ?? false,
+    prevOwnTotalSelf: prevSelfEval ? evalTotal(prevSelfEval) : null,
     peers,
     completed: (selfEval ? 1 : 0) + peers.filter((p) => p.done).length,
     total: 1 + peers.length,

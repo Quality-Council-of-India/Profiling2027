@@ -1,5 +1,6 @@
 import { prisma } from "../utils/prisma.js";
 import { sendMail, reminderEmailBody, digestEmailBody } from "./mailer.js";
+import { evalTotal } from "./evaluations.js";
 
 const DIGEST_ROLE_LABELS = {
   profiler: "Profiler",
@@ -133,6 +134,68 @@ export async function buildComplianceMatrix(projectId, weekId, weekStatus) {
       completionPct: mappingDataAvailable ? (totalExpected > 0 ? Math.round((totalReceived / totalExpected) * 100) : 100) : null,
     },
   };
+}
+
+/**
+ * Evaluations in a week whose Trajectory answer (Improved/Declined)
+ * contradicts the direction the SAME evaluator's OWN scores for the SAME
+ * person actually moved compared to their own submission the previous
+ * week — e.g. marking "Improved" while giving a lower total than last
+ * time. Mirrors the live warning shown on the evaluation form itself
+ * (EvaluatePage.jsx), surfaced here afterward for an Admin to spot-check
+ * instead of blocking submission. This is a soft signal, not proof of an
+ * error — a genuine one-off dip alongside real overall improvement is
+ * possible — so it's a review list, not an automatic penalty.
+ * Self-evaluations and peer evaluations both included (eval_type on each row
+ * says which). Returns [] if there's no prior week to compare against.
+ */
+export async function getTrajectoryMismatches(projectId, weekId) {
+  const week = await prisma.week.findUnique({ where: { id: weekId } });
+  if (!week) return [];
+  const prevWeek = await prisma.week.findFirst({
+    where: { project_id: projectId, week_number: { lt: week.week_number } },
+    orderBy: { week_number: "desc" },
+  });
+  if (!prevWeek) return [];
+
+  const [currentEvals, prevEvals] = await Promise.all([
+    prisma.evaluation.findMany({
+      where: {
+        week_id: weekId,
+        trajectory: { in: ["improved", "declined"] },
+        evaluator: { project_id: projectId },
+      },
+      include: {
+        evaluator: { select: { id: true, name: true } },
+        evaluatee: { select: { id: true, name: true } },
+      },
+    }),
+    prisma.evaluation.findMany({ where: { week_id: prevWeek.id, evaluator: { project_id: projectId } } }),
+  ]);
+
+  const prevTotalByPair = new Map(
+    prevEvals.map((e) => [`${e.evaluator_id}:${e.evaluatee_id}:${e.eval_type}`, evalTotal(e)])
+  );
+
+  const mismatches = [];
+  for (const ev of currentEvals) {
+    const prevTotal = prevTotalByPair.get(`${ev.evaluator_id}:${ev.evaluatee_id}:${ev.eval_type}`);
+    if (prevTotal === undefined) continue;
+    const currentTotal = evalTotal(ev);
+    const isMismatch =
+      (ev.trajectory === "improved" && currentTotal < prevTotal) ||
+      (ev.trajectory === "declined" && currentTotal > prevTotal);
+    if (!isMismatch) continue;
+    mismatches.push({
+      evalType: ev.eval_type,
+      evaluator: ev.evaluator,
+      evaluatee: ev.evaluatee,
+      trajectory: ev.trajectory,
+      prevTotal,
+      currentTotal,
+    });
+  }
+  return mismatches;
 }
 
 /** Emails every non-compliant user their specific pending items. Returns count sent. */
