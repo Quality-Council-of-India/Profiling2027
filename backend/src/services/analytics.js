@@ -990,7 +990,7 @@ export async function getPeerScoreTrendComparison(projectId, targetUser) {
       ? round2(rows.reduce((a, r) => a + Number(r.total_peer), 0) / rows.length)
       : null;
     return {
-      week: { id: w.id, label: w.label, week_number: w.week_number, status: w.status, end_date: w.end_date },
+      week: { id: w.id, label: w.label, week_number: w.week_number, status: w.status },
       selfTotalPeer: mine ? Number(mine.total_peer) : null,
       fieldAvgTotalPeer: fieldAvg,
       fieldLabel: myFieldThisWeek,

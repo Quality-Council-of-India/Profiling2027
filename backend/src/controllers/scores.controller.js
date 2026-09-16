@@ -31,7 +31,7 @@ export async function getUserWeekScore(req, res) {
   ]);
   if (!week) return res.status(404).json({ error: "Week not found" });
 
-  const peerDataLocked = req.user.id === userId && (await isPeerDataLocked(userId, weekId, week));
+  const peerDataLocked = req.user.id === userId && (await isPeerDataLocked(userId, weekId, week.status));
 
   res.json({
     week,
@@ -59,11 +59,11 @@ export async function getUserTrend(req, res) {
     orderBy: { week: { week_number: "asc" } },
   });
 
-  // Only an open week still inside its submission window can be gamed (see
-  // isPeerDataLocked in services/access.js) — and only when the caller is
-  // looking at their own trend line.
-  const openWeeks = scores.filter((s) => s.week.status === "open").map((s) => ({ id: s.week_id, end_date: s.week.end_date }));
-  const lockedWeekIds = req.user.id === userId ? await getLockedOpenWeekIds(userId, openWeeks) : new Set();
+  // Only an open week can still be gamed (see isPeerDataLocked in
+  // services/access.js) — and only when the caller is looking at their own
+  // trend line.
+  const openWeekIds = scores.filter((s) => s.week.status === "open").map((s) => s.week_id);
+  const lockedWeekIds = req.user.id === userId ? await getLockedOpenWeekIds(userId, openWeekIds) : new Set();
 
   res.json({
     user: { id: target.id, name: target.name, role: target.role, field: target.field },

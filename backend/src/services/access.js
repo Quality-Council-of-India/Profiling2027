@@ -8,30 +8,28 @@ import { ROLES } from "../utils/roles.js";
 import { fieldList, sharesField } from "../utils/fields.js";
 
 /**
- * True when `userId`'s own peer-side feedback for `week` should stay hidden
- * from THEM specifically: the week is still open, its submission window
- * (end_date) hasn't passed yet, and they haven't yet locked in their own
- * Self-Evaluation for it. Without this, a person can see live (partial)
- * peer scores/tags about themselves before submitting their own
- * self-rating, and quietly adjust it to match — guaranteeing an "aligned"
- * SAPA Factor regardless of whether the self-rating is honest.
+ * True when `userId`'s own peer-side feedback for `weekId` should stay
+ * hidden from THEM specifically: the week is still open, and they haven't
+ * yet locked in their own Self-Evaluation for it. Without this, a person
+ * can see live (partial) peer scores/tags about themselves before
+ * submitting their own self-rating, and quietly adjust it to match —
+ * guaranteeing an "aligned" SAPA Factor regardless of whether the
+ * self-rating is honest.
  *
- * The end_date check matters for anyone who simply never gets around to
- * submitting a Self-Evaluation that week: without it, they'd stay locked
- * out of their OWN peer feedback indefinitely, for as long as an Admin
- * happens to leave that week open past its window — not just for the
- * active submission period the lock is actually meant to protect. Once the
- * window has closed, there's no live self-eval left to tune against
- * anything, so the concern this lock exists for no longer applies.
+ * Unlocks on either of two events, whichever comes first: the person
+ * submits (and thereby locks) their own Self-Evaluation for the week, or
+ * an Admin closes the week — deliberately not a date-based fallback, so
+ * anyone who simply hasn't submitted yet stays exactly as locked out as
+ * everyone else until the week is formally closed, same as every other
+ * week-boundary rule in this portal (scoring, compliance, historical
+ * freezing) already works on "closed", not "past its date."
  *
  * Callers must separately check that the viewer IS the target (an
  * Admin/Lead/Anchor looking at someone else's scores for oversight isn't
- * part of this concern). A week whose status is already "closed" is always
- * shown in full — once a week closes there's nothing left to game either.
+ * part of this concern).
  */
-export async function isPeerDataLocked(userId, weekId, week) {
-  if (week.status !== "open") return false;
-  if (new Date() > new Date(week.end_date)) return false;
+export async function isPeerDataLocked(userId, weekId, weekStatus) {
+  if (weekStatus !== "open") return false;
   const selfEval = await prisma.evaluation.findUnique({
     where: {
       week_id_evaluator_id_evaluatee_id_eval_type: {
@@ -46,20 +44,15 @@ export async function isPeerDataLocked(userId, weekId, week) {
   return !selfEval?.locked;
 }
 
-/**
- * Batch form of isPeerDataLocked — which of these (already status="open")
- * weeks are still locked for userId. `openWeeks` is [{ id, end_date }].
- */
-export async function getLockedOpenWeekIds(userId, openWeeks) {
-  const candidates = openWeeks.filter((w) => new Date() <= new Date(w.end_date));
-  if (candidates.length === 0) return new Set();
-  const candidateIds = candidates.map((w) => w.id);
+/** Batch form of isPeerDataLocked — which of these (already-open) weekIds are still locked for userId. */
+export async function getLockedOpenWeekIds(userId, openWeekIds) {
+  if (openWeekIds.length === 0) return new Set();
   const selfEvals = await prisma.evaluation.findMany({
-    where: { evaluator_id: userId, evaluatee_id: userId, eval_type: "self", week_id: { in: candidateIds } },
+    where: { evaluator_id: userId, evaluatee_id: userId, eval_type: "self", week_id: { in: openWeekIds } },
     select: { week_id: true, locked: true },
   });
   const lockedByWeek = new Map(selfEvals.map((e) => [e.week_id, e.locked]));
-  return new Set(candidateIds.filter((id) => !lockedByWeek.get(id)));
+  return new Set(openWeekIds.filter((id) => !lockedByWeek.get(id)));
 }
 
 /**
