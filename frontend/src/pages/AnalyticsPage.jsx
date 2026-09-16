@@ -501,18 +501,13 @@ export default function AnalyticsPage() {
                   is a simple formula, not an AI/sentiment model — there isn't one available in this stack.
                 </p>
                 <p>
-                  The four quadrants split each axis at the <strong>midpoint by rank</strong> of whoever's currently
-                  on the plot — not a fixed midpoint of the scale. This team's ratings run consistently high, so a
-                  fixed "half of the max score" split would put almost everyone in Star Performers every week;
-                  ranking the current selection and splitting it as close to 50/50 as possible instead always
-                  divides the group into four real, relative bands.
-                </p>
-                <p>
-                  Sentiment in particular is built from small integer tag/trajectory counts, so several people
-                  often land on the exact same value — ties at the split point are broken by an arbitrary but fully
-                  deterministic rule, not a further merit judgment. The boundary also moves with your week/field
-                  selection — someone can land in a different quadrant just because the comparison group changed,
-                  not because their own numbers did.
+                  The four quadrants split at the <strong>median</strong> performance and median sentiment of
+                  whoever's currently on the plot — not a fixed midpoint of the scale. This team's ratings run
+                  consistently high, so a fixed "half of the max score" split would put almost everyone in Star
+                  Performers every week; splitting at the actual middle of the current selection instead always
+                  divides the group into four real, relative bands. That also means the boundary moves with your
+                  week/field selection — someone can land in a different quadrant just because the comparison
+                  group changed, not because their own numbers did.
                 </p>
               </CalcGuide>
               {quadrantQuery.isLoading ? <Spinner /> : quadrantQuery.isError ? <ErrorBanner message="Failed to load quadrant data" /> : <QuadrantPlot points={quadrantQuery.data.points} />}

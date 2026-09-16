@@ -335,12 +335,9 @@ export async function peerTrend(req, res) {
  * Admin-only Dashboard card — see getDashboardSignals for what this
  * assembles. Route-gated to Admin (see analytics.routes.js); no
  * per-request field/scope narrowing, since it's a whole-project signal.
- * ?asOf=<weekId> revisits an earlier week's signals; omitted defaults to
- * the latest scored week.
  */
 export async function dashboardSignals(req, res) {
-  const asOfWeekId = req.query.asOf ? Number(req.query.asOf) : undefined;
-  const signals = await getDashboardSignals(req.user.project_id, asOfWeekId);
+  const signals = await getDashboardSignals(req.user.project_id);
   res.json(signals);
 }
 
