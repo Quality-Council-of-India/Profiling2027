@@ -1229,14 +1229,25 @@ export async function getDashboardSignals(projectId) {
       role: user.role,
       field: user.field,
       recentWeeks: recent.map((r) => ({ week: r.weekLabel, totalPeer: r.totalPeer })),
-      note: `Total Peer Score has fallen for ${DECLINE_MIN_STREAK} weeks running: ${recent.map((r) => r.totalPeer.toFixed(1)).join(" → ")} (${recent[0].weekLabel} to ${recent[recent.length - 1].weekLabel}).`,
     });
   }
   decliningPerformers.sort(
     (a, b) => a.recentWeeks[a.recentWeeks.length - 1].totalPeer - b.recentWeeks[b.recentWeeks.length - 1].totalPeer
   );
 
-  // ---- 2. This week's most-recognised / most-flagged (tag counts) ----
+  // ---- 2. This week's most-recognised / most-flagged, by tag count ----
+  // Raw tag totals would just crown whoever has the most evaluators — a
+  // Project Lead is mapped to every field's Group Anchor plus the CASU
+  // Lead(s) (peerMapping.js), so they can easily receive 3-4x the peer
+  // responses a Profiler does, and each response can carry up to 3 tags
+  // (Change 4, questionnaire redesign). Comparing fairly across roles with
+  // very different evaluator counts means averaging tags PER response
+  // received, not summing them — and requiring a minimum number of
+  // responses so one or two early submissions can't produce a noisy 3.0
+  // average. This is the same fix in spirit as the "average the person,
+  // then average the group" rule the rest of Team-Wide Analytics already
+  // uses to avoid double-weighting.
+  const MIN_RESPONSES_FOR_TAG_LEADER = 3;
   const tagWeekScores = await prisma.computedScore.findMany({
     where: { week_id: latestScoredWeek.id, user: { project_id: projectId, role: { not: ROLES.ADMIN } } },
     select: {
@@ -1257,59 +1268,90 @@ export async function getDashboardSignals(projectId) {
   let topStrengthTagUser = null;
   let topWeaknessTagUser = null;
   for (const { user } of tagWeekScores) {
+    const responseCount = user.evaluationsReceived.length;
+    if (responseCount < MIN_RESPONSES_FOR_TAG_LEADER) continue;
     const strengthCount = user.evaluationsReceived.reduce((a, e) => a + e.strengths_tags.length, 0);
     const weaknessCount = user.evaluationsReceived.reduce((a, e) => a + e.weakness_tags.length, 0);
-    if (strengthCount > 0 && (!topStrengthTagUser || strengthCount > topStrengthTagUser.count)) {
-      topStrengthTagUser = { id: user.id, name: user.name, role: user.role, field: user.field, count: strengthCount };
+    const strengthAvg = round2(strengthCount / responseCount);
+    const weaknessAvg = round2(weaknessCount / responseCount);
+    const base = { id: user.id, name: user.name, role: user.role, field: user.field, responseCount };
+    if (strengthCount > 0 && (!topStrengthTagUser || strengthAvg > topStrengthTagUser.avgPerResponse)) {
+      topStrengthTagUser = { ...base, avgPerResponse: strengthAvg, totalCount: strengthCount };
     }
-    if (weaknessCount > 0 && (!topWeaknessTagUser || weaknessCount > topWeaknessTagUser.count)) {
-      topWeaknessTagUser = { id: user.id, name: user.name, role: user.role, field: user.field, count: weaknessCount };
+    if (weaknessCount > 0 && (!topWeaknessTagUser || weaknessAvg > topWeaknessTagUser.avgPerResponse)) {
+      topWeaknessTagUser = { ...base, avgPerResponse: weaknessAvg, totalCount: weaknessCount };
     }
   }
   const weeklyTagLeaders = {
     week: { id: latestScoredWeek.id, label: latestScoredWeek.label, week_number: latestScoredWeek.week_number },
+    minResponses: MIN_RESPONSES_FOR_TAG_LEADER,
     mostStrengthTags: topStrengthTagUser,
     mostWeaknessTags: topWeaknessTagUser,
   };
 
-  // ---- 3. Overall (whole cycle so far) positive vs. critical suggestions received, per recipient ----
-  const suggestionScores = await prisma.user.findMany({
-    where: { project_id: projectId, role: { not: ROLES.ADMIN }, ...activeOrScoredWhere(weekIds) },
-    select: {
-      id: true,
-      name: true,
-      role: true,
-      field: true,
-      evaluationsReceived: {
-        where: { week_id: { in: weekIds }, eval_type: "peer" },
-        select: { improvement_suggestion: true },
-      },
-    },
-  });
-  let topPositiveUser = null;
-  let topCriticalUser = null;
-  for (const user of suggestionScores) {
-    let positiveCount = 0;
-    let criticalCount = 0;
-    for (const e of user.evaluationsReceived) {
-      const text = e.improvement_suggestion;
-      if (!text) continue;
-      if (isNonSubstantive(tokenizeSuggestion(text))) continue;
-      if (hasActionableSignal(text)) criticalCount += 1;
-      else positiveCount += 1;
+  // ---- 3. Positive vs. critical peer suggestions received, per recipient ----
+  // Same evaluator-count issue as the tags above: a raw count of "positive"
+  // or "critical" suggestions favors whoever has the most peers writing
+  // them in the first place. Ranked by SHARE of a person's own substantive
+  // suggestions instead (positiveCount / (positiveCount + criticalCount)),
+  // with a minimum sample size so a single response can't read as "100%
+  // positive." Computed once for the latest scored week alone, and once
+  // pooled across every week so far, since Admins want both cuts.
+  const MIN_SUGGESTIONS_FOR_LEADER = 3;
+  function computeSuggestionLeaders(users, weekIdsForCount) {
+    let topPositiveUser = null;
+    let topCriticalUser = null;
+    for (const user of users) {
+      let positiveCount = 0;
+      let criticalCount = 0;
+      for (const e of user.evaluationsReceived) {
+        const text = e.improvement_suggestion;
+        if (!text) continue;
+        if (isNonSubstantive(tokenizeSuggestion(text))) continue;
+        if (hasActionableSignal(text)) criticalCount += 1;
+        else positiveCount += 1;
+      }
+      const substantiveTotal = positiveCount + criticalCount;
+      if (substantiveTotal < MIN_SUGGESTIONS_FOR_LEADER) continue;
+      const positivePct = Math.round((positiveCount / substantiveTotal) * 100);
+      const criticalPct = 100 - positivePct;
+      const base = { id: user.id, name: user.name, role: user.role, field: user.field, substantiveTotal };
+      if (!topPositiveUser || positivePct > topPositiveUser.pct) {
+        topPositiveUser = { ...base, pct: positivePct, count: positiveCount };
+      }
+      if (!topCriticalUser || criticalPct > topCriticalUser.pct) {
+        topCriticalUser = { ...base, pct: criticalPct, count: criticalCount };
+      }
     }
-    if (positiveCount > 0 && (!topPositiveUser || positiveCount > topPositiveUser.count)) {
-      topPositiveUser = { id: user.id, name: user.name, role: user.role, field: user.field, count: positiveCount };
-    }
-    if (criticalCount > 0 && (!topCriticalUser || criticalCount > topCriticalUser.count)) {
-      topCriticalUser = { id: user.id, name: user.name, role: user.role, field: user.field, count: criticalCount };
-    }
+    return {
+      weeksCounted: weekIdsForCount.length,
+      minSubstantiveSuggestions: MIN_SUGGESTIONS_FOR_LEADER,
+      mostPositive: topPositiveUser,
+      mostCritical: topCriticalUser,
+    };
   }
-  const suggestionLeaders = {
-    weeksCounted: closedWeeks.length + (latestScoredWeek.status === "open" ? 1 : 0),
-    mostPositive: topPositiveUser,
-    mostCritical: topCriticalUser,
+
+  const suggestionUserSelect = {
+    id: true,
+    name: true,
+    role: true,
+    field: true,
+  };
+  const [cycleSuggestionUsers, weekSuggestionUsers] = await Promise.all([
+    prisma.user.findMany({
+      where: { project_id: projectId, role: { not: ROLES.ADMIN }, ...activeOrScoredWhere(weekIds) },
+      select: { ...suggestionUserSelect, evaluationsReceived: { where: { week_id: { in: weekIds }, eval_type: "peer" }, select: { improvement_suggestion: true } } },
+    }),
+    prisma.user.findMany({
+      where: { project_id: projectId, role: { not: ROLES.ADMIN }, ...activeOrScoredWhere([latestScoredWeek.id]) },
+      select: { ...suggestionUserSelect, evaluationsReceived: { where: { week_id: latestScoredWeek.id, eval_type: "peer" }, select: { improvement_suggestion: true } } },
+    }),
+  ]);
+  const suggestionLeaders = computeSuggestionLeaders(cycleSuggestionUsers, weekIds);
+  const weeklySuggestionLeaders = {
+    week: { id: latestScoredWeek.id, label: latestScoredWeek.label, week_number: latestScoredWeek.week_number },
+    ...computeSuggestionLeaders(weekSuggestionUsers, [latestScoredWeek.id]),
   };
 
-  return { decliningPerformers, weeklyTagLeaders, suggestionLeaders };
+  return { decliningPerformers, weeklyTagLeaders, suggestionLeaders, weeklySuggestionLeaders };
 }
