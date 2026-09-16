@@ -319,8 +319,10 @@ export async function peerTrend(req, res) {
   // viewers (Admin/Lead/Anchor) see everything as before.
   let outTrend = trend;
   if (req.user.id === userId) {
-    const openWeekIds = trend.filter((t) => t.week.status === "open" && t.selfTotalPeer !== null).map((t) => t.week.id);
-    const lockedWeekIds = await getLockedOpenWeekIds(userId, openWeekIds);
+    const openWeeks = trend
+      .filter((t) => t.week.status === "open" && t.selfTotalPeer !== null)
+      .map((t) => ({ id: t.week.id, end_date: t.week.end_date }));
+    const lockedWeekIds = await getLockedOpenWeekIds(userId, openWeeks);
     if (lockedWeekIds.size > 0) {
       outTrend = trend.map((t) =>
         lockedWeekIds.has(t.week.id) ? { ...t, selfTotalPeer: null, peerDataLocked: true } : t
