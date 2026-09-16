@@ -1262,7 +1262,7 @@ export async function getDashboardSignals(projectId, asOfWeekId) {
   // average. This is the same fix in spirit as the "average the person,
   // then average the group" rule the rest of Team-Wide Analytics already
   // uses to avoid double-weighting.
-  const MIN_RESPONSES_FOR_TAG_LEADER = 3;
+  const MIN_RESPONSES_FOR_TAG_LEADER = 5;
   const tagWeekScores = await prisma.computedScore.findMany({
     where: { week_id: latestScoredWeek.id, user: { project_id: projectId, role: { not: ROLES.ADMIN } } },
     select: {
@@ -1312,7 +1312,7 @@ export async function getDashboardSignals(projectId, asOfWeekId) {
   // with a minimum sample size so a single response can't read as "100%
   // positive." Computed once for the latest scored week alone, and once
   // pooled across every week so far, since Admins want both cuts.
-  const MIN_SUGGESTIONS_FOR_LEADER = 3;
+  const MIN_SUGGESTIONS_FOR_LEADER = 5;
   function computeSuggestionLeaders(users, weekIdsForCount) {
     let topPositiveUser = null;
     let topCriticalUser = null;
