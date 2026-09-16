@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
@@ -26,6 +26,7 @@ export default function DashboardPage() {
     queryClient.invalidateQueries({ queryKey: ["weeks"] });
     queryClient.invalidateQueries({ queryKey: ["pending"] });
     queryClient.invalidateQueries({ queryKey: ["score"] });
+    queryClient.invalidateQueries({ queryKey: ["dashboardSignals"] });
   }
 
   if (weeksQuery.isLoading) return <Spinner />;
@@ -87,22 +88,42 @@ function AdminSummary({ weeks, openWeek }) {
         <QuickLink to="/analytics" Icon={AnalyticsIcon} title="Analytics" desc="Field heatmaps, SAPA distribution, quadrant plot" />
         <QuickLink to="/admin" Icon={AdminIcon} title="Admin Panel" desc="Open/close weeks, import roster, export scores" />
       </div>
-      <AttentionSignalsCard />
+      <AttentionSignalsCard weeks={weeks} />
     </>
+  );
+}
+
+function personHeader(p) {
+  return (
+    <p className="text-xs font-semibold text-slate-800">
+      {p.name} <span className="text-slate-400 font-normal">({ROLE_LABELS[p.role] || p.role}{p.field ? ` · ${p.field}` : ""})</span>
+    </p>
   );
 }
 
 function personLine(p, suffix) {
   if (!p) return null;
   return (
-    <p className="text-xs text-slate-600">
-      <strong>{p.name}</strong>{" "}
-      <span className="text-slate-400">
-        ({ROLE_LABELS[p.role] || p.role}
-        {p.field ? ` · ${p.field}` : ""})
-      </span>{" "}
-      — {suffix}
-    </p>
+    <div>
+      {personHeader(p)}
+      <p className="text-xs text-slate-500">{suffix}</p>
+    </div>
+  );
+}
+
+/** Declining-trend entry — kept as two lines (label, then the number sequence) rather than one run-on sentence. */
+function declineLine(p) {
+  const weeks = p.recentWeeks;
+  const sequence = weeks.map((w) => w.totalPeer.toFixed(1)).join(" → ");
+  const range = weeks.length > 1 ? `(${weeks[0].week} to ${weeks[weeks.length - 1].week})` : `(${weeks[0].week})`;
+  return (
+    <div key={p.id}>
+      {personHeader(p)}
+      <p className="text-xs text-slate-500">Total Peer Score has fallen for {weeks.length - 1} weeks running:</p>
+      <p className="text-xs text-slate-500">
+        {sequence} <span className="text-slate-400">{range}</span>
+      </p>
+    </div>
   );
 }
 
@@ -110,11 +131,35 @@ function personLine(p, suffix) {
  * Admin-only proactive signals — patterns a manual read of Analytics would
  * eventually surface, pulled to the front so an Admin doesn't have to go
  * looking for them: multi-week declining performers, this week's most
- * strength/weakness-tagged person, and whose peer feedback has skewed most
- * positive/constructive over the whole cycle so far.
+ * strength/weakness-tagged person (by average per response received, not
+ * raw count — see weeklyTagLeaders.minResponses below), and whose peer
+ * feedback has skewed most positive/constructive, this week and over the
+ * whole cycle so far.
+ *
+ * Nothing here is stored or snapshotted separately — it's computed on
+ * demand from the same underlying data every other Analytics card reads
+ * (same as Hall of Recognition), which is itself frozen per week at close
+ * time. The week selector below lets an Admin revisit an earlier week's
+ * signals exactly as they were as of that week — since a closed week's
+ * data doesn't change, recomputing it later gives the same answer it
+ * would have at the time.
  */
-function AttentionSignalsCard() {
-  const signalsQuery = useQuery({ queryKey: ["dashboardSignals"], queryFn: analyticsApi.dashboardSignals });
+function AttentionSignalsCard({ weeks }) {
+  const scoredWeeks = weeks.filter((w) => w.status !== "upcoming");
+  const [asOfWeekId, setAsOfWeekId] = useState(null);
+  useEffect(() => {
+    if (scoredWeeks.length && asOfWeekId === null) {
+      setAsOfWeekId(scoredWeeks[scoredWeeks.length - 1].id);
+    }
+  }, [scoredWeeks, asOfWeekId]);
+
+  const signalsQuery = useQuery({
+    queryKey: ["dashboardSignals", asOfWeekId],
+    queryFn: () => analyticsApi.dashboardSignals(asOfWeekId),
+    enabled: asOfWeekId !== null,
+  });
+
+  if (scoredWeeks.length === 0) return null;
 
   if (signalsQuery.isLoading) {
     return (
@@ -131,23 +176,38 @@ function AttentionSignalsCard() {
     );
   }
 
-  const { decliningPerformers, weeklyTagLeaders, suggestionLeaders } = signalsQuery.data;
+  const { decliningPerformers, weeklyTagLeaders, suggestionLeaders, weeklySuggestionLeaders } = signalsQuery.data;
   const nothingToShow =
     decliningPerformers.length === 0 &&
     !weeklyTagLeaders?.mostStrengthTags &&
     !weeklyTagLeaders?.mostWeaknessTags &&
+    !weeklySuggestionLeaders?.mostPositive &&
+    !weeklySuggestionLeaders?.mostCritical &&
     !suggestionLeaders?.mostPositive &&
     !suggestionLeaders?.mostCritical;
 
   return (
     <Card className="p-5">
-      <h2 className="text-sm font-semibold text-slate-800 mb-1">Attention & Recognition Signals</h2>
+      <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
+        <h2 className="text-sm font-semibold text-slate-800">Attention & Recognition Signals</h2>
+        <select
+          value={asOfWeekId ?? ""}
+          onChange={(e) => setAsOfWeekId(Number(e.target.value))}
+          className="px-2.5 py-1 border border-slate-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-standard"
+        >
+          {scoredWeeks.map((w) => (
+            <option key={w.id} value={w.id}>
+              As of {w.label}
+            </option>
+          ))}
+        </select>
+      </div>
       <p className="text-xs text-slate-500 mb-4">Visible to Admins only — patterns worth a look before the next week opens.</p>
 
       {nothingToShow ? (
         <p className="text-sm text-slate-400">Nothing flagged yet — check back once more weeks are scored.</p>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5">
           <div>
             <p className="text-xs font-medium text-red-700 uppercase tracking-wide mb-2">
               Declining Trend ({decliningPerformers.length})
@@ -155,16 +215,7 @@ function AttentionSignalsCard() {
             {decliningPerformers.length === 0 ? (
               <p className="text-xs text-slate-400">No one on a multi-week decline right now.</p>
             ) : (
-              <div className="space-y-2">
-                {decliningPerformers.map((p) => (
-                  <div key={p.id}>
-                    <p className="text-xs font-semibold text-slate-800">
-                      {p.name} <span className="text-slate-400 font-normal">({ROLE_LABELS[p.role] || p.role})</span>
-                    </p>
-                    <p className="text-xs text-slate-500">{p.note}</p>
-                  </div>
-                ))}
-              </div>
+              <div className="space-y-3">{decliningPerformers.map(declineLine)}</div>
             )}
           </div>
 
@@ -172,13 +223,47 @@ function AttentionSignalsCard() {
             <p className="text-xs font-medium text-green-700 uppercase tracking-wide mb-2">
               This Week's Recognition{weeklyTagLeaders?.week ? ` — ${weeklyTagLeaders.week.label}` : ""}
             </p>
-            <div className="space-y-1.5">
+            <p className="text-[11px] text-slate-400 mb-1.5">
+              Ranked by average tags per peer response (min. {weeklyTagLeaders?.minResponses} responses) — not raw count,
+              since roles differ a lot in how many peers evaluate them.
+            </p>
+            <div className="space-y-2">
               {weeklyTagLeaders?.mostStrengthTags
-                ? personLine(weeklyTagLeaders.mostStrengthTags, `${weeklyTagLeaders.mostStrengthTags.count} strength tags received`)
-                : <p className="text-xs text-slate-400">No strength tags recorded yet this week.</p>}
+                ? personLine(
+                    weeklyTagLeaders.mostStrengthTags,
+                    `${weeklyTagLeaders.mostStrengthTags.avgPerResponse.toFixed(1)} avg strength tags/response (${weeklyTagLeaders.mostStrengthTags.totalCount} across ${weeklyTagLeaders.mostStrengthTags.responseCount} responses)`
+                  )
+                : <p className="text-xs text-slate-400">Not enough responses yet this week.</p>}
               {weeklyTagLeaders?.mostWeaknessTags
-                ? personLine(weeklyTagLeaders.mostWeaknessTags, `${weeklyTagLeaders.mostWeaknessTags.count} improvement-area tags received`)
-                : <p className="text-xs text-slate-400">No improvement-area tags recorded yet this week.</p>}
+                ? personLine(
+                    weeklyTagLeaders.mostWeaknessTags,
+                    `${weeklyTagLeaders.mostWeaknessTags.avgPerResponse.toFixed(1)} avg improvement-area tags/response (${weeklyTagLeaders.mostWeaknessTags.totalCount} across ${weeklyTagLeaders.mostWeaknessTags.responseCount} responses)`
+                  )
+                : <p className="text-xs text-slate-400">Not enough responses yet this week.</p>}
+            </div>
+          </div>
+
+          <div>
+            <p className="text-xs font-medium text-slate-600 uppercase tracking-wide mb-2">
+              Peer Suggestions — {weeklySuggestionLeaders?.week ? weeklySuggestionLeaders.week.label : "This Week"}
+            </p>
+            <p className="text-[11px] text-slate-400 mb-1.5">
+              Ranked by share of a person's own substantive suggestions (min. {weeklySuggestionLeaders?.minSubstantiveSuggestions}) —
+              not raw count, for the same reason as above.
+            </p>
+            <div className="space-y-2">
+              {weeklySuggestionLeaders?.mostPositive
+                ? personLine(
+                    weeklySuggestionLeaders.mostPositive,
+                    `${weeklySuggestionLeaders.mostPositive.pct}% positive / no-action (${weeklySuggestionLeaders.mostPositive.count} of ${weeklySuggestionLeaders.mostPositive.substantiveTotal})`
+                  )
+                : <p className="text-xs text-slate-400">Not enough suggestions yet this week.</p>}
+              {weeklySuggestionLeaders?.mostCritical
+                ? personLine(
+                    weeklySuggestionLeaders.mostCritical,
+                    `${weeklySuggestionLeaders.mostCritical.pct}% constructive/critical (${weeklySuggestionLeaders.mostCritical.count} of ${weeklySuggestionLeaders.mostCritical.substantiveTotal})`
+                  )
+                : <p className="text-xs text-slate-400">Not enough suggestions yet this week.</p>}
             </div>
           </div>
 
@@ -186,13 +271,20 @@ function AttentionSignalsCard() {
             <p className="text-xs font-medium text-slate-600 uppercase tracking-wide mb-2">
               Peer Suggestions — Whole Cycle So Far
             </p>
-            <div className="space-y-1.5">
+            <p className="text-[11px] text-slate-400 mb-1.5">Same share-based ranking, pooled across every week so far.</p>
+            <div className="space-y-2">
               {suggestionLeaders?.mostPositive
-                ? personLine(suggestionLeaders.mostPositive, `most positive (no-action) suggestions received (${suggestionLeaders.mostPositive.count})`)
-                : <p className="text-xs text-slate-400">No positive suggestions recorded yet.</p>}
+                ? personLine(
+                    suggestionLeaders.mostPositive,
+                    `${suggestionLeaders.mostPositive.pct}% positive / no-action (${suggestionLeaders.mostPositive.count} of ${suggestionLeaders.mostPositive.substantiveTotal})`
+                  )
+                : <p className="text-xs text-slate-400">Not enough suggestions recorded yet.</p>}
               {suggestionLeaders?.mostCritical
-                ? personLine(suggestionLeaders.mostCritical, `most constructive/critical suggestions received (${suggestionLeaders.mostCritical.count})`)
-                : <p className="text-xs text-slate-400">No constructive suggestions recorded yet.</p>}
+                ? personLine(
+                    suggestionLeaders.mostCritical,
+                    `${suggestionLeaders.mostCritical.pct}% constructive/critical (${suggestionLeaders.mostCritical.count} of ${suggestionLeaders.mostCritical.substantiveTotal})`
+                  )
+                : <p className="text-xs text-slate-400">Not enough suggestions recorded yet.</p>}
             </div>
           </div>
         </div>
