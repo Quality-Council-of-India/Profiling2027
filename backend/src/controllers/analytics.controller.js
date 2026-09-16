@@ -1,5 +1,5 @@
 import { prisma } from "../utils/prisma.js";
-import { analyticsScope, canViewUser } from "../services/access.js";
+import { analyticsScope, canViewUser, getLockedOpenWeekIds } from "../services/access.js";
 import {
   getFieldHeatmap,
   getSapaDistribution,
@@ -15,6 +15,7 @@ import {
   getFieldMemberStandings,
   getHallOfRecognition,
   getPeerScoreTrendComparison,
+  getDashboardSignals,
 } from "../services/analytics.js";
 
 /** Parses "?weeks=1,2,3" into a validated array of week IDs, or returns null (and responds) on failure. */
@@ -309,7 +310,35 @@ export async function peerTrend(req, res) {
     return res.status(403).json({ error: "You cannot view this user's scores" });
   }
   const trend = await getPeerScoreTrendComparison(req.user.project_id, target);
-  res.json({ user: { id: target.id, name: target.name, field: target.field }, trend });
+
+  // Same concern as scores.controller.js's peerDataLocked: a person's own
+  // Total Peer Score point for the currently open week is otherwise visible
+  // here before they've locked in their own Self-Evaluation for it, letting
+  // them tune it to match. Only redact when viewing your OWN trend line —
+  // the field/overall averages on the same points are left alone, and other
+  // viewers (Admin/Lead/Anchor) see everything as before.
+  let outTrend = trend;
+  if (req.user.id === userId) {
+    const openWeekIds = trend.filter((t) => t.week.status === "open" && t.selfTotalPeer !== null).map((t) => t.week.id);
+    const lockedWeekIds = await getLockedOpenWeekIds(userId, openWeekIds);
+    if (lockedWeekIds.size > 0) {
+      outTrend = trend.map((t) =>
+        lockedWeekIds.has(t.week.id) ? { ...t, selfTotalPeer: null, peerDataLocked: true } : t
+      );
+    }
+  }
+
+  res.json({ user: { id: target.id, name: target.name, field: target.field }, trend: outTrend });
+}
+
+/**
+ * Admin-only Dashboard card — see getDashboardSignals for what this
+ * assembles. Route-gated to Admin (see analytics.routes.js); no
+ * per-request field/scope narrowing, since it's a whole-project signal.
+ */
+export async function dashboardSignals(req, res) {
+  const signals = await getDashboardSignals(req.user.project_id);
+  res.json(signals);
 }
 
 /** Hall of Recognition — per-role weekly stars + cumulative Overall Star Performer. Visible to every role. */

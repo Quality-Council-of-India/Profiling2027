@@ -1,5 +1,6 @@
 import { Router } from "express";
-import { authenticate } from "../middleware/auth.js";
+import { authenticate, requireRole } from "../middleware/auth.js";
+import { ROLES } from "../utils/roles.js";
 import {
   heatmap,
   sapaDistribution,
@@ -15,6 +16,7 @@ import {
   fieldMemberRankings,
   hallOfRecognition,
   peerTrend,
+  dashboardSignals,
 } from "../controllers/analytics.controller.js";
 
 const router = Router();
@@ -35,5 +37,6 @@ router.get("/field-standings", authenticate, fieldStandings);
 router.get("/field-members", authenticate, fieldMemberRankings);
 router.get("/hall-of-recognition", authenticate, hallOfRecognition);
 router.get("/peer-trend/:userId", authenticate, peerTrend);
+router.get("/dashboard-signals", authenticate, requireRole(ROLES.ADMIN), dashboardSignals);
 
 export default router;

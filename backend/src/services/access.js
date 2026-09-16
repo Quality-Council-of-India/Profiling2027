@@ -3,8 +3,57 @@
 // route at all" checks; this module handles the finer "which rows can this
 // user see" scoping that depends on field + role combinations.
 
+import { prisma } from "../utils/prisma.js";
 import { ROLES } from "../utils/roles.js";
 import { fieldList, sharesField } from "../utils/fields.js";
+
+/**
+ * True when `userId`'s own peer-side feedback for `weekId` should stay
+ * hidden from THEM specifically: the week is still open, and they haven't
+ * yet locked in their own Self-Evaluation for it. Without this, a person
+ * can see live (partial) peer scores/tags about themselves before
+ * submitting their own self-rating, and quietly adjust it to match —
+ * guaranteeing an "aligned" SAPA Factor regardless of whether the
+ * self-rating is honest.
+ *
+ * Unlocks on either of two events, whichever comes first: the person
+ * submits (and thereby locks) their own Self-Evaluation for the week, or
+ * an Admin closes the week — deliberately not a date-based fallback, so
+ * anyone who simply hasn't submitted yet stays exactly as locked out as
+ * everyone else until the week is formally closed, same as every other
+ * week-boundary rule in this portal (scoring, compliance, historical
+ * freezing) already works on "closed", not "past its date."
+ *
+ * Callers must separately check that the viewer IS the target (an
+ * Admin/Lead/Anchor looking at someone else's scores for oversight isn't
+ * part of this concern).
+ */
+export async function isPeerDataLocked(userId, weekId, weekStatus) {
+  if (weekStatus !== "open") return false;
+  const selfEval = await prisma.evaluation.findUnique({
+    where: {
+      week_id_evaluator_id_evaluatee_id_eval_type: {
+        week_id: weekId,
+        evaluator_id: userId,
+        evaluatee_id: userId,
+        eval_type: "self",
+      },
+    },
+    select: { locked: true },
+  });
+  return !selfEval?.locked;
+}
+
+/** Batch form of isPeerDataLocked — which of these (already-open) weekIds are still locked for userId. */
+export async function getLockedOpenWeekIds(userId, openWeekIds) {
+  if (openWeekIds.length === 0) return new Set();
+  const selfEvals = await prisma.evaluation.findMany({
+    where: { evaluator_id: userId, evaluatee_id: userId, eval_type: "self", week_id: { in: openWeekIds } },
+    select: { week_id: true, locked: true },
+  });
+  const lockedByWeek = new Map(selfEvals.map((e) => [e.week_id, e.locked]));
+  return new Set(openWeekIds.filter((id) => !lockedByWeek.get(id)));
+}
 
 /**
  * Can `requester` view the scores/profile of `target`?

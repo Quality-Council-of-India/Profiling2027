@@ -2,11 +2,11 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
-import { weeksApi, evaluationsApi, scoresApi, downloadExport } from "../api/endpoints.js";
+import { weeksApi, evaluationsApi, scoresApi, analyticsApi, downloadExport } from "../api/endpoints.js";
 import { Card, StatCard, Spinner, ErrorBanner, RefreshButton } from "../components/ui.jsx";
 import RadarComparison from "../components/charts/RadarComparison.jsx";
 import { ComplianceIcon, AnalyticsIcon, AdminIcon } from "../components/icons.jsx";
-import { ACCENT } from "../utils/constants.js";
+import { ACCENT, ROLE_LABELS } from "../utils/constants.js";
 
 function formatDateRange(start, end) {
   if (!start || !end) return "";
@@ -87,7 +87,117 @@ function AdminSummary({ weeks, openWeek }) {
         <QuickLink to="/analytics" Icon={AnalyticsIcon} title="Analytics" desc="Field heatmaps, SAPA distribution, quadrant plot" />
         <QuickLink to="/admin" Icon={AdminIcon} title="Admin Panel" desc="Open/close weeks, import roster, export scores" />
       </div>
+      <AttentionSignalsCard />
     </>
+  );
+}
+
+function personLine(p, suffix) {
+  if (!p) return null;
+  return (
+    <p className="text-xs text-slate-600">
+      <strong>{p.name}</strong>{" "}
+      <span className="text-slate-400">
+        ({ROLE_LABELS[p.role] || p.role}
+        {p.field ? ` · ${p.field}` : ""})
+      </span>{" "}
+      — {suffix}
+    </p>
+  );
+}
+
+/**
+ * Admin-only proactive signals — patterns a manual read of Analytics would
+ * eventually surface, pulled to the front so an Admin doesn't have to go
+ * looking for them: multi-week declining performers, this week's most
+ * strength/weakness-tagged person, and whose peer feedback has skewed most
+ * positive/constructive over the whole cycle so far.
+ */
+function AttentionSignalsCard() {
+  const signalsQuery = useQuery({ queryKey: ["dashboardSignals"], queryFn: analyticsApi.dashboardSignals });
+
+  if (signalsQuery.isLoading) {
+    return (
+      <Card className="p-5">
+        <Spinner />
+      </Card>
+    );
+  }
+  if (signalsQuery.isError) {
+    return (
+      <Card className="p-5">
+        <ErrorBanner message="Failed to load attention signals" />
+      </Card>
+    );
+  }
+
+  const { decliningPerformers, weeklyTagLeaders, suggestionLeaders } = signalsQuery.data;
+  const nothingToShow =
+    decliningPerformers.length === 0 &&
+    !weeklyTagLeaders?.mostStrengthTags &&
+    !weeklyTagLeaders?.mostWeaknessTags &&
+    !suggestionLeaders?.mostPositive &&
+    !suggestionLeaders?.mostCritical;
+
+  return (
+    <Card className="p-5">
+      <h2 className="text-sm font-semibold text-slate-800 mb-1">Attention & Recognition Signals</h2>
+      <p className="text-xs text-slate-500 mb-4">Visible to Admins only — patterns worth a look before the next week opens.</p>
+
+      {nothingToShow ? (
+        <p className="text-sm text-slate-400">Nothing flagged yet — check back once more weeks are scored.</p>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <p className="text-xs font-medium text-red-700 uppercase tracking-wide mb-2">
+              Declining Trend ({decliningPerformers.length})
+            </p>
+            {decliningPerformers.length === 0 ? (
+              <p className="text-xs text-slate-400">No one on a multi-week decline right now.</p>
+            ) : (
+              <div className="space-y-2">
+                {decliningPerformers.map((p) => (
+                  <div key={p.id}>
+                    <p className="text-xs font-semibold text-slate-800">
+                      {p.name} <span className="text-slate-400 font-normal">({ROLE_LABELS[p.role] || p.role})</span>
+                    </p>
+                    <p className="text-xs text-slate-500">{p.note}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <p className="text-xs font-medium text-green-700 uppercase tracking-wide mb-2">
+              This Week's Recognition{weeklyTagLeaders?.week ? ` — ${weeklyTagLeaders.week.label}` : ""}
+            </p>
+            <div className="space-y-1.5">
+              {weeklyTagLeaders?.mostStrengthTags
+                ? personLine(weeklyTagLeaders.mostStrengthTags, `${weeklyTagLeaders.mostStrengthTags.count} strength tags received`)
+                : <p className="text-xs text-slate-400">No strength tags recorded yet this week.</p>}
+              {weeklyTagLeaders?.mostWeaknessTags
+                ? personLine(weeklyTagLeaders.mostWeaknessTags, `${weeklyTagLeaders.mostWeaknessTags.count} improvement-area tags received`)
+                : <p className="text-xs text-slate-400">No improvement-area tags recorded yet this week.</p>}
+            </div>
+          </div>
+
+          <div>
+            <p className="text-xs font-medium text-slate-600 uppercase tracking-wide mb-2">
+              Peer Suggestions — Whole Cycle So Far
+            </p>
+            <div className="space-y-1.5">
+              {suggestionLeaders?.mostPositive
+                ? personLine(suggestionLeaders.mostPositive, `most positive (no-action) suggestions received (${suggestionLeaders.mostPositive.count})`)
+                : <p className="text-xs text-slate-400">No positive suggestions recorded yet.</p>}
+              {suggestionLeaders?.mostCritical
+                ? personLine(suggestionLeaders.mostCritical, `most constructive/critical suggestions received (${suggestionLeaders.mostCritical.count})`)
+                : <p className="text-xs text-slate-400">No constructive suggestions recorded yet.</p>}
+            </div>
+          </div>
+        </div>
+      )}
+    </Card>
   );
 }
 
@@ -146,6 +256,7 @@ function ProfessionalSummary({ user, weeks, openWeek }) {
 
   const pending = pendingQuery.data?.pending;
   const computed = scoreQuery.data?.computed;
+  const peerDataLocked = scoreQuery.data?.peerDataLocked;
   const totalSelf = computed ? Number(computed.total_self) : 0;
   const totalPeer = computed ? Number(computed.total_peer) : 0;
   const sapa = computed?.sapa_factor !== null && computed?.sapa_factor !== undefined ? Number(computed.sapa_factor) : null;
@@ -154,12 +265,17 @@ function ProfessionalSummary({ user, weeks, openWeek }) {
     <>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard label="Total Self Score" value={totalSelf.toFixed(1)} sub="Out of 49" tone="accent" />
-        <StatCard label="Total Peer Score" value={totalPeer.toFixed(1)} sub="Out of 49" tone="info" />
+        <StatCard
+          label="Total Peer Score"
+          value={peerDataLocked ? "🔒" : totalPeer.toFixed(1)}
+          sub={peerDataLocked ? "Submit your Self-Eval to unlock" : "Out of 49"}
+          tone="info"
+        />
         <StatCard
           label="SAPA Factor"
-          value={sapa !== null ? sapa.toFixed(2) : "—"}
-          sub={sapa === null ? "Awaiting data" : sapa > 1.1 ? "Over-rater" : sapa < 0.9 ? "Under-rater" : "Aligned"}
-          tone={sapa === null ? "neutral" : sapa > 1.1 || sapa < 0.9 ? "warning" : "success"}
+          value={peerDataLocked ? "🔒" : sapa !== null ? sapa.toFixed(2) : "—"}
+          sub={peerDataLocked ? "Submit your Self-Eval to unlock" : sapa === null ? "Awaiting data" : sapa > 1.1 ? "Over-rater" : sapa < 0.9 ? "Under-rater" : "Aligned"}
+          tone={peerDataLocked ? "neutral" : sapa === null ? "neutral" : sapa > 1.1 || sapa < 0.9 ? "warning" : "success"}
         />
         <StatCard
           label="Peer Responses"

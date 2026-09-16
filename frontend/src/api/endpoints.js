@@ -77,6 +77,7 @@ export const analyticsApi = {
     api.get(`/analytics/field-members?weeks=${weekIds.join(",")}&field=${encodeURIComponent(field)}`).then((r) => r.data),
   hallOfRecognition: () => api.get("/analytics/hall-of-recognition").then((r) => r.data),
   peerTrend: (userId) => api.get(`/analytics/peer-trend/${userId}`).then((r) => r.data),
+  dashboardSignals: () => api.get("/analytics/dashboard-signals").then((r) => r.data),
 };
 
 export const adminApi = {

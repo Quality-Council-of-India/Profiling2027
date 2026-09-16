@@ -75,7 +75,7 @@ export default function ScoresPage({ userId, userLabel }) {
   if (detailQuery.isLoading) return <Spinner />;
   if (detailQuery.isError) return <ErrorBanner message="Failed to load this week's score" />;
 
-  const { computed, subjective, user: targetUser } = detailQuery.data;
+  const { computed, subjective, user: targetUser, peerDataLocked } = detailQuery.data;
   const totalSelf = computed ? Number(computed.total_self) : 0;
   const totalPeer = computed ? Number(computed.total_peer) : 0;
   const sapa = computed?.sapa_factor !== null && computed?.sapa_factor !== undefined ? Number(computed.sapa_factor) : null;
@@ -121,6 +121,16 @@ export default function ScoresPage({ userId, userLabel }) {
         </Card>
       ) : (
         <>
+          {peerDataLocked && (
+            <Card className="p-4 border-amber-200 bg-amber-50/60">
+              <p className="text-sm text-slate-700">
+                🔒 <strong>{isOwnView ? "Submit your Self-Evaluation" : "They haven't submitted a Self-Evaluation"}</strong>{" "}
+                for {currentWeek.label} to {isOwnView ? "unlock" : "see"} this week's peer feedback and comparison.
+                {isOwnView && " This keeps your self-rating honest, uninfluenced by what peers have already said about you this week."}
+              </p>
+            </Card>
+          )}
+
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
             {PARAM_FIELDS.map(({ key, label }) => (
               <Card key={label} interactive className="p-3 text-center">
@@ -132,7 +142,9 @@ export default function ScoresPage({ userId, userLabel }) {
                   </div>
                   <div className="w-px bg-slate-200" />
                   <div>
-                    <p className="text-lg font-bold" style={{ color: NAV }}>{Number(computed[`${key}_peer`])}</p>
+                    <p className="text-lg font-bold" style={{ color: peerDataLocked ? "#CBD5E1" : NAV }}>
+                      {peerDataLocked ? "🔒" : Number(computed[`${key}_peer`])}
+                    </p>
                     <p className="text-xs text-slate-400">Peer</p>
                   </div>
                 </div>
@@ -143,19 +155,40 @@ export default function ScoresPage({ userId, userLabel }) {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <Card className="p-5">
               <h2 className="text-sm font-semibold text-slate-800 mb-2">Self vs Peer — {currentWeek.label}</h2>
-              <RadarComparison computed={computed} height={260} />
+              {peerDataLocked ? (
+                <p className="text-sm text-slate-400 py-10 text-center">
+                  {isOwnView ? "Submit your Self-Evaluation" : "Awaiting their Self-Evaluation"} to see this comparison.
+                </p>
+              ) : (
+                <RadarComparison computed={computed} height={260} />
+              )}
             </Card>
             <Card className="p-4 flex flex-col">
               <h2 className="text-sm font-semibold text-slate-800 mb-2">SAPA Factor</h2>
               <div className="flex-1 flex flex-col justify-center">
-                <SAPAGauge sapa={sapa} />
+                {peerDataLocked ? (
+                  <p className="text-sm text-slate-400">
+                    {isOwnView ? "Submit your Self-Evaluation" : "Awaiting their Self-Evaluation"} to calculate this.
+                  </p>
+                ) : (
+                  <SAPAGauge sapa={sapa} />
+                )}
               </div>
             </Card>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <StatCard label="Total Self" value={totalSelf.toFixed(1)} sub="/49" tone="accent" />
-            <StatCard label="Total Peer" value={totalPeer.toFixed(1)} sub={`${computed.peer_count} of ${computed.expected_peer_count} peers responded`} tone="info" />
+            <StatCard
+              label="Total Peer"
+              value={peerDataLocked ? "🔒" : totalPeer.toFixed(1)}
+              sub={
+                peerDataLocked
+                  ? `${computed.peer_count} of ${computed.expected_peer_count} peers responded so far`
+                  : `${computed.peer_count} of ${computed.expected_peer_count} peers responded`
+              }
+              tone="info"
+            />
           </div>
 
           <Card className="p-5">
@@ -234,7 +267,11 @@ export default function ScoresPage({ userId, userLabel }) {
 
           <Card className="p-5">
             <h2 className="text-sm font-semibold text-slate-800 mb-3">Peer Feedback Received — {currentWeek.label}</h2>
-            {!subjective ? (
+            {peerDataLocked ? (
+              <p className="text-sm text-slate-400">
+                🔒 {isOwnView ? "Submit your Self-Evaluation above" : "Awaiting their Self-Evaluation"} to {isOwnView ? "unlock" : "see"} this.
+              </p>
+            ) : !subjective ? (
               <Spinner />
             ) : subjective.peer.responseCount === 0 ? (
               <p className="text-sm text-slate-400">No peer responses received for this week.</p>
