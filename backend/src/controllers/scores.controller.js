@@ -1,7 +1,14 @@
 import { prisma } from "../utils/prisma.js";
-import { canViewUser, teamViewFilter, teamViewMatches } from "../services/access.js";
+import { canViewUser, teamViewFilter, teamViewMatches, isPeerDataLocked, getLockedOpenWeekIds } from "../services/access.js";
 import { getSubjectiveSummary } from "../services/evaluations.js";
 import { PARAM_FIELDS } from "../utils/constants.js";
+
+function redactComputedPeerFields(computed) {
+  if (!computed) return computed;
+  const redacted = { ...computed, total_peer: null, sapa_factor: null };
+  for (const { key } of PARAM_FIELDS) redacted[`${key}_peer`] = null;
+  return redacted;
+}
 
 export async function getUserWeekScore(req, res) {
   const userId = Number(req.params.userId);
@@ -24,11 +31,14 @@ export async function getUserWeekScore(req, res) {
   ]);
   if (!week) return res.status(404).json({ error: "Week not found" });
 
+  const peerDataLocked = req.user.id === userId && (await isPeerDataLocked(userId, weekId, week.status));
+
   res.json({
     week,
     user: { id: target.id, name: target.name, role: target.role, field: target.field },
-    computed: computed || null,
-    subjective,
+    computed: peerDataLocked ? redactComputedPeerFields(computed) : computed || null,
+    subjective: peerDataLocked ? { ...subjective, peer: null } : subjective,
+    peerDataLocked,
   });
 }
 
@@ -49,19 +59,26 @@ export async function getUserTrend(req, res) {
     orderBy: { week: { week_number: "asc" } },
   });
 
+  // Only an open week can still be gamed (see isPeerDataLocked in
+  // services/access.js) — and only when the caller is looking at their own
+  // trend line.
+  const openWeekIds = scores.filter((s) => s.week.status === "open").map((s) => s.week_id);
+  const lockedWeekIds = req.user.id === userId ? await getLockedOpenWeekIds(userId, openWeekIds) : new Set();
+
   res.json({
     user: { id: target.id, name: target.name, role: target.role, field: target.field },
     trend: scores.map((s) => {
-      const row = { week: s.week.label, week_number: s.week.week_number };
+      const peerDataLocked = lockedWeekIds.has(s.week_id);
+      const row = { week: s.week.label, week_number: s.week.week_number, peerDataLocked };
       for (const p of PARAM_FIELDS) {
         row[`${p.key}_self`] = s[`${p.key}_self`];
-        row[`${p.key}_peer`] = s[`${p.key}_peer`];
+        row[`${p.key}_peer`] = peerDataLocked ? null : s[`${p.key}_peer`];
       }
       row.total_self = s.total_self;
-      row.total_peer = s.total_peer;
+      row.total_peer = peerDataLocked ? null : s.total_peer;
       row.peer_count = s.peer_count;
       row.expected_peer_count = s.expected_peer_count;
-      row.sapa_factor = s.sapa_factor;
+      row.sapa_factor = peerDataLocked ? null : s.sapa_factor;
       return row;
     }),
   });

@@ -990,7 +990,7 @@ export async function getPeerScoreTrendComparison(projectId, targetUser) {
       ? round2(rows.reduce((a, r) => a + Number(r.total_peer), 0) / rows.length)
       : null;
     return {
-      week: { id: w.id, label: w.label, week_number: w.week_number },
+      week: { id: w.id, label: w.label, week_number: w.week_number, status: w.status },
       selfTotalPeer: mine ? Number(mine.total_peer) : null,
       fieldAvgTotalPeer: fieldAvg,
       fieldLabel: myFieldThisWeek,
@@ -1174,4 +1174,142 @@ export async function getHallOfRecognition(projectId) {
   });
 
   return { weeks: weeksOut };
+}
+
+// A decline is only worth surfacing if it's an actual pattern, not one
+// noisy week — at least 2 consecutive week-over-week drops (3 data points).
+const DECLINE_MIN_STREAK = 2;
+
+/**
+ * Admin-only Dashboard signals — proactive, plain-English flags that would
+ * otherwise only surface if an Admin happened to notice them while manually
+ * reading Analytics: who is on a genuine multi-week decline, who is this
+ * week's most-recognised/most-flagged person, and who has received the
+ * most positive vs. most constructive-criticism suggestions over the whole
+ * cycle so far. Scoped to every non-Admin user with at least one scored
+ * (open or closed) week.
+ */
+export async function getDashboardSignals(projectId) {
+  const weeks = await prisma.week.findMany({
+    where: { project_id: projectId, status: { not: "upcoming" } },
+    orderBy: { week_number: "asc" },
+  });
+  if (weeks.length === 0) {
+    return { decliningPerformers: [], weeklyTagLeaders: null, suggestionLeaders: null };
+  }
+  const weekIds = weeks.map((w) => w.id);
+  const closedWeeks = weeks.filter((w) => w.status === "closed");
+  const latestScoredWeek = weeks[weeks.length - 1]; // weeks is already ordered ascending; last entry is most recent (open, if any, else most recently closed)
+
+  // ---- 1. Declining performers ----
+  const scores = await prisma.computedScore.findMany({
+    where: { week_id: { in: weekIds }, user: { project_id: projectId, role: { not: ROLES.ADMIN } } },
+    include: { user: { select: { id: true, name: true, role: true, field: true } }, week: true },
+    orderBy: { week: { week_number: "asc" } },
+  });
+  const scoresByUser = new Map();
+  for (const s of scores) {
+    // A week with zero peer responses so far isn't a real "0" data point —
+    // it's just a freshly-opened week nobody has evaluated this person for
+    // yet (computeRow reports total_peer 0 until the first peer response
+    // lands). Counting that as a "decline to 0" would be a false alarm.
+    if (s.peer_count === 0) continue;
+    if (!scoresByUser.has(s.user.id)) scoresByUser.set(s.user.id, { user: s.user, rows: [] });
+    scoresByUser.get(s.user.id).rows.push({ weekLabel: s.week.label, totalPeer: Number(s.total_peer) });
+  }
+  const decliningPerformers = [];
+  for (const { user, rows } of scoresByUser.values()) {
+    if (rows.length < DECLINE_MIN_STREAK + 1) continue;
+    const recent = rows.slice(-(DECLINE_MIN_STREAK + 1));
+    const isDeclining = recent.every((r, i) => i === 0 || r.totalPeer < recent[i - 1].totalPeer);
+    if (!isDeclining) continue;
+    decliningPerformers.push({
+      id: user.id,
+      name: user.name,
+      role: user.role,
+      field: user.field,
+      recentWeeks: recent.map((r) => ({ week: r.weekLabel, totalPeer: r.totalPeer })),
+      note: `Total Peer Score has fallen for ${DECLINE_MIN_STREAK} weeks running: ${recent.map((r) => r.totalPeer.toFixed(1)).join(" → ")} (${recent[0].weekLabel} to ${recent[recent.length - 1].weekLabel}).`,
+    });
+  }
+  decliningPerformers.sort(
+    (a, b) => a.recentWeeks[a.recentWeeks.length - 1].totalPeer - b.recentWeeks[b.recentWeeks.length - 1].totalPeer
+  );
+
+  // ---- 2. This week's most-recognised / most-flagged (tag counts) ----
+  const tagWeekScores = await prisma.computedScore.findMany({
+    where: { week_id: latestScoredWeek.id, user: { project_id: projectId, role: { not: ROLES.ADMIN } } },
+    select: {
+      user: {
+        select: {
+          id: true,
+          name: true,
+          role: true,
+          field: true,
+          evaluationsReceived: {
+            where: { week_id: latestScoredWeek.id, eval_type: "peer" },
+            select: { strengths_tags: true, weakness_tags: true },
+          },
+        },
+      },
+    },
+  });
+  let topStrengthTagUser = null;
+  let topWeaknessTagUser = null;
+  for (const { user } of tagWeekScores) {
+    const strengthCount = user.evaluationsReceived.reduce((a, e) => a + e.strengths_tags.length, 0);
+    const weaknessCount = user.evaluationsReceived.reduce((a, e) => a + e.weakness_tags.length, 0);
+    if (strengthCount > 0 && (!topStrengthTagUser || strengthCount > topStrengthTagUser.count)) {
+      topStrengthTagUser = { id: user.id, name: user.name, role: user.role, field: user.field, count: strengthCount };
+    }
+    if (weaknessCount > 0 && (!topWeaknessTagUser || weaknessCount > topWeaknessTagUser.count)) {
+      topWeaknessTagUser = { id: user.id, name: user.name, role: user.role, field: user.field, count: weaknessCount };
+    }
+  }
+  const weeklyTagLeaders = {
+    week: { id: latestScoredWeek.id, label: latestScoredWeek.label, week_number: latestScoredWeek.week_number },
+    mostStrengthTags: topStrengthTagUser,
+    mostWeaknessTags: topWeaknessTagUser,
+  };
+
+  // ---- 3. Overall (whole cycle so far) positive vs. critical suggestions received, per recipient ----
+  const suggestionScores = await prisma.user.findMany({
+    where: { project_id: projectId, role: { not: ROLES.ADMIN }, ...activeOrScoredWhere(weekIds) },
+    select: {
+      id: true,
+      name: true,
+      role: true,
+      field: true,
+      evaluationsReceived: {
+        where: { week_id: { in: weekIds }, eval_type: "peer" },
+        select: { improvement_suggestion: true },
+      },
+    },
+  });
+  let topPositiveUser = null;
+  let topCriticalUser = null;
+  for (const user of suggestionScores) {
+    let positiveCount = 0;
+    let criticalCount = 0;
+    for (const e of user.evaluationsReceived) {
+      const text = e.improvement_suggestion;
+      if (!text) continue;
+      if (isNonSubstantive(tokenizeSuggestion(text))) continue;
+      if (hasActionableSignal(text)) criticalCount += 1;
+      else positiveCount += 1;
+    }
+    if (positiveCount > 0 && (!topPositiveUser || positiveCount > topPositiveUser.count)) {
+      topPositiveUser = { id: user.id, name: user.name, role: user.role, field: user.field, count: positiveCount };
+    }
+    if (criticalCount > 0 && (!topCriticalUser || criticalCount > topCriticalUser.count)) {
+      topCriticalUser = { id: user.id, name: user.name, role: user.role, field: user.field, count: criticalCount };
+    }
+  }
+  const suggestionLeaders = {
+    weeksCounted: closedWeeks.length + (latestScoredWeek.status === "open" ? 1 : 0),
+    mostPositive: topPositiveUser,
+    mostCritical: topCriticalUser,
+  };
+
+  return { decliningPerformers, weeklyTagLeaders, suggestionLeaders };
 }

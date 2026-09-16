@@ -1,34 +1,69 @@
 import { useState } from "react";
 import { ROLE_COLORS, ROLE_LABELS } from "../../utils/constants.js";
 
-const PERFORMANCE_MIDPOINT = 24.5; // half of the 49-point max total peer score
-
-const QUADRANTS = [
-  { key: "star", label: "Star Performers", accent: "#22C55E", test: (p) => p.performance >= PERFORMANCE_MIDPOINT && p.sentiment >= 0 },
-  { key: "wellLiked", label: "Well-Liked Underperformers", accent: "#3B82F6", test: (p) => p.performance < PERFORMANCE_MIDPOINT && p.sentiment >= 0 },
-  { key: "atRisk", label: "At-Risk", accent: "#EF4444", test: (p) => p.performance < PERFORMANCE_MIDPOINT && p.sentiment < 0 },
-  { key: "toxic", label: "High Performers, Low Sentiment", accent: "#F97316", test: (p) => p.performance >= PERFORMANCE_MIDPOINT && p.sentiment < 0 },
-];
+// This team's actual peer scores cluster tightly high (this cycle's medians
+// have run 38-40 out of 49, with even the WORST-scoring person still well
+// above the scale's theoretical midpoint of 24.5), and peer sentiment
+// (trajectory + tag balance) is likewise almost always net-positive — the
+// same leniency pattern documented in the 2025-26 questionnaire redesign
+// (Section 3 of the portal handbook). A fixed midpoint on either axis never
+// actually splits this team: everyone lands in "Star Performers" every
+// week. Splitting at the CURRENT selection's own median instead means the
+// plot always divides the selected people into four real groups relative to
+// each other, regardless of how the team's absolute rating behavior shifts
+// cycle to cycle.
+function median(values) {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
 
 // points: [{ id, name, role, field, performance (0-49), sentiment (-1..1) }]
 export default function QuadrantPlot({ points, height = 280 }) {
   const [expandedKey, setExpandedKey] = useState(null);
+  const performanceMidpoint = median(points.map((p) => p.performance));
+  const sentimentMidpoint = median(points.map((p) => p.sentiment));
+
+  const QUADRANTS = [
+    { key: "star", label: "Star Performers", accent: "#22C55E", test: (p) => p.performance >= performanceMidpoint && p.sentiment >= sentimentMidpoint },
+    { key: "wellLiked", label: "Well-Liked Underperformers", accent: "#3B82F6", test: (p) => p.performance < performanceMidpoint && p.sentiment >= sentimentMidpoint },
+    { key: "atRisk", label: "At-Risk", accent: "#EF4444", test: (p) => p.performance < performanceMidpoint && p.sentiment < sentimentMidpoint },
+    { key: "toxic", label: "High Performers, Low Sentiment", accent: "#F97316", test: (p) => p.performance >= performanceMidpoint && p.sentiment < sentimentMidpoint },
+  ];
+
+  // The visual split lines must track the SAME dynamic midpoints as the
+  // bucket tests above, or the background quadrant colors would land in the
+  // wrong place relative to where dots actually get classified.
+  const perfPct = Math.max(4, Math.min(96, (performanceMidpoint / 49) * 100));
+  const sentPct = Math.max(4, Math.min(96, ((sentimentMidpoint + 1) / 2) * 100));
+
   return (
     <div>
       <div className="relative border border-slate-200 rounded-lg" style={{ height }}>
-        <div className="absolute inset-0 flex">
-          <div className="w-1/2 h-1/2 bg-blue-50/50 border-r border-b border-slate-200 flex items-center justify-center">
-            <span className="text-xs text-blue-400 font-medium opacity-60">Well-Liked Underperformers</span>
+        <div className="absolute inset-0">
+          <div
+            className="absolute top-0 left-0 bg-blue-50/50 border-r border-b border-slate-200 flex items-center justify-center overflow-hidden"
+            style={{ width: `${perfPct}%`, height: `${100 - sentPct}%` }}
+          >
+            <span className="text-xs text-blue-400 font-medium opacity-60 text-center px-1">Well-Liked Underperformers</span>
           </div>
-          <div className="w-1/2 h-1/2 bg-green-50/50 border-b border-slate-200 flex items-center justify-center">
+          <div
+            className="absolute top-0 right-0 bg-green-50/50 border-b border-slate-200 flex items-center justify-center overflow-hidden"
+            style={{ width: `${100 - perfPct}%`, height: `${100 - sentPct}%` }}
+          >
             <span className="text-xs text-green-400 font-medium opacity-60">Star Performers ★</span>
           </div>
-        </div>
-        <div className="absolute bottom-0 left-0 right-0 flex" style={{ height: "50%" }}>
-          <div className="w-1/2 bg-red-50/50 border-r border-slate-200 flex items-center justify-center">
+          <div
+            className="absolute bottom-0 left-0 bg-red-50/50 border-r border-slate-200 flex items-center justify-center overflow-hidden"
+            style={{ width: `${perfPct}%`, height: `${sentPct}%` }}
+          >
             <span className="text-xs text-red-400 font-medium opacity-60">At-Risk</span>
           </div>
-          <div className="w-1/2 bg-orange-50/50 flex items-center justify-center">
+          <div
+            className="absolute bottom-0 right-0 bg-orange-50/50 flex items-center justify-center overflow-hidden"
+            style={{ width: `${100 - perfPct}%`, height: `${sentPct}%` }}
+          >
             <span className="text-xs text-orange-400 font-medium opacity-60 text-center px-2">High Performers,<br />Low Sentiment</span>
           </div>
         </div>

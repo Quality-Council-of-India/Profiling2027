@@ -48,13 +48,25 @@ const SHORT_PARAM_LABELS = {
 
 function averageRows(rows) {
   if (!rows.length) return null;
-  const keys = [...PARAM_FIELDS.flatMap((p) => [`${p.key}_self`, `${p.key}_peer`]), "total_self", "total_peer"];
+  const selfKeys = [...PARAM_FIELDS.flatMap((p) => [`${p.key}_self`]), "total_self"];
+  const peerKeys = [...PARAM_FIELDS.flatMap((p) => [`${p.key}_peer`]), "total_peer"];
   const avg = {};
-  for (const k of keys) avg[k] = rows.reduce((a, r) => a + Number(r[k]), 0) / rows.length;
+  for (const k of selfKeys) avg[k] = rows.reduce((a, r) => a + Number(r[k]), 0) / rows.length;
+
+  // A still-open, not-yet-self-locked week's peer fields come back as null
+  // (see scores.controller.js's peerDataLocked) — averaging those in as 0
+  // would silently crash the "peer" side of this summary toward zero. Drop
+  // locked rows from the peer-side average entirely; if EVERY selected week
+  // is locked, there's nothing real to average, so the summary is locked too.
+  const unlockedRows = rows.filter((r) => !r.peerDataLocked);
+  const peerDataLocked = unlockedRows.length === 0;
+  const peerSource = unlockedRows.length ? unlockedRows : rows;
+  for (const k of peerKeys) avg[k] = peerSource.reduce((a, r) => a + Number(r[k] ?? 0), 0) / peerSource.length;
+
   const peer_count = rows.reduce((a, r) => a + r.peer_count, 0);
   const expected_peer_count = rows.reduce((a, r) => a + r.expected_peer_count, 0);
-  const sapa_factor = avg.total_self > 0 && avg.total_peer > 0 ? avg.total_self / avg.total_peer : null;
-  return { ...avg, peer_count, expected_peer_count, sapa_factor };
+  const sapa_factor = !peerDataLocked && avg.total_self > 0 && avg.total_peer > 0 ? avg.total_self / avg.total_peer : null;
+  return { ...avg, peer_count, expected_peer_count, sapa_factor, peerDataLocked };
 }
 
 export default function AnalyticsPage() {
@@ -230,13 +242,35 @@ export default function AnalyticsPage() {
             </Card>
           ) : (
             <>
+              {summary.peerDataLocked && (
+                <Card className="p-4 border-amber-200 bg-amber-50/60">
+                  <p className="text-sm text-slate-700">
+                    🔒 <strong>Submit your Self-Evaluation</strong> for {rangeLabel} to unlock this range's peer
+                    comparison. This keeps your self-rating honest, uninfluenced by what peers have already said
+                    about you this week.
+                  </p>
+                </Card>
+              )}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <StatCard label="Total Self" value={summary.total_self.toFixed(1)} sub={`${rangeLabel} · /49`} tone="accent" />
-                <StatCard label="Total Peer" value={summary.total_peer.toFixed(1)} sub={`${summary.peer_count} of ${summary.expected_peer_count} peer responses`} tone="info" />
+                <StatCard
+                  label="Total Peer"
+                  value={summary.peerDataLocked ? "🔒" : summary.total_peer.toFixed(1)}
+                  sub={
+                    summary.peerDataLocked
+                      ? "Submit your Self-Eval to unlock"
+                      : `${summary.peer_count} of ${summary.expected_peer_count} peer responses`
+                  }
+                  tone="info"
+                />
                 <Card className="p-4 flex flex-col">
                   <h2 className="text-sm font-semibold text-slate-800 mb-2">SAPA Factor</h2>
                   <div className="flex-1 flex flex-col justify-center">
-                    <SAPAGauge sapa={summary.sapa_factor} />
+                    {summary.peerDataLocked ? (
+                      <p className="text-sm text-slate-400">Submit your Self-Evaluation to calculate this.</p>
+                    ) : (
+                      <SAPAGauge sapa={summary.sapa_factor} />
+                    )}
                   </div>
                 </Card>
               </div>
@@ -260,21 +294,27 @@ export default function AnalyticsPage() {
 
               <Card interactive className="p-5">
                 <h2 className="text-sm font-semibold text-slate-800 mb-3">Per-Parameter Breakdown — {rangeLabel}</h2>
-                <ResponsiveContainer width="100%" height={280}>
-                  <BarChart data={PARAM_FIELDS.map(({ key }) => ({
-                    param: SHORT_PARAM_LABELS[key] ?? key,
-                    Self: summary[`${key}_self`],
-                    Peer: summary[`${key}_peer`],
-                  }))}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                    <XAxis dataKey="param" tick={{ fontSize: 10.5 }} interval={0} angle={-20} textAnchor="end" height={55} />
-                    <YAxis domain={[0, 7]} tick={{ fontSize: 11 }} />
-                    <Tooltip contentStyle={{ fontSize: 12 }} formatter={(v) => Number(v).toFixed(1)} />
-                    <Legend iconSize={8} wrapperStyle={{ fontSize: 11 }} />
-                    <Bar dataKey="Self" fill={ACCENT} radius={[3, 3, 0, 0]} />
-                    <Bar dataKey="Peer" fill={NAV} radius={[3, 3, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+                {summary.peerDataLocked ? (
+                  <p className="text-sm text-slate-400 text-center py-10">
+                    Submit your Self-Evaluation for {rangeLabel} to unlock this.
+                  </p>
+                ) : (
+                  <ResponsiveContainer width="100%" height={280}>
+                    <BarChart data={PARAM_FIELDS.map(({ key }) => ({
+                      param: SHORT_PARAM_LABELS[key] ?? key,
+                      Self: summary[`${key}_self`],
+                      Peer: summary[`${key}_peer`],
+                    }))}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                      <XAxis dataKey="param" tick={{ fontSize: 10.5 }} interval={0} angle={-20} textAnchor="end" height={55} />
+                      <YAxis domain={[0, 7]} tick={{ fontSize: 11 }} />
+                      <Tooltip contentStyle={{ fontSize: 12 }} formatter={(v) => Number(v).toFixed(1)} />
+                      <Legend iconSize={8} wrapperStyle={{ fontSize: 11 }} />
+                      <Bar dataKey="Self" fill={ACCENT} radius={[3, 3, 0, 0]} />
+                      <Bar dataKey="Peer" fill={NAV} radius={[3, 3, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
               </Card>
 
               <Card interactive className="p-5">
