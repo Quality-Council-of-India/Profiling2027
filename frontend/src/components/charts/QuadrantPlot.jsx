@@ -8,44 +8,35 @@ import { ROLE_COLORS, ROLE_LABELS } from "../../utils/constants.js";
 // same leniency pattern documented in the 2025-26 questionnaire redesign
 // (Section 3 of the portal handbook). A fixed midpoint on either axis never
 // actually splits this team: everyone lands in "Star Performers" every
-// week.
-//
-// Splitting at a plain median instead mostly fixes that, but sentiment in
-// particular is built from small integer tag/trajectory counts, so several
-// people often land on the exact same value — a plain ">= median" test then
-// puts every one of those tied people on the same side, skewing what should
-// be a roughly-even split. Ranking and splitting at the midpoint INDEX
-// (rather than the midpoint VALUE) guarantees each axis divides as close to
-// 50/50 as integer math allows (e.g. 36/35 for 71 people) no matter how many
-// ties land at the boundary — ties there are broken by id, an arbitrary but
-// fully deterministic rule (not a further merit judgment).
-function rankSplit(points, key) {
-  if (points.length === 0) return { highIds: new Set(), boundaryValue: 0 };
-  const sorted = [...points].sort((a, b) => a[key] - b[key] || a.id - b.id);
-  const splitIndex = Math.floor(sorted.length / 2); // [0, splitIndex) = low half, [splitIndex, n) = high half
-  return { highIds: new Set(sorted.slice(splitIndex).map((p) => p.id)), boundaryValue: sorted[splitIndex][key] };
+// week. Splitting at the CURRENT selection's own median instead means the
+// plot always divides the selected people into four real groups relative to
+// each other, regardless of how the team's absolute rating behavior shifts
+// cycle to cycle.
+function median(values) {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
 // points: [{ id, name, role, field, performance (0-49), sentiment (-1..1) }]
 export default function QuadrantPlot({ points, height = 280 }) {
   const [expandedKey, setExpandedKey] = useState(null);
-  const { highIds: highPerfIds, boundaryValue: performanceBoundary } = rankSplit(points, "performance");
-  const { highIds: highSentIds, boundaryValue: sentimentBoundary } = rankSplit(points, "sentiment");
-  const isHighPerf = (p) => highPerfIds.has(p.id);
-  const isHighSent = (p) => highSentIds.has(p.id);
+  const performanceMidpoint = median(points.map((p) => p.performance));
+  const sentimentMidpoint = median(points.map((p) => p.sentiment));
 
   const QUADRANTS = [
-    { key: "star", label: "Star Performers", accent: "#22C55E", test: (p) => isHighPerf(p) && isHighSent(p) },
-    { key: "wellLiked", label: "Well-Liked Underperformers", accent: "#3B82F6", test: (p) => !isHighPerf(p) && isHighSent(p) },
-    { key: "atRisk", label: "At-Risk", accent: "#EF4444", test: (p) => !isHighPerf(p) && !isHighSent(p) },
-    { key: "toxic", label: "High Performers, Low Sentiment", accent: "#F97316", test: (p) => isHighPerf(p) && !isHighSent(p) },
+    { key: "star", label: "Star Performers", accent: "#22C55E", test: (p) => p.performance >= performanceMidpoint && p.sentiment >= sentimentMidpoint },
+    { key: "wellLiked", label: "Well-Liked Underperformers", accent: "#3B82F6", test: (p) => p.performance < performanceMidpoint && p.sentiment >= sentimentMidpoint },
+    { key: "atRisk", label: "At-Risk", accent: "#EF4444", test: (p) => p.performance < performanceMidpoint && p.sentiment < sentimentMidpoint },
+    { key: "toxic", label: "High Performers, Low Sentiment", accent: "#F97316", test: (p) => p.performance >= performanceMidpoint && p.sentiment < sentimentMidpoint },
   ];
 
-  // The visual split lines track the same boundary values used for the
-  // rank split above, so the background quadrant colors line up with where
-  // dots actually get classified.
-  const perfPct = Math.max(4, Math.min(96, (performanceBoundary / 49) * 100));
-  const sentPct = Math.max(4, Math.min(96, ((sentimentBoundary + 1) / 2) * 100));
+  // The visual split lines must track the SAME dynamic midpoints as the
+  // bucket tests above, or the background quadrant colors would land in the
+  // wrong place relative to where dots actually get classified.
+  const perfPct = Math.max(4, Math.min(96, (performanceMidpoint / 49) * 100));
+  const sentPct = Math.max(4, Math.min(96, ((sentimentMidpoint + 1) / 2) * 100));
 
   return (
     <div>
