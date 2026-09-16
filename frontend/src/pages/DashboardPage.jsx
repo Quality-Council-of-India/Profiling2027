@@ -161,7 +161,14 @@ function AttentionSignalsCard({ weeks }) {
 
   if (scoredWeeks.length === 0) return null;
 
-  if (signalsQuery.isLoading) {
+  // Not just isLoading: while asOfWeekId is still null (before the effect
+  // above sets it), the query is enabled:false and has never fetched — in
+  // TanStack Query v5 that means isLoading is FALSE (it means "pending AND
+  // actively fetching", not "no data yet"), so it alone doesn't catch this
+  // state. Falling through to the destructure below with signalsQuery.data
+  // still undefined crashed this component (and, with no error boundary in
+  // this app, blanked the entire Dashboard) on every single load.
+  if (signalsQuery.isLoading || !signalsQuery.data) {
     return (
       <Card className="p-5">
         <Spinner />
