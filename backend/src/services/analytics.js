@@ -1188,18 +1188,33 @@ const DECLINE_MIN_STREAK = 2;
  * most positive vs. most constructive-criticism suggestions over the whole
  * cycle so far. Scoped to every non-Admin user with at least one scored
  * (open or closed) week.
+ *
+ * Nothing here is stored separately — it's computed on demand from the
+ * same evaluations/computed_scores every other Analytics card reads,
+ * which is itself frozen per week at close time (Section 5's data-
+ * integrity design). asOfWeekId lets an Admin revisit what these signals
+ * looked like as of an earlier week — the underlying data for a closed
+ * week doesn't change, so recomputing it later gives the same answer it
+ * would have at the time, with no need for a parallel snapshot table.
+ * Defaults to the latest scored week (open, if one exists, else the most
+ * recently closed one) when omitted or not found.
  */
-export async function getDashboardSignals(projectId) {
-  const weeks = await prisma.week.findMany({
+export async function getDashboardSignals(projectId, asOfWeekId) {
+  const allWeeks = await prisma.week.findMany({
     where: { project_id: projectId, status: { not: "upcoming" } },
     orderBy: { week_number: "asc" },
   });
-  if (weeks.length === 0) {
-    return { decliningPerformers: [], weeklyTagLeaders: null, suggestionLeaders: null };
+  if (allWeeks.length === 0) {
+    return { decliningPerformers: [], weeklyTagLeaders: null, suggestionLeaders: null, weeklySuggestionLeaders: null };
   }
+  const targetWeek = (asOfWeekId && allWeeks.find((w) => w.id === asOfWeekId)) || allWeeks[allWeeks.length - 1];
+  // Only weeks up to and including the one being revisited count — looking
+  // back at Week 4's signals shouldn't pull in Week 5+ data that hadn't
+  // happened yet as of that point.
+  const weeks = allWeeks.filter((w) => w.week_number <= targetWeek.week_number);
   const weekIds = weeks.map((w) => w.id);
   const closedWeeks = weeks.filter((w) => w.status === "closed");
-  const latestScoredWeek = weeks[weeks.length - 1]; // weeks is already ordered ascending; last entry is most recent (open, if any, else most recently closed)
+  const latestScoredWeek = targetWeek;
 
   // ---- 1. Declining performers ----
   const scores = await prisma.computedScore.findMany({

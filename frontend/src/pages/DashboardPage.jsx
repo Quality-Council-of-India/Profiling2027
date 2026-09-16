@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
@@ -88,7 +88,7 @@ function AdminSummary({ weeks, openWeek }) {
         <QuickLink to="/analytics" Icon={AnalyticsIcon} title="Analytics" desc="Field heatmaps, SAPA distribution, quadrant plot" />
         <QuickLink to="/admin" Icon={AdminIcon} title="Admin Panel" desc="Open/close weeks, import roster, export scores" />
       </div>
-      <AttentionSignalsCard />
+      <AttentionSignalsCard weeks={weeks} />
     </>
   );
 }
@@ -134,14 +134,32 @@ function declineLine(p) {
  * strength/weakness-tagged person (by average per response received, not
  * raw count — see weeklyTagLeaders.minResponses below), and whose peer
  * feedback has skewed most positive/constructive, this week and over the
- * whole cycle so far. Computed live on every load from whatever weeks
- * currently exist — nothing is stored or snapshotted separately, so it
- * always reflects the latest data the moment a week opens, evaluations
- * come in, or a week closes (same as Hall of Recognition and every other
- * Analytics card).
+ * whole cycle so far.
+ *
+ * Nothing here is stored or snapshotted separately — it's computed on
+ * demand from the same underlying data every other Analytics card reads
+ * (same as Hall of Recognition), which is itself frozen per week at close
+ * time. The week selector below lets an Admin revisit an earlier week's
+ * signals exactly as they were as of that week — since a closed week's
+ * data doesn't change, recomputing it later gives the same answer it
+ * would have at the time.
  */
-function AttentionSignalsCard() {
-  const signalsQuery = useQuery({ queryKey: ["dashboardSignals"], queryFn: analyticsApi.dashboardSignals });
+function AttentionSignalsCard({ weeks }) {
+  const scoredWeeks = weeks.filter((w) => w.status !== "upcoming");
+  const [asOfWeekId, setAsOfWeekId] = useState(null);
+  useEffect(() => {
+    if (scoredWeeks.length && asOfWeekId === null) {
+      setAsOfWeekId(scoredWeeks[scoredWeeks.length - 1].id);
+    }
+  }, [scoredWeeks, asOfWeekId]);
+
+  const signalsQuery = useQuery({
+    queryKey: ["dashboardSignals", asOfWeekId],
+    queryFn: () => analyticsApi.dashboardSignals(asOfWeekId),
+    enabled: asOfWeekId !== null,
+  });
+
+  if (scoredWeeks.length === 0) return null;
 
   if (signalsQuery.isLoading) {
     return (
@@ -170,7 +188,20 @@ function AttentionSignalsCard() {
 
   return (
     <Card className="p-5">
-      <h2 className="text-sm font-semibold text-slate-800 mb-1">Attention & Recognition Signals</h2>
+      <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
+        <h2 className="text-sm font-semibold text-slate-800">Attention & Recognition Signals</h2>
+        <select
+          value={asOfWeekId ?? ""}
+          onChange={(e) => setAsOfWeekId(Number(e.target.value))}
+          className="px-2.5 py-1 border border-slate-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-standard"
+        >
+          {scoredWeeks.map((w) => (
+            <option key={w.id} value={w.id}>
+              As of {w.label}
+            </option>
+          ))}
+        </select>
+      </div>
       <p className="text-xs text-slate-500 mb-4">Visible to Admins only — patterns worth a look before the next week opens.</p>
 
       {nothingToShow ? (
