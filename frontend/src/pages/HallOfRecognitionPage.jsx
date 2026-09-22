@@ -1,11 +1,19 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "../context/AuthContext.jsx";
 import { Card, RefreshButton } from "../components/ui.jsx";
 import HallOfRecognition from "../components/HallOfRecognition.jsx";
 import { TrophyIcon } from "../components/icons.jsx";
+import { AGGREGATE_ROLES } from "../utils/constants.js";
 
 export default function HallOfRecognitionPage() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  // Same visibility rule as RankingCard's percentile guide: the mechanics
+  // of how Overall Star Performer is computed are for people who can see
+  // cross-role standings (Project Lead / CASU Lead / Admin), not for a
+  // Profiler/Group Anchor/CASU Anchor looking at their own recognition.
+  const canSeeGuide = AGGREGATE_ROLES.includes(user.role);
   const [showGuide, setShowGuide] = useState(false);
 
   return (
@@ -27,6 +35,7 @@ export default function HallOfRecognitionPage() {
         />
       </div>
 
+      {canSeeGuide && (
       <div>
         <button onClick={() => setShowGuide((v) => !v)} className="text-xs font-medium text-nav hover:text-accent transition-standard">
           {showGuide ? "Hide guide" : "How is Overall Star Performer calculated?"}
@@ -61,6 +70,7 @@ export default function HallOfRecognitionPage() {
           </div>
         )}
       </div>
+      )}
 
       <Card className="p-5">
         <HallOfRecognition />

@@ -11,9 +11,7 @@ import PeerScoreTrendChart from "../components/charts/PeerScoreTrendChart.jsx";
 import HeatmapGrid from "../components/charts/HeatmapGrid.jsx";
 import QuadrantPlot from "../components/charts/QuadrantPlot.jsx";
 import SAPAGauge from "../components/charts/SAPAGauge.jsx";
-import { PARAM_FIELDS, PARAM_LABELS, ACCENT, NAV, ROLE_LABELS, TRAJECTORY_LABELS } from "../utils/constants.js";
-
-const AGGREGATE_ROLES = ["project_lead", "casu_lead", "admin"];
+import { PARAM_FIELDS, PARAM_LABELS, ACCENT, NAV, ROLE_LABELS, TRAJECTORY_LABELS, AGGREGATE_ROLES } from "../utils/constants.js";
 
 // Categorical palette for the trend line charts (7 parameters / top-5 tags) —
 // distinct enough to tell apart, starting with the app's own NAV/ACCENT so

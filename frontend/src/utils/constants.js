@@ -118,6 +118,13 @@ export const ROLE_LABELS = {
   profiler: "Profiler",
 };
 
+// Roles with a full-aggregate analytics view (mirrors backend
+// services/access.js analyticsScope's "full"/"excl_casu" vs "personal"
+// split) — used to gate content that's only meaningful for someone who
+// can see cross-team/cross-role standings, not an individual contributor
+// looking at their own rank.
+export const AGGREGATE_ROLES = ["project_lead", "casu_lead", "admin"];
+
 export const ROLE_COLORS = {
   admin: "#E07B00",
   project_lead: "#7C3AED",

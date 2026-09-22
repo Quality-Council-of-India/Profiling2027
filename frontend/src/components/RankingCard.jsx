@@ -48,6 +48,13 @@ export default function RankingCard({ title, myRank, total, list, meId, emptyLab
     rankBasis === "percentile"
       ? "Ranked by role-normalized percentile (each person compared only to peers in their own role)"
       : "Ranked by Total Peer Score";
+  // The backend only grants a named `list` to non-personal-scope roles
+  // (Project Lead / CASU Lead / Admin — see analyticsScope). A Profiler,
+  // Group Anchor, or CASU Anchor gets `list: null` and only their own
+  // rank number, so the mechanism guide (which is really about how the
+  // cross-role comparison works, not about their own result) is withheld
+  // from them the same way the list itself already is.
+  const canSeeGuide = rankBasis === "percentile" && Array.isArray(list);
 
   // Admin has no personal rank (never scored) but should still see the full
   // named list — only bail out to the empty state when there's truly
@@ -57,7 +64,7 @@ export default function RankingCard({ title, myRank, total, list, meId, emptyLab
       <Card className="p-5">
         <h2 className="text-sm font-semibold text-slate-800 mb-1">{title}</h2>
         <p className="text-xs text-slate-400 mb-3">{subtitle}</p>
-        {rankBasis === "percentile" && <PercentileGuide />}
+        {canSeeGuide && <PercentileGuide />}
         <p className="text-sm text-slate-400">{emptyLabel || "Not enough data yet for this range."}</p>
       </Card>
     );
@@ -69,7 +76,7 @@ export default function RankingCard({ title, myRank, total, list, meId, emptyLab
     <Card className="p-5">
       <h2 className="text-sm font-semibold text-slate-800 mb-1">{title}</h2>
       <p className="text-xs text-slate-400 mb-3">{subtitle}</p>
-      {rankBasis === "percentile" && <PercentileGuide />}
+      {canSeeGuide && <PercentileGuide />}
       {myRank && (
         <>
           <div className="flex items-baseline gap-2 mb-1">
