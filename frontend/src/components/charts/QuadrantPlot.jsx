@@ -96,25 +96,18 @@ export default function QuadrantPlot({ points, height = 280 }) {
             <span className="text-xs text-orange-400 font-medium opacity-60 text-center px-2">High Performers,<br />Low Sentiment</span>
           </div>
         </div>
-        {/* Split-line values — the rank-based cutoff moves every time this is
-            recomputed (see rankSplit above), so the number is shown directly
-            instead of leaving people to guess it from the background split. */}
+        {/* Split-line position — the rank-based cutoff moves every time this
+            is recomputed (see rankSplit above); the actual boundary VALUES
+            are shown in the axis captions below instead of floating labels
+            here, which collided with the quadrant name labels. */}
         <div
           className="absolute top-0 bottom-0 border-l border-dashed border-slate-300 pointer-events-none"
           style={{ left: `${perfPct}%` }}
-        >
-          <span className="absolute top-0.5 left-1 text-[10px] font-mono text-slate-400 bg-white/70 px-0.5 rounded whitespace-nowrap">
-            perf ≥ {performanceBoundary.toFixed(1)}
-          </span>
-        </div>
+        />
         <div
           className="absolute left-0 right-0 border-t border-dashed border-slate-300 pointer-events-none"
           style={{ bottom: `${sentPct}%` }}
-        >
-          <span className="absolute bottom-0.5 right-1 text-[10px] font-mono text-slate-400 bg-white/70 px-0.5 rounded whitespace-nowrap">
-            sentiment ≥ {sentimentBoundary.toFixed(2)}
-          </span>
-        </div>
+        />
         {points.map((p) => {
           const x = Math.max(2, Math.min(98, (p.performance / 49) * 100));
           const y = Math.max(2, Math.min(98, ((p.sentiment + 1) / 2) * 100));
@@ -127,11 +120,11 @@ export default function QuadrantPlot({ points, height = 280 }) {
             />
           );
         })}
-        <div className="absolute bottom-1 left-1/2 -translate-x-1/2 text-xs text-slate-400">
-          ← Low Performance | High Performance →
+        <div className="absolute bottom-1 left-1/2 -translate-x-1/2 text-xs text-slate-400 whitespace-nowrap">
+          ← Low Performance | High Performance → <span className="font-mono">(split at {performanceBoundary.toFixed(1)})</span>
         </div>
         <div className="absolute left-1 top-1/2 -translate-y-1/2 text-xs text-slate-400 -rotate-90 origin-center whitespace-nowrap">
-          ← Negative | Positive →
+          ← Negative | Positive → <span className="font-mono">(split at {sentimentBoundary.toFixed(2)})</span>
         </div>
       </div>
       <div className="flex gap-3 mt-2 justify-center flex-wrap">

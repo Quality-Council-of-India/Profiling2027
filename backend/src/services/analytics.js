@@ -937,20 +937,28 @@ function rolePercentileMap(rows, roleOf, valueOf, idOf) {
 }
 
 // A single scored week is too thin a sample to place someone on a
-// cross-role leaderboard fairly — a brand-new joiner (or a reshuffle
-// mid-cycle) whose first week happens to be unusually strong or weak
-// would otherwise land at the very top or bottom of "Team's Overall
-// Standing" on one data point alone. Requiring at least this many of the
+// cross-role leaderboard fairly when the view spans MULTIPLE weeks (e.g.
+// "Cumulative") — a brand-new joiner (or a reshuffle mid-cycle) whose
+// first week happens to be unusually strong or weak would otherwise land
+// at the very top or bottom on one data point alone, diluted among many
+// other people's multi-week averages. Requiring at least this many of the
 // person's OWN scored weeks (not weeks since the cycle started) keeps
 // them out of this particular cross-role comparison until there's enough
 // of a track record — they still appear everywhere else (their own
 // Scores/Analytics, Field-Wise Standing, etc.) from week one as usual.
+//
+// This floor only makes sense relative to how many weeks are actually
+// selected: viewing a SINGLE week, everyone's weeksCounted for that
+// selection is trivially 1 (there's only one week to have been scored
+// in) — applying a flat floor of 2 there would exclude literally
+// everyone and empty the whole leaderboard, not just new joiners. See
+// getRankings, which passes Math.min(this, weekIds.length).
 const MIN_WEEKS_FOR_CROSS_ROLE_RANKING = 2;
 
 /** Sorts a pool by role-normalized percentile descending (raw totalPeer as tiebreak) and assigns rank/of. */
-function rankByPercentile(pool) {
+function rankByPercentile(pool, minWeeksRequired) {
   const ranked = pool
-    .filter((u) => u.percentile !== null && u.weeksCounted >= MIN_WEEKS_FOR_CROSS_ROLE_RANKING)
+    .filter((u) => u.percentile !== null && u.weeksCounted >= minWeeksRequired)
     .sort((a, b) => b.percentile - a.percentile || b.totalPeer - a.totalPeer);
   return ranked.map((u, i) => ({ ...u, rank: i + 1, of: ranked.length }));
 }
@@ -1042,7 +1050,7 @@ export async function getRankings(projectId, requester, weekIds) {
   }
 
   const scope = analyticsScope(requester);
-  const overallPool = rankByPercentile(withAvg);
+  const overallPool = rankByPercentile(withAvg, Math.min(MIN_WEEKS_FOR_CROSS_ROLE_RANKING, weekIds.length));
   const mineOverall = overallPool.find((u) => u.id === requester.id);
   const overallList =
     scope === "personal"
