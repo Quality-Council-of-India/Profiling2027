@@ -223,6 +223,18 @@ export async function getQuadrantData(projectId, weekIds, scope, field) {
         field: effectiveField(u, weekIds),
         performance: Math.round(avgPerformance * 100) / 100, // X axis, out of 49
         sentiment: Math.round(sentiment * 100) / 100, // Y axis, -1..1
+        // Raw ingredients behind `sentiment`, for a hover breakdown on the
+        // Quadrant chart — not used for plotting, just for transparency.
+        breakdown: {
+          peerResponseCount: peerEvals.length,
+          improved,
+          declined,
+          scoredTrajectoryCount,
+          trajectorySignal: Math.round(trajectorySignal * 1000) / 1000,
+          strengthTagCount: strengthCount,
+          weaknessTagCount: weaknessCount,
+          tagSignal: Math.round(tagSignal * 1000) / 1000,
+        },
       };
     })
     .filter(Boolean);
@@ -924,10 +936,21 @@ function rolePercentileMap(rows, roleOf, valueOf, idOf) {
   return result;
 }
 
+// A single scored week is too thin a sample to place someone on a
+// cross-role leaderboard fairly — a brand-new joiner (or a reshuffle
+// mid-cycle) whose first week happens to be unusually strong or weak
+// would otherwise land at the very top or bottom of "Team's Overall
+// Standing" on one data point alone. Requiring at least this many of the
+// person's OWN scored weeks (not weeks since the cycle started) keeps
+// them out of this particular cross-role comparison until there's enough
+// of a track record — they still appear everywhere else (their own
+// Scores/Analytics, Field-Wise Standing, etc.) from week one as usual.
+const MIN_WEEKS_FOR_CROSS_ROLE_RANKING = 2;
+
 /** Sorts a pool by role-normalized percentile descending (raw totalPeer as tiebreak) and assigns rank/of. */
 function rankByPercentile(pool) {
   const ranked = pool
-    .filter((u) => u.percentile !== null)
+    .filter((u) => u.percentile !== null && u.weeksCounted >= MIN_WEEKS_FOR_CROSS_ROLE_RANKING)
     .sort((a, b) => b.percentile - a.percentile || b.totalPeer - a.totalPeer);
   return ranked.map((u, i) => ({ ...u, rank: i + 1, of: ranked.length }));
 }
@@ -1273,6 +1296,10 @@ export async function getHallOfRecognition(projectId) {
     let overallStar = null;
     if (index >= 1) {
       for (const entry of cumulative.values()) {
+        // Same reasoning as MIN_WEEKS_FOR_CROSS_ROLE_RANKING in getRankings:
+        // a brand-new joiner's first scored week alone shouldn't be able to
+        // crown them Overall Star Performer.
+        if (entry.percentileCount < MIN_WEEKS_FOR_CROSS_ROLE_RANKING) continue;
         const avgPercentile = Math.round((entry.percentileSum / entry.percentileCount) * 100) / 100;
         if (!overallStar || avgPercentile > overallStar.avgPercentile) {
           overallStar = {

@@ -1,5 +1,38 @@
+import { useState } from "react";
 import { Card } from "./ui.jsx";
 import { ROLE_LABELS, ROLE_COLORS, NAV, ACCENT } from "../utils/constants.js";
+
+/** Same collapsible "How is this calculated?" pattern as Analytics' CalcGuide — kept local since it's only needed here. */
+function PercentileGuide() {
+  const [show, setShow] = useState(false);
+  return (
+    <div className="mb-3">
+      <button onClick={() => setShow((v) => !v)} className="text-xs font-medium text-nav hover:text-accent transition-standard">
+        {show ? "Hide guide" : "How is this calculated?"}
+      </button>
+      {show && (
+        <div className="mt-2 text-xs text-slate-600 bg-blue-50 border border-blue-100 rounded-lg p-3 space-y-1.5">
+          <p>
+            Each person's raw Total Peer Score is converted into a <strong>percentile within their own role</strong>,
+            for each week — e.g. 90th percentile means you scored higher than 90% of people in your own role that
+            week. This is averaged across your own scored weeks.
+          </p>
+          <p>
+            Why: different roles are evaluated by structurally different, more-or-less generous groups of peers (see
+            peerMapping.js) — CASU Anchors, for example, are evaluated only by their own subordinates. A raw-score
+            comparison bakes that gap in; comparing percentiles within the same role cancels it out.
+          </p>
+          <p>
+            A role with fewer than 5 people in a given week (currently CASU Lead and Project Lead — 2 people each,
+            every week) is compared against the WHOLE team that week instead of its own tiny group, since a
+            percentile from only 2 people can only ever be exactly 0 or 100 — not a meaningful signal.
+          </p>
+          <p>You also need at least 2 of your own scored weeks to appear here, so one lucky or unlucky week alone can't place someone at the very top or bottom of this particular list.</p>
+        </div>
+      )}
+    </div>
+  );
+}
 
 /**
  * Standings by Total Peer Score — or, when `rankBasis="percentile"`, by
@@ -24,6 +57,7 @@ export default function RankingCard({ title, myRank, total, list, meId, emptyLab
       <Card className="p-5">
         <h2 className="text-sm font-semibold text-slate-800 mb-1">{title}</h2>
         <p className="text-xs text-slate-400 mb-3">{subtitle}</p>
+        {rankBasis === "percentile" && <PercentileGuide />}
         <p className="text-sm text-slate-400">{emptyLabel || "Not enough data yet for this range."}</p>
       </Card>
     );
@@ -35,6 +69,7 @@ export default function RankingCard({ title, myRank, total, list, meId, emptyLab
     <Card className="p-5">
       <h2 className="text-sm font-semibold text-slate-800 mb-1">{title}</h2>
       <p className="text-xs text-slate-400 mb-3">{subtitle}</p>
+      {rankBasis === "percentile" && <PercentileGuide />}
       {myRank && (
         <>
           <div className="flex items-baseline gap-2 mb-1">
