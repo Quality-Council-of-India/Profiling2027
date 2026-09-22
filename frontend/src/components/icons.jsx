@@ -150,3 +150,12 @@ export function AdminIcon(props) {
     </svg>
   );
 }
+
+export function FlagIcon(props) {
+  return (
+    <svg viewBox="0 0 20 20" width="18" height="18" {...base} {...props}>
+      <path d="M4.5 2.5v15" />
+      <path d="M4.5 3.5c2-1.2 3.8-1.2 5.6 0 1.8 1.2 3.6 1.2 5.4 0v7c-1.8 1.2-3.6 1.2-5.4 0-1.8-1.2-3.6-1.2-5.6 0z" />
+    </svg>
+  );
+}

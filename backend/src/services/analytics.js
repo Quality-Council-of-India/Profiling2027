@@ -223,6 +223,18 @@ export async function getQuadrantData(projectId, weekIds, scope, field) {
         field: effectiveField(u, weekIds),
         performance: Math.round(avgPerformance * 100) / 100, // X axis, out of 49
         sentiment: Math.round(sentiment * 100) / 100, // Y axis, -1..1
+        // Raw ingredients behind `sentiment`, for a hover breakdown on the
+        // Quadrant chart — not used for plotting, just for transparency.
+        breakdown: {
+          peerResponseCount: peerEvals.length,
+          improved,
+          declined,
+          scoredTrajectoryCount,
+          trajectorySignal: Math.round(trajectorySignal * 1000) / 1000,
+          strengthTagCount: strengthCount,
+          weaknessTagCount: weaknessCount,
+          tagSignal: Math.round(tagSignal * 1000) / 1000,
+        },
       };
     })
     .filter(Boolean);
@@ -499,7 +511,7 @@ function stemWord(word) {
   return word.length >= 5 && word.endsWith("s") && !word.endsWith("ss") ? word.slice(0, -1) : word;
 }
 
-function tokenizeSuggestion(text) {
+export function tokenizeSuggestion(text) {
   const words = text.toLowerCase().match(/[a-z']+/g) || [];
   const tokens = [];
   for (const w of words) {
@@ -520,7 +532,7 @@ function tokenizeSuggestion(text) {
  * curated keyword list, not real language understanding — a genuinely
  * unusual non-answer can still slip through as its own small cluster.
  */
-function isNonSubstantive(tokens) {
+export function isNonSubstantive(tokens) {
   return tokens.length === 0 || tokens.every((t) => NON_SUBSTANTIVE_WORDS.has(t));
 }
 
@@ -854,8 +866,116 @@ function rankByTotalPeer(pool) {
   return ranked.map((u, i) => ({ ...u, rank: i + 1, of: ranked.length }));
 }
 
-/** Per-user average totalPeer/totalSelf across the given weeks, for a set of users. */
+/**
+ * Percentile rank (0-100) of each value within `values`, using the
+ * standard "count below + half of ties" formula so exact ties split the
+ * difference instead of all landing on the same side. A pool of 1 has no
+ * peers to compare against, so every value in it is treated as neutral
+ * (50) rather than trivially reading as "best" or "worst".
+ */
+function percentileRanks(values) {
+  const n = values.length;
+  if (n <= 1) return values.map(() => 50);
+  return values.map((v) => {
+    let below = 0;
+    let tied = 0;
+    for (const other of values) {
+      if (other < v) below += 1;
+      else if (other === v) tied += 1;
+    }
+    return Math.round(((below + (tied - 1) * 0.5) / (n - 1)) * 10000) / 100;
+  });
+}
+
+// Below this many same-role, same-week rows, a role-local percentile isn't
+// a meaningful signal — with only 2 people in a role (this project's CASU
+// Lead and Project Lead roles, consistently, every week), a percentile can
+// only ever land on exactly 0 or 100, which is noise wearing the costume
+// of a real "how good are you against your peers" measurement, and would
+// let a small role trivially dominate a cross-role ranking exactly the
+// way it was supposed to stop a big role (CASU Anchor) from doing. Below
+// the threshold, fall back to a percentile against the WHOLE pool passed
+// in (every role together) instead of the tiny same-role group.
+const MIN_ROLE_SIZE_FOR_PERCENTILE = 5;
+
+/**
+ * Turns a flat list of same-week score rows into a user_id -> percentile
+ * map, where each percentile is computed against ONLY the other rows
+ * sharing that same role — never against the whole cross-role pool —
+ * PROVIDED that role has at least MIN_ROLE_SIZE_FOR_PERCENTILE members
+ * that week; otherwise see above. This role-local comparison is what
+ * makes "Team's Overall Standing" and "Overall Star Performer" fair
+ * across roles that are structurally scored by different, more or less
+ * generous evaluator pools (see peerMapping.js: CASU Anchors are
+ * evaluated only by subordinates, everyone else by a broader mix). A raw
+ * Total Peer Score comparison bakes that evaluator-generosity gap in; a
+ * percentile-within-role comparison cancels it out, since "top 10% of
+ * Profilers" and "top 10% of CASU Anchors" are now the same currency.
+ */
+function rolePercentileMap(rows, roleOf, valueOf, idOf) {
+  const byRole = new Map();
+  for (const row of rows) {
+    const role = roleOf(row);
+    if (!byRole.has(role)) byRole.set(role, []);
+    byRole.get(role).push(row);
+  }
+
+  const wholePoolPercentiles = percentileRanks(rows.map(valueOf));
+  const wholePoolById = new Map();
+  rows.forEach((row, i) => wholePoolById.set(idOf(row), wholePoolPercentiles[i]));
+
+  const result = new Map();
+  for (const roleRows of byRole.values()) {
+    if (roleRows.length < MIN_ROLE_SIZE_FOR_PERCENTILE) {
+      for (const row of roleRows) result.set(idOf(row), wholePoolById.get(idOf(row)));
+      continue;
+    }
+    const percentiles = percentileRanks(roleRows.map(valueOf));
+    roleRows.forEach((row, i) => result.set(idOf(row), percentiles[i]));
+  }
+  return result;
+}
+
+// A single scored week is too thin a sample to place someone on a
+// cross-role leaderboard fairly — a brand-new joiner (or a reshuffle
+// mid-cycle) whose first week happens to be unusually strong or weak
+// would otherwise land at the very top or bottom of "Team's Overall
+// Standing" on one data point alone. Requiring at least this many of the
+// person's OWN scored weeks (not weeks since the cycle started) keeps
+// them out of this particular cross-role comparison until there's enough
+// of a track record — they still appear everywhere else (their own
+// Scores/Analytics, Field-Wise Standing, etc.) from week one as usual.
+const MIN_WEEKS_FOR_CROSS_ROLE_RANKING = 2;
+
+/** Sorts a pool by role-normalized percentile descending (raw totalPeer as tiebreak) and assigns rank/of. */
+function rankByPercentile(pool) {
+  const ranked = pool
+    .filter((u) => u.percentile !== null && u.weeksCounted >= MIN_WEEKS_FOR_CROSS_ROLE_RANKING)
+    .sort((a, b) => b.percentile - a.percentile || b.totalPeer - a.totalPeer);
+  return ranked.map((u, i) => ({ ...u, rank: i + 1, of: ranked.length }));
+}
+
+/**
+ * Per-user average totalPeer/totalSelf across the given weeks, for a set
+ * of users — plus each user's own average role-normalized percentile
+ * (each of their scored weeks converted to a percentile within their own
+ * role for that one week, via rolePercentileMap, then averaged the same
+ * way totalPeer is averaged).
+ */
 function averageScoresByUser(users, weekIds) {
+  const rowsByWeek = new Map();
+  for (const u of users) {
+    for (const s of u.computedScores) {
+      if (!rowsByWeek.has(s.week_id)) rowsByWeek.set(s.week_id, []);
+      rowsByWeek.get(s.week_id).push({ userId: u.id, role: u.role, totalPeer: Number(s.total_peer) });
+    }
+  }
+  const percentileByUserWeek = new Map(); // `${userId}:${weekId}` -> percentile
+  for (const [weekId, rows] of rowsByWeek) {
+    const map = rolePercentileMap(rows, (r) => r.role, (r) => r.totalPeer, (r) => r.userId);
+    for (const [userId, pct] of map) percentileByUserWeek.set(`${userId}:${weekId}`, pct);
+  }
+
   return users.map((u) => {
     const scores = u.computedScores;
     const totalPeer = scores.length
@@ -864,6 +984,9 @@ function averageScoresByUser(users, weekIds) {
     const totalSelf = scores.length
       ? scores.reduce((a, s) => a + Number(s.total_self), 0) / scores.length
       : null;
+    const percentile = scores.length
+      ? scores.reduce((a, s) => a + (percentileByUserWeek.get(`${u.id}:${s.week_id}`) ?? 50), 0) / scores.length
+      : null;
     return {
       id: u.id,
       name: u.name,
@@ -871,6 +994,7 @@ function averageScoresByUser(users, weekIds) {
       field: effectiveField(u, weekIds),
       totalPeer: totalPeer === null ? null : Math.round(totalPeer * 100) / 100,
       totalSelf: totalSelf === null ? null : Math.round(totalSelf * 100) / 100,
+      percentile: percentile === null ? null : Math.round(percentile * 100) / 100,
       weeksCounted: scores.length,
     };
   });
@@ -883,6 +1007,10 @@ export async function getRankings(projectId, requester, weekIds) {
   });
 
   const withAvg = averageScoresByUser(users, weekIds);
+  // Field-Wise Standing still ranks by raw Total Peer Score — a field
+  // groups people across roles too, but that's a separate, not-yet-asked-
+  // for change (see the role-normalization discussion). Only the flat
+  // cross-role "Team's Overall Standing" pool below switches to percentile.
   const rank = rankByTotalPeer;
 
   let field = null;
@@ -914,7 +1042,7 @@ export async function getRankings(projectId, requester, weekIds) {
   }
 
   const scope = analyticsScope(requester);
-  const overallPool = rank(withAvg);
+  const overallPool = rankByPercentile(withAvg);
   const mineOverall = overallPool.find((u) => u.id === requester.id);
   const overallList =
     scope === "personal"
@@ -1075,10 +1203,17 @@ const HALL_OF_RECOGNITION_ROLES = [ROLES.PROFILER, ROLES.GROUP_ANCHOR, ROLES.CAS
  * Score scorer for each of Profiler/Group Anchor/CASU Anchor, irrespective
  * of field, plus — from the 2nd closed week onward — a single cross-role
  * "Overall Star Performer": whoever has the highest CUMULATIVE average
- * Total Peer Score across every closed week completed so far. Each
+ * role-normalized percentile across every closed week completed so far.
+ * Each week, a person's raw Total Peer Score is first converted into a
+ * percentile against only their own role's scores that week
+ * (rolePercentileMap) — this is what lets the Overall Star Performer be
+ * fairly compared across roles that are structurally scored by different,
+ * more-or-less generous evaluator pools (see peerMapping.js). Each
  * person's average is over their own scored weeks only (not diluted by
  * weeks before they joined), matching how the Combined Score Sheet already
- * averages per person.
+ * averages per person. The raw average Total Peer Score is still carried
+ * alongside (avgTotalPeer) for display, but the percentile average
+ * (avgPercentile) is what actually decides the winner.
  */
 export async function getHallOfRecognition(projectId) {
   const closedWeeks = await prisma.week.findMany({
@@ -1112,6 +1247,12 @@ export async function getHallOfRecognition(projectId) {
 
   closedWeeks.forEach((week, index) => {
     const weekScores = scoresByWeek.get(week.id) || [];
+    const percentileByUserId = rolePercentileMap(
+      weekScores,
+      (s) => s.user.role,
+      (s) => Number(s.total_peer),
+      (s) => s.user.id
+    );
 
     const topByRole = {};
     for (const role of HALL_OF_RECOGNITION_ROLES) {
@@ -1137,6 +1278,8 @@ export async function getHallOfRecognition(projectId) {
         cumulative.set(uid, {
           sum: 0,
           count: 0,
+          percentileSum: 0,
+          percentileCount: 0,
           name: s.user.name,
           role: s.user.role,
           field: s.user.field,
@@ -1146,19 +1289,26 @@ export async function getHallOfRecognition(projectId) {
       const entry = cumulative.get(uid);
       entry.sum += Number(s.total_peer);
       entry.count += 1;
+      entry.percentileSum += percentileByUserId.get(uid) ?? 50;
+      entry.percentileCount += 1;
     }
 
     let overallStar = null;
     if (index >= 1) {
       for (const entry of cumulative.values()) {
-        const avgTotalPeer = Math.round((entry.sum / entry.count) * 100) / 100;
-        if (!overallStar || avgTotalPeer > overallStar.avgTotalPeer) {
+        // Same reasoning as MIN_WEEKS_FOR_CROSS_ROLE_RANKING in getRankings:
+        // a brand-new joiner's first scored week alone shouldn't be able to
+        // crown them Overall Star Performer.
+        if (entry.percentileCount < MIN_WEEKS_FOR_CROSS_ROLE_RANKING) continue;
+        const avgPercentile = Math.round((entry.percentileSum / entry.percentileCount) * 100) / 100;
+        if (!overallStar || avgPercentile > overallStar.avgPercentile) {
           overallStar = {
             name: entry.name,
             role: entry.role,
             field: entry.field,
             photo_url: entry.photo_url,
-            avgTotalPeer,
+            avgPercentile,
+            avgTotalPeer: Math.round((entry.sum / entry.count) * 100) / 100,
           };
         }
       }
@@ -1181,13 +1331,39 @@ export async function getHallOfRecognition(projectId) {
 const DECLINE_MIN_STREAK = 2;
 
 /**
+ * Tracks every candidate currently tied for the best value of a "who's
+ * #1" metric, instead of silently keeping only the first one seen. An
+ * exact tie is common with small integer-ish metrics like these (avg tags
+ * per response, % positive suggestions) — picking just one used to depend
+ * on nothing more meaningful than the order rows came back from the
+ * database, which looks like it means something (like a merit ranking)
+ * but doesn't.
+ */
+class LeaderTracker {
+  constructor() {
+    this.best = null;
+    this.list = [];
+  }
+  consider(candidate, value) {
+    if (this.best === null || value > this.best) {
+      this.best = value;
+      this.list = [candidate];
+    } else if (value === this.best) {
+      this.list.push(candidate);
+    }
+  }
+}
+
+/**
  * Admin-only Dashboard signals — proactive, plain-English flags that would
  * otherwise only surface if an Admin happened to notice them while manually
  * reading Analytics: who is on a genuine multi-week decline, who is this
- * week's most-recognised/most-flagged person, and who has received the
- * most positive vs. most constructive-criticism suggestions over the whole
- * cycle so far. Scoped to every non-Admin user with at least one scored
- * (open or closed) week.
+ * week's most-recognised/most-flagged person (or people — see
+ * LeaderTracker; ties are common on these small integer-ish metrics and
+ * every tied person is returned, not just whichever the query happened to
+ * list first), and who has received the most positive vs. most
+ * constructive-criticism suggestions over the whole cycle so far. Scoped
+ * to every non-Admin user with at least one scored (open or closed) week.
  *
  * Nothing here is stored separately — it's computed on demand from the
  * same evaluations/computed_scores every other Analytics card reads,
@@ -1280,8 +1456,8 @@ export async function getDashboardSignals(projectId, asOfWeekId) {
       },
     },
   });
-  let topStrengthTagUser = null;
-  let topWeaknessTagUser = null;
+  const topStrengthTagUsers = new LeaderTracker();
+  const topWeaknessTagUsers = new LeaderTracker();
   for (const { user } of tagWeekScores) {
     const responseCount = user.evaluationsReceived.length;
     if (responseCount < MIN_RESPONSES_FOR_TAG_LEADER) continue;
@@ -1290,18 +1466,17 @@ export async function getDashboardSignals(projectId, asOfWeekId) {
     const strengthAvg = round2(strengthCount / responseCount);
     const weaknessAvg = round2(weaknessCount / responseCount);
     const base = { id: user.id, name: user.name, role: user.role, field: user.field, responseCount };
-    if (strengthCount > 0 && (!topStrengthTagUser || strengthAvg > topStrengthTagUser.avgPerResponse)) {
-      topStrengthTagUser = { ...base, avgPerResponse: strengthAvg, totalCount: strengthCount };
-    }
-    if (weaknessCount > 0 && (!topWeaknessTagUser || weaknessAvg > topWeaknessTagUser.avgPerResponse)) {
-      topWeaknessTagUser = { ...base, avgPerResponse: weaknessAvg, totalCount: weaknessCount };
-    }
+    if (strengthCount > 0) topStrengthTagUsers.consider({ ...base, avgPerResponse: strengthAvg, totalCount: strengthCount }, strengthAvg);
+    if (weaknessCount > 0) topWeaknessTagUsers.consider({ ...base, avgPerResponse: weaknessAvg, totalCount: weaknessCount }, weaknessAvg);
   }
   const weeklyTagLeaders = {
     week: { id: latestScoredWeek.id, label: latestScoredWeek.label, week_number: latestScoredWeek.week_number },
     minResponses: MIN_RESPONSES_FOR_TAG_LEADER,
-    mostStrengthTags: topStrengthTagUser,
-    mostWeaknessTags: topWeaknessTagUser,
+    // Arrays, not single objects: an exact tie (common with small integer
+    // averages like these) surfaces every tied person instead of picking
+    // one arbitrarily. null when nobody qualified at all.
+    mostStrengthTags: topStrengthTagUsers.list.length ? topStrengthTagUsers.list : null,
+    mostWeaknessTags: topWeaknessTagUsers.list.length ? topWeaknessTagUsers.list : null,
   };
 
   // ---- 3. Positive vs. critical peer suggestions received, per recipient ----
@@ -1314,8 +1489,8 @@ export async function getDashboardSignals(projectId, asOfWeekId) {
   // pooled across every week so far, since Admins want both cuts.
   const MIN_SUGGESTIONS_FOR_LEADER = 5;
   function computeSuggestionLeaders(users, weekIdsForCount) {
-    let topPositiveUser = null;
-    let topCriticalUser = null;
+    const topPositiveUsers = new LeaderTracker();
+    const topCriticalUsers = new LeaderTracker();
     for (const user of users) {
       let positiveCount = 0;
       let criticalCount = 0;
@@ -1331,18 +1506,15 @@ export async function getDashboardSignals(projectId, asOfWeekId) {
       const positivePct = Math.round((positiveCount / substantiveTotal) * 100);
       const criticalPct = 100 - positivePct;
       const base = { id: user.id, name: user.name, role: user.role, field: user.field, substantiveTotal };
-      if (!topPositiveUser || positivePct > topPositiveUser.pct) {
-        topPositiveUser = { ...base, pct: positivePct, count: positiveCount };
-      }
-      if (!topCriticalUser || criticalPct > topCriticalUser.pct) {
-        topCriticalUser = { ...base, pct: criticalPct, count: criticalCount };
-      }
+      topPositiveUsers.consider({ ...base, pct: positivePct, count: positiveCount }, positivePct);
+      topCriticalUsers.consider({ ...base, pct: criticalPct, count: criticalCount }, criticalPct);
     }
     return {
       weeksCounted: weekIdsForCount.length,
       minSubstantiveSuggestions: MIN_SUGGESTIONS_FOR_LEADER,
-      mostPositive: topPositiveUser,
-      mostCritical: topCriticalUser,
+      // Arrays, not single objects — see the tag-leader comment above on why.
+      mostPositive: topPositiveUsers.list.length ? topPositiveUsers.list : null,
+      mostCritical: topCriticalUsers.list.length ? topCriticalUsers.list : null,
     };
   }
 

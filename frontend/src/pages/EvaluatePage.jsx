@@ -17,6 +17,21 @@ import {
 
 const DEFAULT_RATINGS = Object.fromEntries(PARAM_FIELDS.map((p) => [p.key, 4]));
 
+// Deterministic shuffle so tag order is stable within a week (everyone sees
+// the same order, and re-rendering doesn't reshuffle) but differs week to
+// week, to avoid the same tags always landing in the same (likely
+// higher-click) position.
+function seededShuffle(array, seed) {
+  const result = [...array];
+  let s = seed || 1;
+  for (let i = result.length - 1; i > 0; i--) {
+    s = (s * 1103515245 + 12345) & 0x7fffffff;
+    const j = s % (i + 1);
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
+
 export default function EvaluatePage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -88,6 +103,18 @@ export default function EvaluatePage() {
         : null
       : null;
 
+  const shuffledStrengthTags = useMemo(
+    () => (week ? seededShuffle(STRENGTH_TAGS, week.week_number) : STRENGTH_TAGS),
+    [week]
+  );
+  const shuffledWeaknessTags = useMemo(
+    () => (week ? seededShuffle(WEAKNESS_TAGS, week.week_number + 1000) : WEAKNESS_TAGS),
+    [week]
+  );
+
+  const [showMismatchConfirm, setShowMismatchConfirm] = useState(false);
+  const [pendingEvaluateeId, setPendingEvaluateeId] = useState(null);
+
   const toggleTag = (tag, list, setter) => {
     if (list.includes(tag)) {
       setter(list.filter((t) => t !== tag));
@@ -133,6 +160,21 @@ export default function EvaluatePage() {
     return missing;
   }
 
+  function buildPayload(evaluateeId) {
+    return {
+      week_id: week.id,
+      evaluatee_id: evaluateeId,
+      eval_type: evalType,
+      ...ratings,
+      strengths_tags: otherStrengthSelected ? [...selectedStrengths, "Others"] : selectedStrengths,
+      weakness_tags: otherWeaknessSelected ? [...selectedWeaknesses, "Others"] : selectedWeaknesses,
+      strengths_other_text: otherStrengthSelected ? otherStrengthText.trim() : undefined,
+      weakness_other_text: otherWeaknessSelected ? otherWeaknessText.trim() : undefined,
+      improvement_suggestion: improvementSuggestion || null,
+      trajectory: needsTrajectory ? trajectory : "not_applicable",
+    };
+  }
+
   function handleSubmit() {
     if (!week) return;
     const evaluateeId = evalType === "self" ? user.id : Number(selectedPeerId);
@@ -144,18 +186,18 @@ export default function EvaluatePage() {
       return;
     }
 
-    submitMutation.mutate({
-      week_id: week.id,
-      evaluatee_id: evaluateeId,
-      eval_type: evalType,
-      ...ratings,
-      strengths_tags: otherStrengthSelected ? [...selectedStrengths, "Others"] : selectedStrengths,
-      weakness_tags: otherWeaknessSelected ? [...selectedWeaknesses, "Others"] : selectedWeaknesses,
-      strengths_other_text: otherStrengthSelected ? otherStrengthText.trim() : undefined,
-      weakness_other_text: otherWeaknessSelected ? otherWeaknessText.trim() : undefined,
-      improvement_suggestion: improvementSuggestion || null,
-      trajectory: needsTrajectory ? trajectory : "not_applicable",
-    });
+    if (trajectoryMismatch) {
+      setPendingEvaluateeId(evaluateeId);
+      setShowMismatchConfirm(true);
+      return;
+    }
+
+    submitMutation.mutate(buildPayload(evaluateeId));
+  }
+
+  function confirmMismatchAndSubmit() {
+    setShowMismatchConfirm(false);
+    submitMutation.mutate(buildPayload(pendingEvaluateeId));
   }
 
   if (pendingQuery.isLoading) return <Spinner />;
@@ -323,7 +365,7 @@ export default function EvaluatePage() {
           </p>
           <p className="text-xs text-slate-400 mb-2">Choose the most distinguishing strengths. Required — select at least one.</p>
           <div className="flex flex-wrap gap-1.5">
-            {STRENGTH_TAGS.map((tag) => {
+            {shuffledStrengthTags.map((tag) => {
               const selected = selectedStrengths.includes(tag);
               const disabled = !selected && selectedStrengths.length >= MAX_TAGS_PER_CATEGORY;
               return (
@@ -375,7 +417,7 @@ export default function EvaluatePage() {
           </p>
           <p className="text-xs text-slate-400 mb-2">Choose the most pressing improvement areas. Required — select at least one.</p>
           <div className="flex flex-wrap gap-1.5">
-            {WEAKNESS_TAGS.map((tag) => {
+            {shuffledWeaknessTags.map((tag) => {
               const selected = selectedWeaknesses.includes(tag);
               const disabled = !selected && selectedWeaknesses.length >= MAX_TAGS_PER_CATEGORY;
               return (
@@ -453,12 +495,6 @@ export default function EvaluatePage() {
                 </button>
               ))}
             </div>
-            {trajectoryMismatch && (
-              <p className="mt-2 text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
-                {evalType === "self" ? "Your" : "Their"} scores are {trajectoryMismatch.direction} than last week (
-                {prevTotal} → {currentTotal}), but you marked {trajectoryMismatch.claim} — are you sure?
-              </p>
-            )}
           </div>
         )}
       </Card>
@@ -481,6 +517,37 @@ export default function EvaluatePage() {
         )}
         {submitMutation.isPending ? "Submitting…" : "Submit Evaluation"}
       </button>
+
+      {showMismatchConfirm && trajectoryMismatch && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+          <Card className="max-w-sm w-full p-6 text-center animate-[fadeIn_0.15s_ease]">
+            <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center mx-auto mb-3 text-2xl">
+              ⚠️
+            </div>
+            <h2 className="text-sm font-semibold text-slate-800 mb-2">Double-check the trajectory answer</h2>
+            <p className="text-sm text-slate-600 mb-5">
+              {evalType === "self" ? "Your" : "Their"} scores are {trajectoryMismatch.direction} than last week (
+              {prevTotal} → {currentTotal}), but you marked <strong>{trajectoryMismatch.claim}</strong>. Are you sure
+              this is correct?
+            </p>
+            <div className="flex gap-2 justify-center">
+              <button
+                onClick={() => setShowMismatchConfirm(false)}
+                className="px-4 py-2 rounded-lg text-sm font-medium border border-slate-300 text-slate-600 hover:bg-slate-50 transition-standard"
+              >
+                Go back
+              </button>
+              <button
+                onClick={confirmMismatchAndSubmit}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-white transition-standard hover:shadow-md"
+                style={{ background: ACCENT }}
+              >
+                Yes, submit anyway
+              </button>
+            </div>
+          </Card>
+        </div>
+      )}
         </>
       )}
     </div>

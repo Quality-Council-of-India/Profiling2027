@@ -9,6 +9,7 @@ import {
   ConcernIcon,
   AdminIcon,
   MailIcon,
+  FlagIcon,
 } from "../components/icons.jsx";
 
 /** Single source of truth for the sidebar's nav list, shared with the
@@ -96,6 +97,13 @@ export function getNavItems(user) {
       Icon: MailIcon,
       show: isAdmin,
       tourText: "Send a message on any topic to everyone, a specific role, a specific field, or a hand-picked list.",
+    },
+    {
+      to: "/admin/data-quality",
+      label: "Data Quality",
+      Icon: FlagIcon,
+      show: isAdmin,
+      tourText: "Peer evaluations with signs of being low-effort or self-contradictory, flagged for a quick review.",
     },
   ];
 }

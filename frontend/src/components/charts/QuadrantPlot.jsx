@@ -47,6 +47,26 @@ export default function QuadrantPlot({ points, height = 280 }) {
   const perfPct = Math.max(4, Math.min(96, (performanceBoundary / 49) * 100));
   const sentPct = Math.max(4, Math.min(96, ((sentimentBoundary + 1) / 2) * 100));
 
+  function tooltipFor(p) {
+    const remark = QUADRANTS.find((q) => q.test(p))?.label ?? "";
+    const lines = [`${p.name} (${ROLE_LABELS[p.role] || p.role}) — ${remark}`, ""];
+    const b = p.breakdown;
+    if (b) {
+      const stayedSame = b.scoredTrajectoryCount - b.improved - b.declined;
+      lines.push(
+        `Performance: ${p.performance.toFixed(1)}/49 — avg of ${b.peerResponseCount} peer response${b.peerResponseCount === 1 ? "" : "s"} this range`,
+        "",
+        `Sentiment: ${p.sentiment.toFixed(2)} (-1..1)`,
+        `  Trajectory: ${b.improved} improved, ${b.declined} declined, ${stayedSame} stayed the same (of ${b.scoredTrajectoryCount} scored) -> signal ${b.trajectorySignal.toFixed(2)}`,
+        `  Tags: ${b.strengthTagCount} strength, ${b.weaknessTagCount} improvement-area -> signal ${b.tagSignal.toFixed(2)}`,
+        `  sentiment = 0.5x${b.trajectorySignal.toFixed(2)} + 0.5x${b.tagSignal.toFixed(2)} = ${p.sentiment.toFixed(2)}`
+      );
+    } else {
+      lines.push(`Performance: ${p.performance.toFixed(1)}/49`, `Sentiment: ${p.sentiment.toFixed(2)} (-1..1)`);
+    }
+    return lines.join("\n");
+  }
+
   return (
     <div>
       <div className="relative border border-slate-200 rounded-lg" style={{ height }}>
@@ -76,6 +96,25 @@ export default function QuadrantPlot({ points, height = 280 }) {
             <span className="text-xs text-orange-400 font-medium opacity-60 text-center px-2">High Performers,<br />Low Sentiment</span>
           </div>
         </div>
+        {/* Split-line values — the rank-based cutoff moves every time this is
+            recomputed (see rankSplit above), so the number is shown directly
+            instead of leaving people to guess it from the background split. */}
+        <div
+          className="absolute top-0 bottom-0 border-l border-dashed border-slate-300 pointer-events-none"
+          style={{ left: `${perfPct}%` }}
+        >
+          <span className="absolute top-0.5 left-1 text-[10px] font-mono text-slate-400 bg-white/70 px-0.5 rounded whitespace-nowrap">
+            perf ≥ {performanceBoundary.toFixed(1)}
+          </span>
+        </div>
+        <div
+          className="absolute left-0 right-0 border-t border-dashed border-slate-300 pointer-events-none"
+          style={{ bottom: `${sentPct}%` }}
+        >
+          <span className="absolute bottom-0.5 right-1 text-[10px] font-mono text-slate-400 bg-white/70 px-0.5 rounded whitespace-nowrap">
+            sentiment ≥ {sentimentBoundary.toFixed(2)}
+          </span>
+        </div>
         {points.map((p) => {
           const x = Math.max(2, Math.min(98, (p.performance / 49) * 100));
           const y = Math.max(2, Math.min(98, ((p.sentiment + 1) / 2) * 100));
@@ -84,7 +123,7 @@ export default function QuadrantPlot({ points, height = 280 }) {
               key={p.id}
               className="absolute w-3 h-3 rounded-full border-2 border-white shadow-sm"
               style={{ left: `${x}%`, bottom: `${y}%`, background: ROLE_COLORS[p.role] }}
-              title={`${p.name} — performance ${p.performance.toFixed(1)}/49, sentiment ${p.sentiment.toFixed(2)}`}
+              title={tooltipFor(p)}
             />
           );
         })}

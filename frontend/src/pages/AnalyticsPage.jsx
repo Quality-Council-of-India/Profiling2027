@@ -11,9 +11,7 @@ import PeerScoreTrendChart from "../components/charts/PeerScoreTrendChart.jsx";
 import HeatmapGrid from "../components/charts/HeatmapGrid.jsx";
 import QuadrantPlot from "../components/charts/QuadrantPlot.jsx";
 import SAPAGauge from "../components/charts/SAPAGauge.jsx";
-import { PARAM_FIELDS, PARAM_LABELS, ACCENT, NAV, ROLE_LABELS, TRAJECTORY_LABELS } from "../utils/constants.js";
-
-const AGGREGATE_ROLES = ["project_lead", "casu_lead", "admin"];
+import { PARAM_FIELDS, PARAM_LABELS, ACCENT, NAV, ROLE_LABELS, TRAJECTORY_LABELS, AGGREGATE_ROLES } from "../utils/constants.js";
 
 // Categorical palette for the trend line charts (7 parameters / top-5 tags) —
 // distinct enough to tell apart, starting with the app's own NAV/ACCENT so
@@ -415,6 +413,7 @@ export default function AnalyticsPage() {
               total={rankingsQuery.data.overall?.totalOverall}
               list={rankingsQuery.data.overall?.list}
               meId={user.id}
+              rankBasis="percentile"
             />
           </>
         )}
@@ -500,12 +499,24 @@ export default function AnalyticsPage() {
                   many Strength vs. Area-of-Improvement tags they received, pooled across your selected weeks. This
                   is a simple formula, not an AI/sentiment model — there isn't one available in this stack.
                 </p>
+                <p className="font-mono text-[11px] bg-white/60 border border-blue-100 rounded px-2 py-1.5 leading-relaxed">
+                  trajectorySignal = (improved − declined) / scoredCount, where scoredCount = every peer response
+                  EXCEPT "Not Applicable" ones (first-time pairings with nothing to compare against) — a "Stayed
+                  the Same" answer IS counted in scoredCount, it just contributes 0 to the numerator, so it pulls
+                  the signal toward neutral rather than being ignored.
+                  <br />
+                  tagSignal = (strengthTags − weaknessTags) / (strengthTags + weaknessTags)
+                  <br />
+                  sentiment = 0.5 × trajectorySignal + 0.5 × tagSignal
+                </p>
                 <p>
                   The four quadrants split each axis at the <strong>midpoint by rank</strong> of whoever's currently
                   on the plot — not a fixed midpoint of the scale. This team's ratings run consistently high, so a
                   fixed "half of the max score" split would put almost everyone in Star Performers every week;
                   ranking the current selection and splitting it as close to 50/50 as possible instead always
-                  divides the group into four real, relative bands.
+                  divides the group into four real, relative bands. The split lines on the chart are labeled with
+                  their actual current boundary values, and hovering any dot shows the full breakdown behind that
+                  person's numbers.
                 </p>
                 <p>
                   Sentiment in particular is built from small integer tag/trajectory counts, so several people
