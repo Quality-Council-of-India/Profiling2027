@@ -511,7 +511,7 @@ function stemWord(word) {
   return word.length >= 5 && word.endsWith("s") && !word.endsWith("ss") ? word.slice(0, -1) : word;
 }
 
-function tokenizeSuggestion(text) {
+export function tokenizeSuggestion(text) {
   const words = text.toLowerCase().match(/[a-z']+/g) || [];
   const tokens = [];
   for (const w of words) {
@@ -532,7 +532,7 @@ function tokenizeSuggestion(text) {
  * curated keyword list, not real language understanding — a genuinely
  * unusual non-answer can still slip through as its own small cluster.
  */
-function isNonSubstantive(tokens) {
+export function isNonSubstantive(tokens) {
   return tokens.length === 0 || tokens.every((t) => NON_SUBSTANTIVE_WORDS.has(t));
 }
 

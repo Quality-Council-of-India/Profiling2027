@@ -14,6 +14,7 @@ import RaiseConcernPage from "./pages/RaiseConcernPage.jsx";
 import AdminGrievancesPage from "./pages/AdminGrievancesPage.jsx";
 import AdminBroadcastPage from "./pages/AdminBroadcastPage.jsx";
 import AdminPage from "./pages/AdminPage.jsx";
+import DataQualityPage from "./pages/DataQualityPage.jsx";
 
 export default function App() {
   return (
@@ -78,6 +79,14 @@ export default function App() {
           element={
             <ProtectedRoute roles={["admin"]}>
               <AdminBroadcastPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/data-quality"
+          element={
+            <ProtectedRoute roles={["admin"]}>
+              <DataQualityPage />
             </ProtectedRoute>
           }
         />

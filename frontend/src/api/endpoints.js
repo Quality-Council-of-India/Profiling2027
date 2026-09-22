@@ -81,6 +81,10 @@ export const analyticsApi = {
     api.get(`/analytics/dashboard-signals${asOfWeekId ? `?asOf=${asOfWeekId}` : ""}`).then((r) => r.data),
 };
 
+export const dataQualityApi = {
+  flags: (weekId) => api.get(`/data-quality/flags${weekId ? `?weekId=${weekId}` : ""}`).then((r) => r.data),
+};
+
 export const adminApi = {
   createWeek: () => api.post("/admin/weeks", {}).then((r) => r.data),
   impersonateUser: (userId) => api.post(`/admin/impersonate-user/${userId}`).then((r) => r.data),

@@ -15,6 +15,7 @@ import exportRoutes from "./routes/export.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
 import ticketsRoutes from "./routes/tickets.routes.js";
 import notificationsRoutes from "./routes/notifications.routes.js";
+import dataQualityRoutes from "./routes/dataQuality.routes.js";
 import { notFoundHandler, errorHandler } from "./middleware/errorHandler.js";
 import { prisma } from "./utils/prisma.js";
 
@@ -79,6 +80,7 @@ app.use("/api/export", exportRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/tickets", ticketsRoutes);
 app.use("/api/notifications", notificationsRoutes);
+app.use("/api/data-quality", dataQualityRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);
