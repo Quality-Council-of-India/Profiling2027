@@ -415,6 +415,7 @@ export default function AnalyticsPage() {
               total={rankingsQuery.data.overall?.totalOverall}
               list={rankingsQuery.data.overall?.list}
               meId={user.id}
+              rankBasis="percentile"
             />
           </>
         )}

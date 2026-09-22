@@ -101,12 +101,25 @@ function personHeader(p) {
   );
 }
 
-function personLine(p, suffix) {
-  if (!p) return null;
+/**
+ * Renders every person tied for a "who's #1" spot, not just the first one
+ * — an exact tie on these small integer-ish metrics (avg tags/response, %
+ * positive suggestions) is common, and picking only one to show would
+ * depend on nothing more meaningful than database row order.
+ */
+function personLines(list, suffixFor) {
+  if (!list || list.length === 0) return null;
   return (
-    <div>
-      {personHeader(p)}
-      <p className="text-xs text-slate-500">{suffix}</p>
+    <div className="space-y-2">
+      {list.length > 1 && (
+        <p className="text-[11px] text-slate-400 italic">Tied — {list.length} people at the same value:</p>
+      )}
+      {list.map((p) => (
+        <div key={p.id}>
+          {personHeader(p)}
+          <p className="text-xs text-slate-500">{suffixFor(p)}</p>
+        </div>
+      ))}
     </div>
   );
 }
@@ -186,12 +199,12 @@ function AttentionSignalsCard({ weeks }) {
   const { decliningPerformers, weeklyTagLeaders, suggestionLeaders, weeklySuggestionLeaders } = signalsQuery.data;
   const nothingToShow =
     decliningPerformers.length === 0 &&
-    !weeklyTagLeaders?.mostStrengthTags &&
-    !weeklyTagLeaders?.mostWeaknessTags &&
-    !weeklySuggestionLeaders?.mostPositive &&
-    !weeklySuggestionLeaders?.mostCritical &&
-    !suggestionLeaders?.mostPositive &&
-    !suggestionLeaders?.mostCritical;
+    !weeklyTagLeaders?.mostStrengthTags?.length &&
+    !weeklyTagLeaders?.mostWeaknessTags?.length &&
+    !weeklySuggestionLeaders?.mostPositive?.length &&
+    !weeklySuggestionLeaders?.mostCritical?.length &&
+    !suggestionLeaders?.mostPositive?.length &&
+    !suggestionLeaders?.mostCritical?.length;
 
   return (
     <Card className="p-5">
@@ -235,16 +248,16 @@ function AttentionSignalsCard({ weeks }) {
               since roles differ a lot in how many peers evaluate them.
             </p>
             <div className="space-y-2">
-              {weeklyTagLeaders?.mostStrengthTags
-                ? personLine(
+              {weeklyTagLeaders?.mostStrengthTags?.length
+                ? personLines(
                     weeklyTagLeaders.mostStrengthTags,
-                    `${weeklyTagLeaders.mostStrengthTags.avgPerResponse.toFixed(1)} avg strength tags/response (${weeklyTagLeaders.mostStrengthTags.totalCount} across ${weeklyTagLeaders.mostStrengthTags.responseCount} responses)`
+                    (p) => `${p.avgPerResponse.toFixed(1)} avg strength tags/response (${p.totalCount} across ${p.responseCount} responses)`
                   )
                 : <p className="text-xs text-slate-400">Not enough responses yet this week.</p>}
-              {weeklyTagLeaders?.mostWeaknessTags
-                ? personLine(
+              {weeklyTagLeaders?.mostWeaknessTags?.length
+                ? personLines(
                     weeklyTagLeaders.mostWeaknessTags,
-                    `${weeklyTagLeaders.mostWeaknessTags.avgPerResponse.toFixed(1)} avg improvement-area tags/response (${weeklyTagLeaders.mostWeaknessTags.totalCount} across ${weeklyTagLeaders.mostWeaknessTags.responseCount} responses)`
+                    (p) => `${p.avgPerResponse.toFixed(1)} avg improvement-area tags/response (${p.totalCount} across ${p.responseCount} responses)`
                   )
                 : <p className="text-xs text-slate-400">Not enough responses yet this week.</p>}
             </div>
@@ -259,16 +272,16 @@ function AttentionSignalsCard({ weeks }) {
               not raw count, for the same reason as above.
             </p>
             <div className="space-y-2">
-              {weeklySuggestionLeaders?.mostPositive
-                ? personLine(
+              {weeklySuggestionLeaders?.mostPositive?.length
+                ? personLines(
                     weeklySuggestionLeaders.mostPositive,
-                    `${weeklySuggestionLeaders.mostPositive.pct}% positive / no-action (${weeklySuggestionLeaders.mostPositive.count} of ${weeklySuggestionLeaders.mostPositive.substantiveTotal})`
+                    (p) => `${p.pct}% positive / no-action (${p.count} of ${p.substantiveTotal})`
                   )
                 : <p className="text-xs text-slate-400">Not enough suggestions yet this week.</p>}
-              {weeklySuggestionLeaders?.mostCritical
-                ? personLine(
+              {weeklySuggestionLeaders?.mostCritical?.length
+                ? personLines(
                     weeklySuggestionLeaders.mostCritical,
-                    `${weeklySuggestionLeaders.mostCritical.pct}% constructive/critical (${weeklySuggestionLeaders.mostCritical.count} of ${weeklySuggestionLeaders.mostCritical.substantiveTotal})`
+                    (p) => `${p.pct}% constructive/critical (${p.count} of ${p.substantiveTotal})`
                   )
                 : <p className="text-xs text-slate-400">Not enough suggestions yet this week.</p>}
             </div>
@@ -280,16 +293,16 @@ function AttentionSignalsCard({ weeks }) {
             </p>
             <p className="text-[11px] text-slate-400 mb-1.5">Same share-based ranking, pooled across every week so far.</p>
             <div className="space-y-2">
-              {suggestionLeaders?.mostPositive
-                ? personLine(
+              {suggestionLeaders?.mostPositive?.length
+                ? personLines(
                     suggestionLeaders.mostPositive,
-                    `${suggestionLeaders.mostPositive.pct}% positive / no-action (${suggestionLeaders.mostPositive.count} of ${suggestionLeaders.mostPositive.substantiveTotal})`
+                    (p) => `${p.pct}% positive / no-action (${p.count} of ${p.substantiveTotal})`
                   )
                 : <p className="text-xs text-slate-400">Not enough suggestions recorded yet.</p>}
-              {suggestionLeaders?.mostCritical
-                ? personLine(
+              {suggestionLeaders?.mostCritical?.length
+                ? personLines(
                     suggestionLeaders.mostCritical,
-                    `${suggestionLeaders.mostCritical.pct}% constructive/critical (${suggestionLeaders.mostCritical.count} of ${suggestionLeaders.mostCritical.substantiveTotal})`
+                    (p) => `${p.pct}% constructive/critical (${p.count} of ${p.substantiveTotal})`
                   )
                 : <p className="text-xs text-slate-400">Not enough suggestions recorded yet.</p>}
             </div>

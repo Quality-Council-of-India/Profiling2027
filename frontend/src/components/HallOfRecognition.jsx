@@ -9,8 +9,9 @@ import { ACCENT } from "../utils/constants.js";
  * Per closed week: the Total-Peer-Score top scorer for each of
  * Profiler/Group Anchor/CASU Anchor (irrespective of field), plus — from
  * the 2nd closed week onward — a single cross-role Overall Star Performer
- * based on cumulative average Total Peer Score across every closed week so
- * far. Most recent week first.
+ * based on cumulative average ROLE-NORMALIZED PERCENTILE (not raw score)
+ * across every closed week so far — see getHallOfRecognition. Most recent
+ * week first.
  */
 export default function HallOfRecognition() {
   const query = useQuery({ queryKey: ["hallOfRecognition"], queryFn: analyticsApi.hallOfRecognition });
@@ -69,7 +70,10 @@ function RecognitionCell({ winner, isOverall = false }) {
   if (!winner) {
     return <td className="px-3 py-2.5 text-slate-400 text-xs">—</td>;
   }
-  const score = isOverall ? winner.avgTotalPeer : winner.totalPeer;
+  const score = isOverall ? winner.avgPercentile : winner.totalPeer;
+  const scoreTitle = isOverall
+    ? `Avg role-normalized percentile — raw avg Total Peer Score: ${winner.avgTotalPeer.toFixed(1)}`
+    : undefined;
   return (
     <td className="px-3 py-2.5">
       <div className="flex items-center gap-2">
@@ -77,8 +81,8 @@ function RecognitionCell({ winner, isOverall = false }) {
         <div>
           <div className="flex items-baseline gap-1.5">
             <span className="font-medium text-slate-800">{winner.name}</span>
-            <span className="text-xs font-mono tabular-nums" style={{ color: ACCENT }}>
-              {score.toFixed(1)}
+            <span className="text-xs font-mono tabular-nums" style={{ color: ACCENT }} title={scoreTitle}>
+              {isOverall ? `${score.toFixed(1)} %ile` : score.toFixed(1)}
             </span>
           </div>
           {winner.field && <span className="text-[11px] text-slate-400">{winner.field}</span>}

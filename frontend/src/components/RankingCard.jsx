@@ -2,12 +2,20 @@ import { Card } from "./ui.jsx";
 import { ROLE_LABELS, ROLE_COLORS, NAV, ACCENT } from "../utils/constants.js";
 
 /**
- * Standings by Total Peer Score. Always shows "Rank X of Y" (never exposes
- * anyone's individual score by itself); additionally shows the named,
- * scored list when the backend granted one (role-dependent — see
- * services/analytics.js getRankings on the API side).
+ * Standings by Total Peer Score — or, when `rankBasis="percentile"`, by
+ * each person's role-normalized percentile (see getRankings' overall pool)
+ * instead, so a cross-role list isn't dominated by whichever role happens
+ * to have structurally more generous evaluators. Always shows "Rank X of
+ * Y" (never exposes anyone's individual score by itself); additionally
+ * shows the named, scored list when the backend granted one (role-
+ * dependent — see services/analytics.js getRankings on the API side).
  */
-export default function RankingCard({ title, myRank, total, list, meId, emptyLabel }) {
+export default function RankingCard({ title, myRank, total, list, meId, emptyLabel, rankBasis = "totalPeer" }) {
+  const subtitle =
+    rankBasis === "percentile"
+      ? "Ranked by role-normalized percentile (each person compared only to peers in their own role)"
+      : "Ranked by Total Peer Score";
+
   // Admin has no personal rank (never scored) but should still see the full
   // named list — only bail out to the empty state when there's truly
   // nothing to show either way.
@@ -15,7 +23,7 @@ export default function RankingCard({ title, myRank, total, list, meId, emptyLab
     return (
       <Card className="p-5">
         <h2 className="text-sm font-semibold text-slate-800 mb-1">{title}</h2>
-        <p className="text-xs text-slate-400 mb-3">Ranked by Total Peer Score</p>
+        <p className="text-xs text-slate-400 mb-3">{subtitle}</p>
         <p className="text-sm text-slate-400">{emptyLabel || "Not enough data yet for this range."}</p>
       </Card>
     );
@@ -26,7 +34,7 @@ export default function RankingCard({ title, myRank, total, list, meId, emptyLab
   return (
     <Card className="p-5">
       <h2 className="text-sm font-semibold text-slate-800 mb-1">{title}</h2>
-      <p className="text-xs text-slate-400 mb-3">Ranked by Total Peer Score</p>
+      <p className="text-xs text-slate-400 mb-3">{subtitle}</p>
       {myRank && (
         <>
           <div className="flex items-baseline gap-2 mb-1">
@@ -60,7 +68,9 @@ export default function RankingCard({ title, myRank, total, list, meId, emptyLab
                       {ROLE_LABELS[m.role]}
                     </span>
                   </td>
-                  <td className="py-1.5 text-right font-mono text-slate-700 tabular-nums">{m.totalPeer.toFixed(1)}</td>
+                  <td className="py-1.5 text-right font-mono text-slate-700 tabular-nums" title={rankBasis === "percentile" ? `Raw avg Total Peer Score: ${m.totalPeer.toFixed(1)}` : undefined}>
+                    {rankBasis === "percentile" ? `${m.percentile.toFixed(1)} %ile` : m.totalPeer.toFixed(1)}
+                  </td>
                 </tr>
               ))}
             </tbody>
