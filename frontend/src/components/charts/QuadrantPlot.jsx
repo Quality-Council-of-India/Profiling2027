@@ -26,7 +26,7 @@ function rankSplit(points, key) {
   return { highIds: new Set(sorted.slice(splitIndex).map((p) => p.id)), boundaryValue: sorted[splitIndex][key] };
 }
 
-// points: [{ id, name, role, field, performance (0-49), sentiment (-1..1) }]
+// points: [{ id, name, role, field, performance (0-49), sentiment [-1, 1] }]
 export default function QuadrantPlot({ points, height = 280 }) {
   const [expandedKey, setExpandedKey] = useState(null);
   const { highIds: highPerfIds, boundaryValue: performanceBoundary } = rankSplit(points, "performance");
@@ -57,7 +57,7 @@ export default function QuadrantPlot({ points, height = 280 }) {
       lines.push(
         `Performance: ${p.performance.toFixed(1)}/49 — avg of ${b.peerResponseCount} peer response${b.peerResponseCount === 1 ? "" : "s"} this range`,
         "",
-        `Sentiment: ${p.sentiment.toFixed(2)} (-1..1)`,
+        `Sentiment: ${p.sentiment.toFixed(2)} [-1, 1]`,
         `  Trajectory: ${b.improved} improved, ${b.declined} declined, ${stayedSame} stayed the same (of ${b.scoredTrajectoryCount} scored)`,
         `  trajectorySignal = (${b.improved} - ${b.declined}) / ${b.scoredTrajectoryCount} = ${b.trajectorySignal.toFixed(2)}`,
         `  Tags: ${b.strengthTagCount} strength, ${b.weaknessTagCount} improvement-area`,
@@ -65,7 +65,7 @@ export default function QuadrantPlot({ points, height = 280 }) {
         `  sentiment = 0.5×${b.trajectorySignal.toFixed(2)} + 0.5×${b.tagSignal.toFixed(2)} = ${p.sentiment.toFixed(2)}`
       );
     } else {
-      lines.push(`Performance: ${p.performance.toFixed(1)}/49`, `Sentiment: ${p.sentiment.toFixed(2)} (-1..1)`);
+      lines.push(`Performance: ${p.performance.toFixed(1)}/49`, `Sentiment: ${p.sentiment.toFixed(2)} [-1, 1]`);
     }
     return lines.join("\n");
   }
