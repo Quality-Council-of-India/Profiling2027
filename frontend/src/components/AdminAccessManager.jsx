@@ -41,7 +41,19 @@ export default function AdminAccessManager() {
     },
   });
 
+  const dataQualityMutation = useMutation({
+    mutationFn: ({ id, can_view_data_quality }) => adminApi.setDataQualityAccess(id, can_view_data_quality),
+    onSuccess: (_data, { id }) => {
+      setRowMessage((m) => ({ ...m, [id]: { type: "success", text: "Access updated." } }));
+      queryClient.invalidateQueries({ queryKey: ["adminUsers"] });
+    },
+    onError: (err, { id }) => {
+      setRowMessage((m) => ({ ...m, [id]: { type: "error", text: err.response?.data?.error || "Failed to update access" } }));
+    },
+  });
+
   const otherAdmins = (usersQuery.data || []).filter((u) => u.role === "admin" && !u.is_master_admin);
+  const leads = (usersQuery.data || []).filter((u) => ["project_lead", "casu_lead"].includes(u.role));
 
   function draftFor(u) {
     return (
@@ -77,9 +89,11 @@ export default function AdminAccessManager() {
       </Card>
     );
   }
-  if (otherAdmins.length === 0) return null;
+  if (otherAdmins.length === 0 && leads.length === 0) return null;
 
   return (
+    <>
+    {otherAdmins.length > 0 && (
     <Card className="p-5">
       <h2 className="text-sm font-semibold text-slate-800 mb-1">Manage Admin Access</h2>
       <p className="text-xs text-slate-500 mb-4">
@@ -139,6 +153,60 @@ export default function AdminAccessManager() {
             </div>
           );
         })}
+      </div>
+    </Card>
+    )}
+
+    {leads.length > 0 && <DataQualityAccessCard leads={leads} mutation={dataQualityMutation} rowMessage={rowMessage} setRowMessage={setRowMessage} />}
+    </>
+  );
+}
+
+/**
+ * Data Quality is Admin-only by default; a Project Lead or CASU Lead sees
+ * it only once granted here, individually — same "hidden until granted"
+ * pattern as Trajectory Mismatches above, but for a non-Admin role.
+ */
+function DataQualityAccessCard({ leads, mutation, rowMessage, setRowMessage }) {
+  function toggle(u) {
+    mutation.mutate(
+      { id: u.id, can_view_data_quality: !u.can_view_data_quality },
+      { onSuccess: () => setRowMessage((m) => ({ ...m, [u.id]: { type: "success", text: "Access updated." } })) }
+    );
+  }
+
+  return (
+    <Card className="p-5">
+      <h2 className="text-sm font-semibold text-slate-800 mb-1">Data Quality Access</h2>
+      <p className="text-xs text-slate-500 mb-4">
+        The Data Quality tab is Admin-only by default. Grant a Project Lead or CASU Lead view access here,
+        individually — it never becomes visible to them until you turn it on.
+      </p>
+      <div className="space-y-2">
+        {leads.map((u) => (
+          <div key={u.id} className="flex items-center justify-between px-3 py-2.5 rounded-lg border border-slate-200">
+            <div>
+              <p className="text-sm font-medium text-slate-800">
+                {u.name} <span className="text-xs font-normal text-slate-400">({u.role === "project_lead" ? "Project Lead" : "CASU Lead"})</span>
+              </p>
+              <p className="text-xs text-slate-400">{u.email}</p>
+              {rowMessage[u.id] && (
+                <p className={`text-[11px] mt-0.5 ${rowMessage[u.id].type === "success" ? "text-green-700" : "text-red-600"}`}>
+                  {rowMessage[u.id].text}
+                </p>
+              )}
+            </div>
+            <label className="flex items-center gap-1.5 text-xs text-slate-600 flex-shrink-0">
+              <input
+                type="checkbox"
+                checked={u.can_view_data_quality}
+                disabled={mutation.isPending && mutation.variables?.id === u.id}
+                onChange={() => toggle(u)}
+              />
+              Can view Data Quality
+            </label>
+          </div>
+        ))}
       </div>
     </Card>
   );

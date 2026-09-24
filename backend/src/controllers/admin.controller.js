@@ -252,6 +252,7 @@ export async function listUsers(req, res) {
       can_manage_passwords: true,
       can_manage_roster: true,
       can_view_trajectory_mismatches: true,
+      can_view_data_quality: true,
     },
   });
   res.json({ users });
@@ -298,6 +299,38 @@ export async function setAdminPermissions(req, res, next) {
         error:
           "Body must include can_manage_weeks, can_manage_passwords, can_manage_roster, can_view_trajectory_mismatches as booleans",
       });
+    }
+    next(err);
+  }
+}
+
+const setDataQualityAccessSchema = z.object({ can_view_data_quality: z.boolean() });
+
+/**
+ * Master-Admin-only: grants/revokes a Project Lead or CASU Lead's VIEW
+ * access to the Admin Panel's Data Quality tab, which is otherwise
+ * restricted to Admin accounts. Distinct from setAdminPermissions above
+ * (that one only ever targets other Admin accounts) — this is the
+ * opposite direction, extending an Admin-only feature out to specific
+ * non-Admin roles, one user at a time. Has no effect on an Admin account
+ * (already sees the tab regardless) or any other role.
+ */
+export async function setDataQualityAccess(req, res, next) {
+  try {
+    const userId = Number(req.params.id);
+    const { can_view_data_quality } = setDataQualityAccessSchema.parse(req.body);
+
+    const user = await prisma.user.findFirst({ where: { id: userId, project_id: req.user.project_id } });
+    if (!user) return res.status(404).json({ error: "User not found" });
+    if (![ROLES.PROJECT_LEAD, ROLES.CASU_LEAD].includes(user.role)) {
+      return res.status(400).json({ error: "Data Quality access can only be granted to a Project Lead or CASU Lead" });
+    }
+
+    const updated = await prisma.user.update({ where: { id: userId }, data: { can_view_data_quality } });
+    res.json({ user: { id: updated.id, can_view_data_quality: updated.can_view_data_quality } });
+  } catch (err) {
+    if (err.name === "ZodError") {
+      return res.status(400).json({ error: "Body must include can_view_data_quality as a boolean" });
     }
     next(err);
   }

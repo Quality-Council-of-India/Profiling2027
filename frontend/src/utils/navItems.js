@@ -102,8 +102,11 @@ export function getNavItems(user) {
       to: "/admin/data-quality",
       label: "Data Quality",
       Icon: FlagIcon,
-      show: isAdmin,
-      tourText: "Peer evaluations with signs of being low-effort or self-contradictory, flagged for a quick review.",
+      // Admin always; a Project Lead/CASU Lead only once the Master Admin
+      // grants it via Manage Admin Access (user.can_view_data_quality) —
+      // see access.js canViewDataQuality on the API side.
+      show: isAdmin || (isLead && user.can_view_data_quality),
+      tourText: "Evaluations with signs of being low-effort or self-contradictory, flagged for a quick review.",
     },
   ];
 }

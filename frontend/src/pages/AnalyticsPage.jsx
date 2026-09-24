@@ -499,15 +499,15 @@ export default function AnalyticsPage() {
                   many Strength vs. Area-of-Improvement tags they received, pooled across your selected weeks. This
                   is a simple formula, not an AI/sentiment model — there isn't one available in this stack.
                 </p>
-                <p className="font-mono text-[11px] bg-white/60 border border-blue-100 rounded px-2 py-1.5 leading-relaxed">
-                  trajectorySignal = (improved − declined) / scoredCount, where scoredCount = every peer response
-                  EXCEPT "Not Applicable" ones (first-time pairings with nothing to compare against) — a "Stayed
-                  the Same" answer IS counted in scoredCount, it just contributes 0 to the numerator, so it pulls
-                  the signal toward neutral rather than being ignored.
-                  <br />
-                  tagSignal = (strengthTags − weaknessTags) / (strengthTags + weaknessTags)
-                  <br />
-                  sentiment = 0.5 × trajectorySignal + 0.5 × tagSignal
+                <div className="bg-white/60 border border-blue-100 rounded px-3 py-3 space-y-3">
+                  <Equation lhs="trajectorySignal" num="improved − declined" den="scoredCount" />
+                  <Equation lhs="tagSignal" num="strengthTags − weaknessTags" den="strengthTags + weaknessTags" />
+                  <Equation lhs="sentiment" rhs="0.5 · trajectorySignal + 0.5 · tagSignal" />
+                </div>
+                <p>
+                  scoredCount is every peer response EXCEPT "Not Applicable" ones (first-time pairings with
+                  nothing to compare against) — a "Stayed the Same" answer IS counted in scoredCount, it just
+                  contributes 0 to the numerator, so it pulls the signal toward neutral rather than being ignored.
                 </p>
                 <p>
                   The four quadrants split each axis at the <strong>midpoint by rank</strong> of whoever's currently
@@ -1024,6 +1024,33 @@ function CalcGuide({ children }) {
         {show ? "Hide guide" : "How is this calculated?"}
       </button>
       {show && <div className="mt-2 text-xs text-slate-600 bg-blue-50 border border-blue-100 rounded-lg p-3 space-y-1.5">{children}</div>}
+    </div>
+  );
+}
+
+/** A single textbook-style fraction: numerator over denominator, divided by a rule. */
+function Frac({ num, den }) {
+  return (
+    <span className="inline-flex flex-col items-center align-middle mx-1 text-center leading-tight not-italic">
+      <span className="px-1 whitespace-nowrap">{num}</span>
+      <span className="border-t border-slate-500 w-full px-1 whitespace-nowrap">{den}</span>
+    </span>
+  );
+}
+
+/**
+ * One line of a formula, typeset like a textbook equation rather than a
+ * plain-text `a = b / c` string — italic serif for the named quantities
+ * (the usual math-notation convention), upright for operators/numbers.
+ * Pass either `rhs` (a plain right-hand side) or `num`+`den` (rendered as
+ * a stacked fraction via Frac).
+ */
+function Equation({ lhs, rhs, num, den }) {
+  return (
+    <div className="flex items-center flex-wrap gap-1.5 font-serif italic text-[13px] text-slate-700">
+      <span>{lhs}</span>
+      <span className="not-italic">=</span>
+      {rhs ? <span className="not-italic">{rhs}</span> : <Frac num={num} den={den} />}
     </div>
   );
 }

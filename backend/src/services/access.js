@@ -156,6 +156,17 @@ export function canViewTrajectoryMismatches(requester) {
   return requester.role === ROLES.ADMIN && (requester.is_master_admin || requester.can_view_trajectory_mismatches);
 }
 
+/**
+ * Can `requester` open the Admin Panel's Data Quality tab? Every Admin,
+ * always. A Project Lead or CASU Lead only once the Master Admin has
+ * granted it to them specifically (can_view_data_quality) — see
+ * setDataQualityAccess. Every other role: never.
+ */
+export function canViewDataQuality(requester) {
+  if (requester.role === ROLES.ADMIN) return true;
+  return [ROLES.PROJECT_LEAD, ROLES.CASU_LEAD].includes(requester.role) && requester.can_view_data_quality;
+}
+
 /** Can `requester` open/close weeks or manage the roster? */
 export function isAdmin(requester) {
   return requester.role === ROLES.ADMIN;

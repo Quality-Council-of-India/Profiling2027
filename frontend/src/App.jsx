@@ -85,7 +85,11 @@ export default function App() {
         <Route
           path="/admin/data-quality"
           element={
-            <ProtectedRoute roles={["admin"]}>
+            // Broad gate here (same pattern as /compliance) — the finer
+            // "has this Project Lead/CASU Lead actually been granted
+            // access" check happens inside the page via the API's 403,
+            // since it depends on a per-user flag, not just role.
+            <ProtectedRoute roles={["admin", "casu_lead", "project_lead"]}>
               <DataQualityPage />
             </ProtectedRoute>
           }
