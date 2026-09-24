@@ -222,7 +222,7 @@ export async function getQuadrantData(projectId, weekIds, scope, field) {
         role: u.role,
         field: effectiveField(u, weekIds),
         performance: Math.round(avgPerformance * 100) / 100, // X axis, out of 49
-        sentiment: Math.round(sentiment * 100) / 100, // Y axis, -1..1
+        sentiment: Math.round(sentiment * 100) / 100, // Y axis, [-1, 1]
         // Raw ingredients behind `sentiment`, for a hover breakdown on the
         // Quadrant chart — not used for plotting, just for transparency.
         breakdown: {
