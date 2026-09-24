@@ -82,7 +82,14 @@ export const analyticsApi = {
 };
 
 export const dataQualityApi = {
-  flags: (weekId) => api.get(`/data-quality/flags${weekId ? `?weekId=${weekId}` : ""}`).then((r) => r.data),
+  flags: (filters = {}) => {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(filters)) {
+      if (value) params.set(key, value);
+    }
+    const qs = params.toString();
+    return api.get(`/data-quality/flags${qs ? `?${qs}` : ""}`).then((r) => r.data);
+  },
 };
 
 export const adminApi = {
@@ -105,6 +112,8 @@ export const adminApi = {
   setUserField: (userId, field) => api.patch(`/admin/users/${userId}/field`, { field }).then((r) => r.data),
   setAdminPermissions: (userId, permissions) =>
     api.patch(`/admin/admins/${userId}/permissions`, permissions).then((r) => r.data),
+  setDataQualityAccess: (userId, can_view_data_quality) =>
+    api.patch(`/admin/users/${userId}/data-quality-access`, { can_view_data_quality }).then((r) => r.data),
   sendBroadcastEmail: (payload) => api.post("/admin/broadcast-email", payload).then((r) => r.data),
   listEmailBroadcasts: () => api.get("/admin/broadcast-email").then((r) => r.data.broadcasts),
   setUserPassword: (userId, password) =>

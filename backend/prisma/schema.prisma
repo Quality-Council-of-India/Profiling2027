@@ -139,6 +139,11 @@ model User {
   // once explicitly granted here. Project Leads and CASU Leads never see
   // it regardless of this flag; it only ever applies to Admin accounts.
   can_view_trajectory_mismatches Boolean @default(false)
+  // Same idea as can_view_trajectory_mismatches, but for a non-Admin role:
+  // the Data Quality tab is Admin-only by default; a Project Lead or CASU
+  // Lead sees it only once the Master Admin grants this per-user. Has no
+  // effect for any other role (Admin already sees the tab regardless).
+  can_view_data_quality          Boolean @default(false)
 
   project Project @relation(fields: [project_id], references: [id], onDelete: Cascade)
 

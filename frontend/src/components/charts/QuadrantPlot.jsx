@@ -53,13 +53,16 @@ export default function QuadrantPlot({ points, height = 280 }) {
     const b = p.breakdown;
     if (b) {
       const stayedSame = b.scoredTrajectoryCount - b.improved - b.declined;
+      const tagTotal = b.strengthTagCount + b.weaknessTagCount;
       lines.push(
         `Performance: ${p.performance.toFixed(1)}/49 — avg of ${b.peerResponseCount} peer response${b.peerResponseCount === 1 ? "" : "s"} this range`,
         "",
         `Sentiment: ${p.sentiment.toFixed(2)} (-1..1)`,
-        `  Trajectory: ${b.improved} improved, ${b.declined} declined, ${stayedSame} stayed the same (of ${b.scoredTrajectoryCount} scored) -> signal ${b.trajectorySignal.toFixed(2)}`,
-        `  Tags: ${b.strengthTagCount} strength, ${b.weaknessTagCount} improvement-area -> signal ${b.tagSignal.toFixed(2)}`,
-        `  sentiment = 0.5x${b.trajectorySignal.toFixed(2)} + 0.5x${b.tagSignal.toFixed(2)} = ${p.sentiment.toFixed(2)}`
+        `  Trajectory: ${b.improved} improved, ${b.declined} declined, ${stayedSame} stayed the same (of ${b.scoredTrajectoryCount} scored)`,
+        `  trajectorySignal = (${b.improved} - ${b.declined}) / ${b.scoredTrajectoryCount} = ${b.trajectorySignal.toFixed(2)}`,
+        `  Tags: ${b.strengthTagCount} strength, ${b.weaknessTagCount} improvement-area`,
+        `  tagSignal = (${b.strengthTagCount} - ${b.weaknessTagCount}) / (${b.strengthTagCount} + ${b.weaknessTagCount}) = ${tagTotal ? (b.strengthTagCount - b.weaknessTagCount) : 0}/${tagTotal} = ${b.tagSignal.toFixed(2)}`,
+        `  sentiment = 0.5×${b.trajectorySignal.toFixed(2)} + 0.5×${b.tagSignal.toFixed(2)} = ${p.sentiment.toFixed(2)}`
       );
     } else {
       lines.push(`Performance: ${p.performance.toFixed(1)}/49`, `Sentiment: ${p.sentiment.toFixed(2)} (-1..1)`);

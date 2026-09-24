@@ -12,6 +12,7 @@ import {
   setUserField,
   setUserPassword,
   setAdminPermissions,
+  setDataQualityAccess,
   sendUserPasswordReset,
   previewLoginCredentialsRecipients,
   sendLoginCredentialsToAll,
@@ -72,6 +73,7 @@ router.patch(
   uploadUserPhoto
 );
 router.patch("/admins/:id/permissions", authenticate, requireRole(ROLES.ADMIN), requireMasterAdmin, setAdminPermissions);
+router.patch("/users/:id/data-quality-access", authenticate, requireRole(ROLES.ADMIN), requireMasterAdmin, setDataQualityAccess);
 router.post("/users/:id/send-reset", authenticate, requireRole(ROLES.ADMIN), requireAdminAccess("passwords"), sendUserPasswordReset);
 router.get("/users/send-credentials-all/preview", authenticate, requireRole(ROLES.ADMIN), requireAdminAccess("passwords"), previewLoginCredentialsRecipients);
 router.post("/users/send-credentials-all", authenticate, requireRole(ROLES.ADMIN), requireAdminAccess("passwords"), sendLoginCredentialsToAll);

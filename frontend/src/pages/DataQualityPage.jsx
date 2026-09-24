@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { dataQualityApi, weeksApi } from "../api/endpoints.js";
 import { Card, Spinner, ErrorBanner, EmptyState, Badge, RefreshButton } from "../components/ui.jsx";
-import { ROLE_LABELS, ROLE_COLORS, PARAM_FIELDS, TRAJECTORY_LABELS } from "../utils/constants.js";
+import { ROLE_LABELS, ROLE_COLORS, PARAM_FIELDS, TRAJECTORY_LABELS, FIELDS } from "../utils/constants.js";
 import { FlagIcon } from "../components/icons.jsx";
 
 const SIGNAL_LABELS = {
@@ -12,16 +12,40 @@ const SIGNAL_LABELS = {
   junkSuggestion: "Non-substantive suggestion",
 };
 
+const ROLE_OPTIONS = Object.entries(ROLE_LABELS).filter(([k]) => k !== "admin");
+
+const SIGNAL_OPTIONS = [
+  { value: "", label: "Any signal" },
+  { value: "floorFlat", label: "Floor-flat scores" },
+  { value: "contradictoryPair", label: "Contradictory tags" },
+  { value: "mismatch", label: "Extreme score + opposite trajectory" },
+];
+
+const DEFAULT_FILTERS = { weekId: "", evalType: "peer", name: "", role: "", field: "", signal: "" };
+
 export default function DataQualityPage() {
   const queryClient = useQueryClient();
-  const [weekId, setWeekId] = useState("");
+  const [filters, setFilters] = useState(DEFAULT_FILTERS);
+  const [nameInput, setNameInput] = useState("");
   const [expandedId, setExpandedId] = useState(null);
 
   const weeksQuery = useQuery({ queryKey: ["weeks"], queryFn: weeksApi.list });
   const flagsQuery = useQuery({
-    queryKey: ["dataQualityFlags", weekId],
-    queryFn: () => dataQualityApi.flags(weekId || undefined),
+    queryKey: ["dataQualityFlags", filters],
+    queryFn: () => dataQualityApi.flags(filters),
   });
+
+  function setFilter(key, value) {
+    setFilters((f) => ({ ...f, [key]: value }));
+  }
+
+  function applyName(e) {
+    e.preventDefault();
+    setFilter("name", nameInput.trim());
+  }
+
+  const hasActiveFilters =
+    filters.weekId || filters.evalType !== "peer" || filters.name || filters.role || filters.field || filters.signal;
 
   return (
     <div className="space-y-6">
@@ -32,8 +56,8 @@ export default function DataQualityPage() {
             Data Quality
           </h1>
           <p className="text-sm text-slate-500">
-            Peer evaluation submissions with internal signs of being low-effort or self-contradictory — a review
-            list, not proof of anything wrong. Nothing here is auto-corrected or excluded from scoring.
+            Evaluation submissions with internal signs of being low-effort or self-contradictory — a review list,
+            not proof of anything wrong. Nothing here is auto-corrected or excluded from scoring.
           </p>
         </div>
         <RefreshButton
@@ -45,44 +69,137 @@ export default function DataQualityPage() {
 
       <CalcGuide />
 
-      <div className="flex items-center gap-2">
-        <label htmlFor="dq-week-filter" className="text-xs font-medium text-slate-600">
-          Week:
-        </label>
-        <select
-          id="dq-week-filter"
-          value={weekId}
-          onChange={(e) => setWeekId(e.target.value)}
-          className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-standard"
-        >
-          <option value="">All weeks</option>
-          {(weeksQuery.data || [])
-            .filter((w) => w.status !== "upcoming")
-            .map((w) => (
-              <option key={w.id} value={w.id}>
-                {w.label}
-              </option>
+      <div className="flex flex-wrap items-end gap-3">
+        <div>
+          <label htmlFor="dq-week-filter" className="block text-[11px] font-medium text-slate-500 mb-1">Week</label>
+          <select
+            id="dq-week-filter"
+            value={filters.weekId}
+            onChange={(e) => setFilter("weekId", e.target.value)}
+            className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-standard"
+          >
+            <option value="">All weeks</option>
+            {(weeksQuery.data || [])
+              .filter((w) => w.status !== "upcoming")
+              .map((w) => (
+                <option key={w.id} value={w.id}>{w.label}</option>
+              ))}
+          </select>
+        </div>
+
+        <div>
+          <label htmlFor="dq-type-filter" className="block text-[11px] font-medium text-slate-500 mb-1">Evaluation type</label>
+          <select
+            id="dq-type-filter"
+            value={filters.evalType}
+            onChange={(e) => setFilter("evalType", e.target.value)}
+            className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-standard"
+          >
+            <option value="peer">Peer evaluations</option>
+            <option value="self">Self evaluations</option>
+          </select>
+        </div>
+
+        <div>
+          <label htmlFor="dq-role-filter" className="block text-[11px] font-medium text-slate-500 mb-1">Role</label>
+          <select
+            id="dq-role-filter"
+            value={filters.role}
+            onChange={(e) => setFilter("role", e.target.value)}
+            className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-standard"
+          >
+            <option value="">Any role</option>
+            {ROLE_OPTIONS.map(([k, label]) => (
+              <option key={k} value={k}>{label}</option>
             ))}
-        </select>
+          </select>
+        </div>
+
+        <div>
+          <label htmlFor="dq-field-filter" className="block text-[11px] font-medium text-slate-500 mb-1">Field</label>
+          <select
+            id="dq-field-filter"
+            value={filters.field}
+            onChange={(e) => setFilter("field", e.target.value)}
+            className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-standard"
+          >
+            <option value="">Any field</option>
+            {FIELDS.map((f) => (
+              <option key={f} value={f}>{f}</option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label htmlFor="dq-signal-filter" className="block text-[11px] font-medium text-slate-500 mb-1">Signal</label>
+          <select
+            id="dq-signal-filter"
+            value={filters.signal}
+            onChange={(e) => setFilter("signal", e.target.value)}
+            className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-standard"
+          >
+            {SIGNAL_OPTIONS.map((s) => (
+              <option key={s.value} value={s.value}>{s.label}</option>
+            ))}
+          </select>
+        </div>
+
+        <form onSubmit={applyName} className="flex items-end gap-1.5">
+          <div>
+            <label htmlFor="dq-name-filter" className="block text-[11px] font-medium text-slate-500 mb-1">Name</label>
+            <input
+              id="dq-name-filter"
+              type="text"
+              value={nameInput}
+              onChange={(e) => setNameInput(e.target.value)}
+              placeholder="Evaluator or evaluatee…"
+              className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-standard w-44"
+            />
+          </div>
+          <button
+            type="submit"
+            className="px-3 py-1.5 rounded-lg text-xs font-medium border border-slate-300 text-slate-600 hover:bg-slate-50 transition-standard"
+          >
+            Search
+          </button>
+        </form>
+
+        {hasActiveFilters && (
+          <button
+            onClick={() => {
+              setFilters(DEFAULT_FILTERS);
+              setNameInput("");
+            }}
+            className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-500 hover:text-slate-700 transition-standard"
+          >
+            Clear filters
+          </button>
+        )}
       </div>
 
       <Card className="p-5">
         {flagsQuery.isLoading ? (
           <Spinner />
         ) : flagsQuery.isError ? (
-          <ErrorBanner message="Failed to load Data Quality flags" />
+          <ErrorBanner
+            message={
+              flagsQuery.error?.response?.status === 403
+                ? "You don't have access to Data Quality — ask your Master Admin to grant it."
+                : "Failed to load Data Quality flags"
+            }
+          />
         ) : flagsQuery.data.flagged.length === 0 ? (
           <EmptyState
             icon="✓"
             title="Nothing flagged"
-            message={`Checked ${flagsQuery.data.totalSubmissionsChecked} peer evaluation${
+            message={`Checked ${flagsQuery.data.totalSubmissionsChecked} evaluation${
               flagsQuery.data.totalSubmissionsChecked === 1 ? "" : "s"
-            } — none tripped a data-quality signal.`}
+            } matching these filters — none tripped a data-quality signal.`}
           />
         ) : (
           <>
             <p className="text-xs text-slate-500 mb-4">
-              {flagsQuery.data.flagged.length} of {flagsQuery.data.totalSubmissionsChecked} peer evaluations flagged —
+              {flagsQuery.data.flagged.length} of {flagsQuery.data.totalSubmissionsChecked} evaluations flagged —
               sorted by how many signals fired, most recent first within each.
             </p>
             <div className="space-y-3">
@@ -115,9 +232,18 @@ function FlagRow({ f, expanded, onToggle }) {
       <button onClick={onToggle} className="w-full text-left">
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <div className="flex items-center gap-1.5 flex-wrap text-sm">
-            <PersonBadge user={f.evaluator} />
-            <span className="text-slate-400">→</span>
-            <PersonBadge user={f.evaluatee} />
+            {f.eval_type === "self" ? (
+              <>
+                <span className="text-slate-400 text-xs">Self:</span>
+                <PersonBadge user={f.evaluatee} />
+              </>
+            ) : (
+              <>
+                <PersonBadge user={f.evaluator} />
+                <span className="text-slate-400">→</span>
+                <PersonBadge user={f.evaluatee} />
+              </>
+            )}
           </div>
           <span className="text-xs text-slate-400 whitespace-nowrap">
             {f.week?.label} · Total {f.total}/49 · {TRAJECTORY_LABELS[f.trajectory] || f.trajectory}
@@ -183,13 +309,14 @@ function CalcGuide() {
       {show && (
         <div className="mt-2 text-xs text-slate-600 bg-blue-50 border border-blue-100 rounded-lg p-3 space-y-1.5">
           <p>
-            A peer evaluation is flagged when at least one of 3 "strong" signals fires: all 7 quantitative
-            parameters given the same value AND that value is 1 or 2 (a perfectly flat score at the bottom of the
-            scale); a strength tag and a weakness tag selected together that describe the exact same underlying
-            thing from opposite directions (e.g. "Manages work efficiently and consistently meets deadlines" and
-            "Needs to improve time management and meet deadlines" in the same submission); or an extreme total
-            score (≤10 or ≥46 out of 49) paired with a trajectory claim in the opposite direction ("Improved" at
-            the floor, or "Declined" at the ceiling).
+            An evaluation is flagged when at least one of 3 "strong" signals fires: all 7 quantitative parameters
+            given the same value AND that value is 1 or 2 (a perfectly flat score at the bottom of the scale); a
+            strength tag and a weakness tag selected together that describe the exact same underlying thing from
+            opposite directions (e.g. "Manages work efficiently and consistently meets deadlines" and "Needs to
+            improve time management and meet deadlines" in the same submission); or an extreme total score (≤10 or
+            ≥46 out of 49) paired with a trajectory claim in the opposite direction ("Improved" at the floor, or
+            "Declined" at the ceiling). These signals are generic to any evaluation — switch "Evaluation type" above
+            to check Self-Evaluations the same way.
           </p>
           <p>
             A non-substantive improvement suggestion ("Kk", "Nothing", "-") never triggers a flag on its own — it's

@@ -65,21 +65,48 @@ function detectSignals(row) {
   return { floorFlat, contradictoryPair, mismatch, junkSuggestion, total };
 }
 
+// Which of the 3 strong signals a `?signal=` filter value corresponds to —
+// "any" (default) means "at least one", matching the base flagging rule.
+const SIGNAL_FILTER_KEYS = {
+  floorFlat: (s) => s.floorFlat,
+  contradictoryPair: (s) => !!s.contradictoryPair,
+  mismatch: (s) => s.mismatch,
+};
+
 /**
- * Returns every peer evaluation (optionally narrowed to one week) with at
- * least one of the 3 "strong" signals — a floor-flat score, a
- * contradictory strength/weakness tag pair, or an extreme-score/trajectory
- * mismatch. A non-substantive improvement suggestion never triggers a flag
- * by itself (too common — ~46% of ALL submissions — to mean much alone),
- * but is reported as corroborating context once a strong signal has
- * already fired. Calibrated against this project's real Week 1-5 data:
- * this threshold flags ~6.7% of real submissions.
+ * Returns every evaluation of the given type (peer by default; optionally
+ * narrowed to one week, and/or filtered by evaluator/evaluatee name, role,
+ * field, or which specific signal fired) with at least one of the 3
+ * "strong" signals — a floor-flat score, a contradictory strength/weakness
+ * tag pair, or an extreme-score/trajectory mismatch. A non-substantive
+ * improvement suggestion never triggers a flag by itself (too common —
+ * ~46% of ALL submissions — to mean much alone), but is reported as
+ * corroborating context once a strong signal has already fired.
+ * Calibrated against this project's real Week 1-5 data: this threshold
+ * flags ~6.7% of real peer-evaluation submissions.
+ *
+ * For a self-evaluation, evaluator and evaluatee are the same person
+ * (see evaluations.controller.js) — the signals themselves are generic to
+ * any evaluation row and need no special-casing, only the frontend's
+ * display differs (a self row shows one person, not "A -> B").
  */
-export async function getDataQualityFlags(projectId, weekId) {
+export async function getDataQualityFlags(projectId, weekId, evalType = "peer", filters = {}) {
+  const { name, role, field, signal } = filters;
+  const personMatch = (extra) => ({
+    ...(name ? { name: { contains: name, mode: "insensitive" } } : {}),
+    ...(role ? { role } : {}),
+    ...(field ? { field } : {}),
+    ...extra,
+  });
+  const personFilterActive = Boolean(name || role || field);
+
   const rows = await prisma.evaluation.findMany({
     where: {
-      eval_type: "peer",
+      eval_type: evalType,
       week: { project_id: projectId, ...(weekId ? { id: weekId } : {}) },
+      ...(personFilterActive
+        ? { OR: [{ evaluator: personMatch() }, { evaluatee: personMatch() }] }
+        : {}),
     },
     include: {
       week: { select: { id: true, label: true, week_number: true } },
@@ -89,6 +116,8 @@ export async function getDataQualityFlags(projectId, weekId) {
     orderBy: { submitted_at: "desc" },
   });
 
+  const signalFilter = signal && signal !== "any" ? SIGNAL_FILTER_KEYS[signal] : null;
+
   const flagged = [];
   for (const row of rows) {
     const signals = detectSignals(row);
@@ -96,9 +125,11 @@ export async function getDataQualityFlags(projectId, weekId) {
       Boolean
     ).length;
     if (strongSignalCount === 0) continue;
+    if (signalFilter && !signalFilter(signals)) continue;
 
     flagged.push({
       id: row.id,
+      eval_type: row.eval_type,
       week: row.week,
       evaluator: row.evaluator,
       evaluatee: row.evaluatee,
