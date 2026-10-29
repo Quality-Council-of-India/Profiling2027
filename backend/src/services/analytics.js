@@ -1210,19 +1210,32 @@ const HALL_OF_RECOGNITION_ROLES = [ROLES.PROFILER, ROLES.GROUP_ANCHOR, ROLES.CAS
  * Hall of Recognition — per closed week (in order), the top Total Peer
  * Score scorer for each of Profiler/Group Anchor/CASU Anchor, irrespective
  * of field, plus — from the 2nd closed week onward — a single cross-role
- * "Overall Star Performer": whoever has the highest CUMULATIVE average
- * role-normalized percentile across every closed week completed so far.
- * Each week, a person's raw Total Peer Score is first converted into a
- * percentile against only their own role's scores that week
- * (rolePercentileMap) — this is what lets the Overall Star Performer be
- * fairly compared across roles that are structurally scored by different,
- * more-or-less generous evaluator pools (see peerMapping.js). Each
- * person's average is over their own scored weeks only (not diluted by
- * weeks before they joined), matching how the Combined Score Sheet already
- * averages per person. The raw average Total Peer Score is still carried
- * alongside (avgTotalPeer) for display, but the percentile average
- * (avgPercentile) is what actually decides the winner.
+ * "Overall Star Performer": whoever has the highest average role-
+ * normalized percentile over a TRAILING 3-CLOSED-WEEK WINDOW (this week
+ * and the 2 before it, or fewer at the start of the cycle). Each week, a
+ * person's raw Total Peer Score is first converted into a percentile
+ * against only their own role's scores that week (rolePercentileMap) —
+ * this is what lets the Overall Star Performer be fairly compared across
+ * roles that are structurally scored by different, more-or-less generous
+ * evaluator pools (see peerMapping.js).
+ *
+ * This used to average across EVERY closed week since the start of the
+ * cycle, which made the title effectively permanent once someone built a
+ * strong enough lead — checked against this project's real Week 1-10
+ * data before switching: the all-time version never changed winner once
+ * from Week 3 through Week 10, while a trailing-3-week window produced 2
+ * genuine changes over that same span (and a trailing-4 window only 1) —
+ * enough to let a recent standout week actually show up here, without
+ * being so short a window that it just duplicates the weekly
+ * Top Profiler/Group Anchor/CASU Anchor cards above. A person's average
+ * is still over their own SCORED weeks within that window only (not
+ * diluted by a week they weren't evaluated in), and the raw average Total
+ * Peer Score over that same window is still carried alongside
+ * (avgTotalPeer) for display, but the percentile average (avgPercentile)
+ * is what actually decides the winner.
  */
+const OVERALL_STAR_WINDOW_WEEKS = 3;
+
 export async function getHallOfRecognition(projectId) {
   const closedWeeks = await prisma.week.findMany({
     where: { project_id: projectId, status: "closed" },
@@ -1250,7 +1263,11 @@ export async function getHallOfRecognition(projectId) {
     scoresByWeek.get(s.week_id).push(s);
   }
 
-  const cumulative = new Map(); // user_id -> { sum, count, name, role, field }
+  // user_id -> Map<closedWeekIndex, { totalPeer, percentile }> — sparse, one
+  // entry per week that person actually has a score in, so a trailing
+  // window can tell "not scored that week" apart from "scored 0".
+  const history = new Map();
+  const userInfo = new Map(); // user_id -> { name, role, field, photo_url }
   const weeksOut = [];
 
   closedWeeks.forEach((week, index) => {
@@ -1282,41 +1299,43 @@ export async function getHallOfRecognition(projectId) {
 
     for (const s of weekScores) {
       const uid = s.user.id;
-      if (!cumulative.has(uid)) {
-        cumulative.set(uid, {
-          sum: 0,
-          count: 0,
-          percentileSum: 0,
-          percentileCount: 0,
-          name: s.user.name,
-          role: s.user.role,
-          field: s.user.field,
-          photo_url: s.user.photo_url,
-        });
+      if (!userInfo.has(uid)) {
+        userInfo.set(uid, { name: s.user.name, role: s.user.role, field: s.user.field, photo_url: s.user.photo_url });
       }
-      const entry = cumulative.get(uid);
-      entry.sum += Number(s.total_peer);
-      entry.count += 1;
-      entry.percentileSum += percentileByUserId.get(uid) ?? 50;
-      entry.percentileCount += 1;
+      if (!history.has(uid)) history.set(uid, new Map());
+      history.get(uid).set(index, { totalPeer: Number(s.total_peer), percentile: percentileByUserId.get(uid) ?? 50 });
     }
 
     let overallStar = null;
     if (index >= 1) {
-      for (const entry of cumulative.values()) {
+      // Can't look back further than the cycle itself has gone on so far —
+      // same shrink-to-fit idea as Math.min(MIN_WEEKS_FOR_CROSS_ROLE_RANKING,
+      // weekIds.length) in getRankings.
+      const windowSize = Math.min(OVERALL_STAR_WINDOW_WEEKS, index + 1);
+      const windowStart = index - windowSize + 1;
+      const floor = Math.min(MIN_WEEKS_FOR_CROSS_ROLE_RANKING, windowSize);
+
+      for (const [uid, weekMap] of history) {
+        const inWindow = [];
+        for (let i = windowStart; i <= index; i++) {
+          const rec = weekMap.get(i);
+          if (rec) inWindow.push(rec);
+        }
         // Same reasoning as MIN_WEEKS_FOR_CROSS_ROLE_RANKING in getRankings:
-        // a brand-new joiner's first scored week alone shouldn't be able to
-        // crown them Overall Star Performer.
-        if (entry.percentileCount < MIN_WEEKS_FOR_CROSS_ROLE_RANKING) continue;
-        const avgPercentile = Math.round((entry.percentileSum / entry.percentileCount) * 100) / 100;
+        // a single scored week within the window alone shouldn't be able to
+        // crown someone Overall Star Performer.
+        if (inWindow.length < floor) continue;
+
+        const avgPercentile = round2(inWindow.reduce((a, r) => a + r.percentile, 0) / inWindow.length);
         if (!overallStar || avgPercentile > overallStar.avgPercentile) {
+          const info = userInfo.get(uid);
           overallStar = {
-            name: entry.name,
-            role: entry.role,
-            field: entry.field,
-            photo_url: entry.photo_url,
+            name: info.name,
+            role: info.role,
+            field: info.field,
+            photo_url: info.photo_url,
             avgPercentile,
-            avgTotalPeer: Math.round((entry.sum / entry.count) * 100) / 100,
+            avgTotalPeer: round2(inWindow.reduce((a, r) => a + r.totalPeer, 0) / inWindow.length),
           };
         }
       }

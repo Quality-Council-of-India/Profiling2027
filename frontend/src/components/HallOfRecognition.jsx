@@ -9,9 +9,9 @@ import { ACCENT } from "../utils/constants.js";
  * Per closed week: the Total-Peer-Score top scorer for each of
  * Profiler/Group Anchor/CASU Anchor (irrespective of field), plus — from
  * the 2nd closed week onward — a single cross-role Overall Star Performer
- * based on cumulative average ROLE-NORMALIZED PERCENTILE (not raw score)
- * across every closed week so far — see getHallOfRecognition. Most recent
- * week first.
+ * based on a TRAILING 3-CLOSED-WEEK average ROLE-NORMALIZED PERCENTILE
+ * (not raw score, and not all-time) — see getHallOfRecognition. Most
+ * recent week first.
  */
 export default function HallOfRecognition() {
   const query = useQuery({ queryKey: ["hallOfRecognition"], queryFn: analyticsApi.hallOfRecognition });
@@ -72,7 +72,7 @@ function RecognitionCell({ winner, isOverall = false }) {
   }
   const score = isOverall ? winner.avgPercentile : winner.totalPeer;
   const scoreTitle = isOverall
-    ? `Avg role-normalized percentile — raw avg Total Peer Score: ${winner.avgTotalPeer.toFixed(1)}`
+    ? `Trailing 3-week avg role-normalized percentile — raw avg Total Peer Score over that window: ${winner.avgTotalPeer.toFixed(1)}`
     : undefined;
   return (
     <td className="px-3 py-2.5">

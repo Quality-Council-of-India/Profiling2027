@@ -25,8 +25,8 @@ export default function HallOfRecognitionPage() {
             Hall of Recognition
           </h1>
           <p className="text-sm text-slate-500">
-            Top Total Peer Score by role each closed week, irrespective of field, plus a cumulative,
-            role-normalized Overall Star Performer from the 2nd closed week onward.
+            Top Total Peer Score by role each closed week, irrespective of field, plus a role-normalized Overall
+            Star Performer — a trailing 3-week window — from the 2nd closed week onward.
           </p>
         </div>
         <RefreshButton
@@ -49,23 +49,31 @@ export default function HallOfRecognitionPage() {
             <p>
               Overall Star Performer is different: each week, a person's raw score is first converted into a
               <strong> percentile within their own role</strong> (e.g. "top 10% of Profilers this week"), then
-              averaged across every closed week they've been scored in. This is what makes it comparable across
-              roles that are evaluated by structurally different, more-or-less generous groups of peers (see
-              peerMapping.js — CASU Anchors are evaluated only by their own subordinates, everyone else by a
-              broader mix), instead of raw scores where that gap alone could decide the winner.
+              averaged over a <strong>trailing 3-closed-week window</strong> — this week and the 2 before it (or
+              fewer, right at the start of the cycle). Converting to a percentile-within-role is what makes it
+              comparable across roles that are evaluated by structurally different, more-or-less generous groups of
+              peers (see peerMapping.js — CASU Anchors are evaluated only by their own subordinates, everyone else
+              by a broader mix), instead of raw scores where that gap alone could decide the winner.
+            </p>
+            <p>
+              This used to average across every closed week since the start of the cycle, which made the title
+              effectively permanent once someone built a strong enough lead — checked against real multi-week data
+              before switching: the all-time version never changed winner across 9 real weeks, while this 3-week
+              window changed it twice in that same span. A recent standout week can now actually show up here,
+              instead of being invisible against months of history.
             </p>
             <p>
               A role with fewer than 5 people in a given week (CASU Lead and Project Lead, currently 2 each) is
               compared against the whole team that week instead of its own tiny group, since a percentile from 2
-              people can only ever be exactly 0 or 100. You also need at least 2 of your own scored weeks to be
-              eligible, so a single strong or weak first week can't crown (or rule out) someone right away.
+              people can only ever be exactly 0 or 100. You also need at least 2 scored weeks within the window to
+              be eligible, so one lucky or unlucky week in isolation can't crown (or rule out) someone.
             </p>
             <p>
-              This doesn't cap any role's ceiling — being #1 in your own role every week still averages to a
-              perfect 100, for any role. What it does mean: a role with only 9 people sees much bigger percentile
-              swings from one off-week than a role with 49 people does (losing 1st place costs far more percentile
-              points in a small group), so staying #1 in a small role EVERY week is what it now takes to keep pace
-              with someone who's merely very consistently near the top of a large one.
+              This doesn't cap any role's ceiling — being #1 in your own role for all 3 weeks in the window still
+              averages to a perfect 100, for any role. A role with only 9 people does see bigger percentile swings
+              from one off-week than a role with 49 people does (losing 1st place costs far more percentile points
+              in a small group) — but with only a 3-week memory now, one off-week stops mattering again within a
+              few weeks, instead of needing to be out-averaged forever.
             </p>
           </div>
         )}
