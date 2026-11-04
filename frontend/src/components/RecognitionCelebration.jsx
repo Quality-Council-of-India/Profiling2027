@@ -5,21 +5,24 @@ import { analyticsApi } from "../api/endpoints.js";
 import { NAV, ACCENT } from "../utils/constants.js";
 
 /**
- * Checked once per app visit for every non-admin role (Admin never scores,
- * so never has a win to celebrate) — see analyticsCardSettings' sibling
- * endpoint getRecognitionCelebration for the "most recently closed week
- * only, max 3 shows" rules. Layout.jsx renders this only while
- * `!impersonating`, so an Admin's "View Portal As" preview never triggers
- * it — that's a second line of defense; the backend also refuses while
- * impersonated regardless of what the frontend sends.
+ * Checked once per portal open (fresh page load — React Router's
+ * client-side navigation doesn't remount Layout, so this never re-fires
+ * just from clicking around) for every non-admin identity, including a
+ * "View Portal As" preview — see getRecognitionCelebration for the "most
+ * recently closed week only, max 3 shows" rules, and `countTowardCap` for
+ * why a preview still shows the real celebration without spending any of
+ * the real person's 3 shows. Tracks the last user id checked (not just
+ * "ever checked") so an Admin switching View Portal As between several
+ * different winners gets a fresh check for each one, in the same session.
  */
 export default function RecognitionCelebration({ user }) {
   const [celebration, setCelebration] = useState(null);
-  const checkedRef = useRef(false);
+  const lastCheckedUserId = useRef(null);
 
   useEffect(() => {
-    if (checkedRef.current || !user || user.role === "admin") return;
-    checkedRef.current = true;
+    if (!user || user.role === "admin" || lastCheckedUserId.current === user.id) return;
+    lastCheckedUserId.current = user.id;
+    setCelebration(null);
     analyticsApi
       .recognitionCelebration()
       .then((data) => {

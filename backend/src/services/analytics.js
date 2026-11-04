@@ -1354,29 +1354,43 @@ export async function getHallOfRecognition(projectId) {
   return { weeks: weeksOut };
 }
 
-// How many separate logins get the confetti celebration for a given win
-// before it goes quiet — see getRecognitionCelebration.
+// How many separate times a user's portal session gets the confetti
+// celebration for a given win before it goes quiet — see
+// getRecognitionCelebration. Each "time" is each occasion the frontend
+// re-opens the portal (a fresh page load/reload) while authenticated as
+// that person, not a literal re-entry of credentials — the login token
+// persists for days, so most visits never touch the credentials form at all.
 export const MAX_CELEBRATION_SHOWS = 3;
 
+// Per explicit instruction, this celebration doesn't apply retroactively —
+// Weeks 1-10 already closed before this feature existed, so only Week 11
+// onward is eligible. Guards the rare edge case too: if Week 11 (or later)
+// is ever reopened for a correction, the "most recently closed" week would
+// otherwise briefly fall back to Week 10 and wrongly start celebrating it.
+const MIN_CELEBRATION_WEEK_NUMBER = 11;
+
 /**
- * Login-triggered confetti celebration: does `user` have a Hall of
- * Recognition win in the MOST RECENTLY closed week, and if so, have they
- * already seen the celebration for it 3 times? Only the latest closed week
- * is ever considered — once a newer week closes, an older win simply never
- * comes up again here, which is what gives the celebration its "valid
- * until the next week's results" lifetime without any explicit expiry.
+ * Portal-open-triggered confetti celebration: does `user` have a Hall of
+ * Recognition win in the MOST RECENTLY closed week (Week 11 or later —
+ * see MIN_CELEBRATION_WEEK_NUMBER), and if so, have they already seen the
+ * celebration for it MAX_CELEBRATION_SHOWS times? Only the latest closed
+ * week is ever considered — once a newer week closes, an older win simply
+ * never comes up again here, which is what gives the celebration its
+ * "valid until the next week's results" lifetime without any explicit
+ * expiry.
  *
- * Call site (analytics.controller.js) is expected to skip this entirely
- * for an impersonated ("View Portal As") session — that's an Admin
- * previewing the account, not the real person logging in, so it must
- * never consume one of their 3 shows or fire confetti for the Admin.
+ * `countTowardCap: false` is for an Admin's "View Portal As" preview — the
+ * Admin should still be able to see exactly what the celebration looks
+ * like, every time they preview, but that's a preview, not the real person
+ * logging in, so it must never consume one of their 3 real shows. Passing
+ * false skips both the cap check and the read-modify-write entirely.
  */
-export async function getRecognitionCelebration(projectId, userId) {
+export async function getRecognitionCelebration(projectId, userId, { countTowardCap = true } = {}) {
   const latestClosedWeek = await prisma.week.findFirst({
     where: { project_id: projectId, status: "closed" },
     orderBy: { week_number: "desc" },
   });
-  if (!latestClosedWeek) return null;
+  if (!latestClosedWeek || latestClosedWeek.week_number < MIN_CELEBRATION_WEEK_NUMBER) return null;
 
   const { weeks } = await getHallOfRecognition(projectId);
   const latest = weeks[weeks.length - 1];
@@ -1388,6 +1402,12 @@ export async function getRecognitionCelebration(projectId, userId) {
   if (latest.topCasuAnchor?.id === userId) accolades.push("Top CASU Anchor");
   if (latest.overallStar?.id === userId) accolades.push("Overall Star Performer");
   if (accolades.length === 0) return null;
+
+  const weekSummary = { id: latestClosedWeek.id, label: latestClosedWeek.label, week_number: latestClosedWeek.week_number };
+
+  if (!countTowardCap) {
+    return { week: weekSummary, accolades, timesShown: null };
+  }
 
   const existing = await prisma.recognitionCelebration.findUnique({
     where: { user_id_week_id: { user_id: userId, week_id: latestClosedWeek.id } },
@@ -1401,7 +1421,7 @@ export async function getRecognitionCelebration(projectId, userId) {
   });
 
   return {
-    week: { id: latestClosedWeek.id, label: latestClosedWeek.label, week_number: latestClosedWeek.week_number },
+    week: weekSummary,
     accolades,
     timesShown: updated.times_shown,
   };

@@ -364,15 +364,17 @@ export async function analyticsCardSettings(req, res) {
 }
 
 /**
- * Checked once per app visit (see RecognitionCelebration.jsx) — returns
+ * Checked once per portal open (see RecognitionCelebration.jsx) — returns
  * null unless the requester has a Hall of Recognition win in the most
- * recently closed week AND hasn't already seen the celebration for it 3
- * times. Always null while "View Portal As" is active (req.isImpersonating)
- * — an Admin's preview must never fire confetti for itself or spend one of
- * the real person's 3 shows.
+ * recently closed week (Week 11 onward) AND hasn't already seen the
+ * celebration for it 3 times. While "View Portal As" is active
+ * (req.isImpersonating), the Admin still sees exactly what the real person
+ * would see — `countTowardCap: false` skips the cap check and never writes,
+ * so previewing never spends one of the real person's 3 shows.
  */
 export async function recognitionCelebration(req, res) {
-  if (req.isImpersonating) return res.json({ celebration: null });
-  const celebration = await getRecognitionCelebration(req.user.project_id, req.user.id);
+  const celebration = await getRecognitionCelebration(req.user.project_id, req.user.id, {
+    countTowardCap: !req.isImpersonating,
+  });
   res.json({ celebration });
 }

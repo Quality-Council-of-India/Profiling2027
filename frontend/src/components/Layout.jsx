@@ -57,7 +57,7 @@ export default function Layout() {
         </div>
       </div>
       {showTour && <OnboardingTour user={user} onClose={() => setShowTour(false)} />}
-      {!impersonating && <RecognitionCelebration user={user} />}
+      <RecognitionCelebration user={user} />
     </div>
   );
 }
