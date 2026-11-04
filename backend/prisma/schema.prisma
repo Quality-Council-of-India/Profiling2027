@@ -75,6 +75,19 @@ model Project {
   is_active  Boolean   @default(true)
   created_at DateTime  @default(now())
 
+  // Master-Admin-only visibility switches for the Analytics tab's
+  // Team-Wide Analytics section (shared by Admin/Project Lead/CASU Lead —
+  // same set of cards for all three, just scoped differently in content).
+  // Defaulting every one to true keeps today's behavior unchanged until the
+  // Master Admin actually turns one off — see setAnalyticsCardSettings.
+  analytics_card_heatmap_enabled              Boolean @default(true)
+  analytics_card_sapa_enabled                 Boolean @default(true)
+  analytics_card_quadrant_enabled             Boolean @default(true)
+  analytics_card_parameter_alignment_enabled  Boolean @default(true)
+  analytics_card_team_tags_enabled            Boolean @default(true)
+  analytics_card_team_focus_enabled           Boolean @default(true)
+  analytics_card_team_momentum_enabled        Boolean @default(true)
+
   users                  User[]
   weeks                  Week[]
   peer_mappings          PeerMapping[]

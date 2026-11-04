@@ -13,6 +13,7 @@ import {
   setUserPassword,
   setAdminPermissions,
   setDataQualityAccess,
+  setAnalyticsCardSettings,
   sendUserPasswordReset,
   previewLoginCredentialsRecipients,
   sendLoginCredentialsToAll,
@@ -74,6 +75,7 @@ router.patch(
 );
 router.patch("/admins/:id/permissions", authenticate, requireRole(ROLES.ADMIN), requireMasterAdmin, setAdminPermissions);
 router.patch("/users/:id/data-quality-access", authenticate, requireRole(ROLES.ADMIN), requireMasterAdmin, setDataQualityAccess);
+router.patch("/analytics-card-settings", authenticate, requireRole(ROLES.ADMIN), requireMasterAdmin, setAnalyticsCardSettings);
 router.post("/users/:id/send-reset", authenticate, requireRole(ROLES.ADMIN), requireAdminAccess("passwords"), sendUserPasswordReset);
 router.get("/users/send-credentials-all/preview", authenticate, requireRole(ROLES.ADMIN), requireAdminAccess("passwords"), previewLoginCredentialsRecipients);
 router.post("/users/send-credentials-all", authenticate, requireRole(ROLES.ADMIN), requireAdminAccess("passwords"), sendLoginCredentialsToAll);

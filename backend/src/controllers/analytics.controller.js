@@ -1,5 +1,6 @@
 import { prisma } from "../utils/prisma.js";
 import { analyticsScope, canViewUser, getLockedOpenWeekIds } from "../services/access.js";
+import { pickAnalyticsCardSettings } from "../utils/analyticsCards.js";
 import {
   getFieldHeatmap,
   getSapaDistribution,
@@ -348,4 +349,15 @@ export async function dashboardSignals(req, res) {
 export async function hallOfRecognition(req, res) {
   const data = await getHallOfRecognition(req.user.project_id);
   res.json(data);
+}
+
+/**
+ * Which of the 7 Team-Wide Analytics cards the Master Admin currently has
+ * switched on — read by every role (not sensitive, and the frontend needs
+ * it before it knows whether to render each card at all). Only the Master
+ * Admin can change these — see admin.controller.js's setAnalyticsCardSettings.
+ */
+export async function analyticsCardSettings(req, res) {
+  const project = await prisma.project.findUnique({ where: { id: req.user.project_id } });
+  res.json({ settings: pickAnalyticsCardSettings(project) });
 }

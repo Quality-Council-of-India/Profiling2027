@@ -79,6 +79,7 @@ export const analyticsApi = {
   peerTrend: (userId) => api.get(`/analytics/peer-trend/${userId}`).then((r) => r.data),
   dashboardSignals: (asOfWeekId) =>
     api.get(`/analytics/dashboard-signals${asOfWeekId ? `?asOf=${asOfWeekId}` : ""}`).then((r) => r.data),
+  cardSettings: () => api.get("/analytics/card-settings").then((r) => r.data.settings),
 };
 
 export const dataQualityApi = {
@@ -114,6 +115,8 @@ export const adminApi = {
     api.patch(`/admin/admins/${userId}/permissions`, permissions).then((r) => r.data),
   setDataQualityAccess: (userId, can_view_data_quality) =>
     api.patch(`/admin/users/${userId}/data-quality-access`, { can_view_data_quality }).then((r) => r.data),
+  setAnalyticsCardSettings: (settings) =>
+    api.patch("/admin/analytics-card-settings", settings).then((r) => r.data.settings),
   sendBroadcastEmail: (payload) => api.post("/admin/broadcast-email", payload).then((r) => r.data),
   listEmailBroadcasts: () => api.get("/admin/broadcast-email").then((r) => r.data.broadcasts),
   setUserPassword: (userId, password) =>

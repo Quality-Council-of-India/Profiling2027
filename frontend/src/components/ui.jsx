@@ -144,6 +144,30 @@ export function Modal({ title, onClose, children, widthClass = "max-w-lg" }) {
   );
 }
 
+/** Compact on/off pill switch — e.g. the Master Admin's per-card Analytics visibility controls. */
+export function ToggleSwitch({ checked, onChange, disabled = false, label }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      title={label}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={`relative inline-flex items-center h-5 w-9 flex-shrink-0 rounded-full transition-standard disabled:opacity-40 disabled:cursor-not-allowed ${
+        checked ? "bg-emerald-600" : "bg-slate-300"
+      }`}
+    >
+      <span
+        className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-standard ${
+          checked ? "translate-x-[18px]" : "translate-x-1"
+        }`}
+      />
+    </button>
+  );
+}
+
 export function EmptyState({ icon = "○", title, message }) {
   return (
     <div className="flex flex-col items-center justify-center gap-2 py-12 text-center">
