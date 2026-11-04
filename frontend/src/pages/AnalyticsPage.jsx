@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { useAuth } from "../context/AuthContext.jsx";
-import { weeksApi, scoresApi, analyticsApi } from "../api/endpoints.js";
-import { Card, StatCard, Spinner, ErrorBanner, EmptyState, RefreshButton } from "../components/ui.jsx";
+import { weeksApi, scoresApi, analyticsApi, adminApi } from "../api/endpoints.js";
+import { Card, StatCard, Spinner, ErrorBanner, EmptyState, RefreshButton, ToggleSwitch } from "../components/ui.jsx";
 import WeekSelector from "../components/WeekSelector.jsx";
 import RankingCard from "../components/RankingCard.jsx";
 import FieldStandingCard from "../components/FieldStandingCard.jsx";
@@ -179,6 +179,25 @@ export default function AnalyticsPage() {
     queryFn: () => analyticsApi.teamTrajectory(selectedWeekIds),
     enabled: isAggregate && selectedWeekIds.length > 0,
   });
+
+  // Master-Admin-only visibility switches for the 7 Team-Wide Analytics
+  // cards below, shared project-wide — everyone else (other Admins,
+  // Project Leads, CASU Leads) just sees whichever cards are currently on.
+  // Defaulting a not-yet-loaded/unknown key to "on" matches the backend's
+  // own default and avoids a flash of missing cards while this loads.
+  const isMasterAdmin = !!user.is_master_admin;
+  const cardSettingsQuery = useQuery({
+    queryKey: ["analyticsCardSettings"],
+    queryFn: analyticsApi.cardSettings,
+    enabled: isAggregate,
+  });
+  const cardSettings = cardSettingsQuery.data || {};
+  const cardSettingsMutation = useMutation({
+    mutationFn: (patch) => adminApi.setAnalyticsCardSettings(patch),
+    onSuccess: (settings) => queryClient.setQueryData(["analyticsCardSettings"], settings),
+  });
+  const toggleCard = (key, current) => cardSettingsMutation.mutate({ [key]: !current });
+  const showCard = (key) => isMasterAdmin || cardSettings[key] !== false;
 
   if (weeksQuery.isLoading) return <Spinner />;
   if (weeksQuery.isError) return <ErrorBanner message="Failed to load weeks" />;
@@ -449,8 +468,18 @@ export default function AnalyticsPage() {
             </div>
           </div>
 
+          {showCard("heatmap") && (
           <Card className="p-5">
-            <h2 className="text-sm font-semibold text-slate-800 mb-1">Field-Wise Performance Heatmap (Peer Scores)</h2>
+            <div className="flex items-start justify-between gap-2 mb-1">
+              <h2 className="text-sm font-semibold text-slate-800">Field-Wise Performance Heatmap (Peer Scores)</h2>
+              {isMasterAdmin && (
+                <CardVisibilityToggle
+                  enabled={cardSettings.heatmap !== false}
+                  pending={cardSettingsMutation.isPending}
+                  onToggle={() => toggleCard("heatmap", cardSettings.heatmap !== false)}
+                />
+              )}
+            </div>
             <CalcGuide>
               <p>Each cell is the average Peer Score (1–7) for that field on that parameter.</p>
               <p>
@@ -470,10 +499,22 @@ export default function AnalyticsPage() {
               </>
             )}
           </Card>
+          )}
 
+          {(showCard("sapa") || showCard("quadrant")) && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <Card className="p-5 h-full flex flex-col">
-              <h2 className="text-sm font-semibold text-slate-800 mb-4">SAPA Distribution by Role</h2>
+            {showCard("sapa") && (
+            <Card className={`p-5 h-full flex flex-col ${!showCard("quadrant") ? "lg:col-span-2" : ""}`}>
+              <div className="flex items-start justify-between gap-2 mb-4">
+                <h2 className="text-sm font-semibold text-slate-800">SAPA Distribution by Role</h2>
+                {isMasterAdmin && (
+                  <CardVisibilityToggle
+                    enabled={cardSettings.sapa !== false}
+                    pending={cardSettingsMutation.isPending}
+                    onToggle={() => toggleCard("sapa", cardSettings.sapa !== false)}
+                  />
+                )}
+              </div>
               <CalcGuide>
                 <p>
                   Each person's SAPA Factor (their own Self score ÷ their Peer score) is averaged across your
@@ -490,8 +531,19 @@ export default function AnalyticsPage() {
                 <SapaBars rows={sapaQuery.data.byRole} />
               )}
             </Card>
-            <Card className="p-5 h-full flex flex-col">
-              <h2 className="text-sm font-semibold text-slate-800 mb-4">Quadrant Analysis — Performance vs Sentiment</h2>
+            )}
+            {showCard("quadrant") && (
+            <Card className={`p-5 h-full flex flex-col ${!showCard("sapa") ? "lg:col-span-2" : ""}`}>
+              <div className="flex items-start justify-between gap-2 mb-4">
+                <h2 className="text-sm font-semibold text-slate-800">Quadrant Analysis — Performance vs Sentiment</h2>
+                {isMasterAdmin && (
+                  <CardVisibilityToggle
+                    enabled={cardSettings.quadrant !== false}
+                    pending={cardSettingsMutation.isPending}
+                    onToggle={() => toggleCard("quadrant", cardSettings.quadrant !== false)}
+                  />
+                )}
+              </div>
               <CalcGuide>
                 <p>X-axis: each person's Total Peer Score, averaged across your selected weeks.</p>
                 <p>
@@ -528,10 +580,22 @@ export default function AnalyticsPage() {
               </CalcGuide>
               {quadrantQuery.isLoading ? <Spinner /> : quadrantQuery.isError ? <ErrorBanner message="Failed to load quadrant data" /> : <QuadrantPlot points={quadrantQuery.data.points} />}
             </Card>
+            )}
           </div>
+          )}
 
+          {showCard("parameterAlignment") && (
           <Card className="p-5">
-            <h2 className="text-sm font-semibold text-slate-800 mb-1">Per-Parameter Alignment — Self vs Peer</h2>
+            <div className="flex items-start justify-between gap-2 mb-1">
+              <h2 className="text-sm font-semibold text-slate-800">Per-Parameter Alignment — Self vs Peer</h2>
+              {isMasterAdmin && (
+                <CardVisibilityToggle
+                  enabled={cardSettings.parameterAlignment !== false}
+                  pending={cardSettingsMutation.isPending}
+                  onToggle={() => toggleCard("parameterAlignment", cardSettings.parameterAlignment !== false)}
+                />
+              )}
+            </div>
             <p className="text-xs text-slate-500 mb-2">
               For each parameter, what share of the team is Aligned, has Some Gap, or a Large Gap between their
               self-rating and how peers rated them — the same comparison as the individual scorecard, rolled up
@@ -586,10 +650,22 @@ export default function AnalyticsPage() {
               </div>
             )}
           </Card>
+          )}
 
+          {(showCard("teamTags") || showCard("teamFocus")) && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <Card className="p-5">
-              <h2 className="text-sm font-semibold text-slate-800 mb-1">Team Strengths & Growth Areas</h2>
+            {showCard("teamTags") && (
+            <Card className={`p-5 ${!showCard("teamFocus") ? "lg:col-span-2" : ""}`}>
+              <div className="flex items-start justify-between gap-2 mb-1">
+                <h2 className="text-sm font-semibold text-slate-800">Team Strengths & Growth Areas</h2>
+                {isMasterAdmin && (
+                  <CardVisibilityToggle
+                    enabled={cardSettings.teamTags !== false}
+                    pending={cardSettingsMutation.isPending}
+                    onToggle={() => toggleCard("teamTags", cardSettings.teamTags !== false)}
+                  />
+                )}
+              </div>
               <p className="text-xs text-slate-500 mb-2">Most-selected Strength and Area of Improvement tags across every peer evaluation in your selection.</p>
               <CalcGuide>
                 <p>Counts how many peer evaluations selected each tag, pooled across your selected weeks.</p>
@@ -641,9 +717,20 @@ export default function AnalyticsPage() {
                 </>
               )}
             </Card>
+            )}
 
-            <Card className="p-5">
-              <h2 className="text-sm font-semibold text-slate-800 mb-1">What the Team Should Focus On</h2>
+            {showCard("teamFocus") && (
+            <Card className={`p-5 ${!showCard("teamTags") ? "lg:col-span-2" : ""}`}>
+              <div className="flex items-start justify-between gap-2 mb-1">
+                <h2 className="text-sm font-semibold text-slate-800">What the Team Should Focus On</h2>
+                {isMasterAdmin && (
+                  <CardVisibilityToggle
+                    enabled={cardSettings.teamFocus !== false}
+                    pending={cardSettingsMutation.isPending}
+                    onToggle={() => toggleCard("teamFocus", cardSettings.teamFocus !== false)}
+                  />
+                )}
+              </div>
               <p className="text-xs text-slate-500 mb-2">
                 Every peer suggestion to "What is the single most impactful action this person could take to
                 improve?", sorted into four categories below — nothing is excluded. Peer-only.
@@ -677,10 +764,22 @@ export default function AnalyticsPage() {
                 <TeamFocusSuggestions data={teamFocusSuggestionsQuery.data} />
               )}
             </Card>
+            )}
           </div>
+          )}
 
+          {showCard("teamMomentum") && (
           <Card className="p-5">
-            <h2 className="text-sm font-semibold text-slate-800 mb-1">Team Momentum</h2>
+            <div className="flex items-start justify-between gap-2 mb-1">
+              <h2 className="text-sm font-semibold text-slate-800">Team Momentum</h2>
+              {isMasterAdmin && (
+                <CardVisibilityToggle
+                  enabled={cardSettings.teamMomentum !== false}
+                  pending={cardSettingsMutation.isPending}
+                  onToggle={() => toggleCard("teamMomentum", cardSettings.teamMomentum !== false)}
+                />
+              )}
+            </div>
             <p className="text-xs text-slate-500 mb-2">
               Share of peer Trajectory answers saying the person Improved, Stayed the Same, or Declined compared to
               the week before, pooled across your selection.
@@ -697,6 +796,7 @@ export default function AnalyticsPage() {
               <TeamMomentum data={teamTrajectoryQuery.data} />
             )}
           </Card>
+          )}
         </>
       )}
     </div>
@@ -998,6 +1098,23 @@ function TagRankBars({ items, color }) {
         </div>
       ))}
     </div>
+  );
+}
+
+/** Master-Admin-only per-card on/off switch for Team-Wide Analytics — off hides that card project-wide for every other Admin, Project Lead, and CASU Lead; the Master Admin keeps seeing it regardless, with this control, so it's never possible to lose track of what's hidden. */
+function CardVisibilityToggle({ enabled, pending, onToggle }) {
+  return (
+    <span className="flex items-center gap-1.5 flex-shrink-0">
+      <span className={`text-[10px] font-medium uppercase tracking-wide ${enabled ? "text-emerald-600" : "text-slate-400"}`}>
+        {enabled ? "Visible to all" : "Hidden"}
+      </span>
+      <ToggleSwitch
+        checked={enabled}
+        onChange={onToggle}
+        disabled={pending}
+        label={enabled ? "Hide this card from everyone else" : "Show this card to everyone"}
+      />
+    </span>
   );
 }
 

@@ -15,6 +15,7 @@ import { FIELDS } from "../utils/constants.js";
 import { notify, getActiveNonAdminIds, getAdminIds } from "../services/notifications.js";
 import { sendMail } from "../services/mailer.js";
 import { resolveRecipients, broadcastEmailBody } from "../services/broadcast.js";
+import { ANALYTICS_CARDS, ANALYTICS_CARD_KEYS, pickAnalyticsCardSettings } from "../utils/analyticsCards.js";
 
 const EXPORTABLE_TABLES = ["self_evaluations", "peer_evaluations"];
 const setPasswordSchema = z.object({ password: z.string().min(8) });
@@ -305,6 +306,11 @@ export async function setAdminPermissions(req, res, next) {
 }
 
 const setDataQualityAccessSchema = z.object({ can_view_data_quality: z.boolean() });
+const analyticsCardSettingsSchema = z
+  .object(Object.fromEntries(ANALYTICS_CARD_KEYS.map((k) => [k, z.boolean().optional()])))
+  .refine((body) => Object.values(body).some((v) => v !== undefined), {
+    message: "Provide at least one card key to update",
+  });
 
 /**
  * Master-Admin-only: grants/revokes a Project Lead or CASU Lead's VIEW
@@ -331,6 +337,31 @@ export async function setDataQualityAccess(req, res, next) {
   } catch (err) {
     if (err.name === "ZodError") {
       return res.status(400).json({ error: "Body must include can_view_data_quality as a boolean" });
+    }
+    next(err);
+  }
+}
+
+/**
+ * Master-Admin-only: switches any of the 7 Team-Wide Analytics cards on or
+ * off for the whole project at once — every other Admin, Project Lead, and
+ * CASU Lead shares this one setting (see analyticsScope in access.js: all
+ * three see the same card set, just scoped differently in content). Body
+ * is a partial object of { [cardKey]: boolean } — only the keys present are
+ * changed, so a draft can flip one card without resending all 7.
+ */
+export async function setAnalyticsCardSettings(req, res, next) {
+  try {
+    const body = analyticsCardSettingsSchema.parse(req.body);
+    const data = {};
+    for (const { key, column } of ANALYTICS_CARDS) {
+      if (body[key] !== undefined) data[column] = body[key];
+    }
+    const updated = await prisma.project.update({ where: { id: req.user.project_id }, data });
+    res.json({ settings: pickAnalyticsCardSettings(updated) });
+  } catch (err) {
+    if (err.name === "ZodError") {
+      return res.status(400).json({ error: "Body must be a partial map of analytics card keys to booleans" });
     }
     next(err);
   }
