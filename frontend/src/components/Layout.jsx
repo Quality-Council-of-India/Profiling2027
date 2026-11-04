@@ -3,6 +3,7 @@ import { Outlet, useNavigate } from "react-router-dom";
 import Sidebar from "./Sidebar.jsx";
 import TopBar from "./TopBar.jsx";
 import OnboardingTour, { hasSeenOnboarding } from "./OnboardingTour.jsx";
+import RecognitionCelebration from "./RecognitionCelebration.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { ROLE_LABELS } from "../utils/constants.js";
 
@@ -56,6 +57,7 @@ export default function Layout() {
         </div>
       </div>
       {showTour && <OnboardingTour user={user} onClose={() => setShowTour(false)} />}
+      <RecognitionCelebration user={user} />
     </div>
   );
 }

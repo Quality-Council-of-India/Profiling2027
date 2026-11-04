@@ -17,6 +17,11 @@ export async function authenticate(req, res, next) {
     }
 
     req.user = user;
+    // True while an Admin is "viewing portal as" this person (see
+    // impersonateUser) — callers that gate login-triggered, once-per-visit
+    // behavior (e.g. the Hall of Recognition celebration) check this so an
+    // Admin's preview never counts as the real person logging in.
+    req.isImpersonating = !!payload.impersonated_by;
     next();
   } catch (err) {
     return res.status(401).json({ error: "Invalid or expired token" });

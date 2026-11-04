@@ -80,6 +80,7 @@ export const analyticsApi = {
   dashboardSignals: (asOfWeekId) =>
     api.get(`/analytics/dashboard-signals${asOfWeekId ? `?asOf=${asOfWeekId}` : ""}`).then((r) => r.data),
   cardSettings: () => api.get("/analytics/card-settings").then((r) => r.data.settings),
+  recognitionCelebration: () => api.get("/analytics/recognition-celebration").then((r) => r.data.celebration),
 };
 
 export const dataQualityApi = {

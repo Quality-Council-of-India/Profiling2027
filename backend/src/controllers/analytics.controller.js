@@ -17,6 +17,7 @@ import {
   getHallOfRecognition,
   getPeerScoreTrendComparison,
   getDashboardSignals,
+  getRecognitionCelebration,
 } from "../services/analytics.js";
 
 /** Parses "?weeks=1,2,3" into a validated array of week IDs, or returns null (and responds) on failure. */
@@ -360,4 +361,20 @@ export async function hallOfRecognition(req, res) {
 export async function analyticsCardSettings(req, res) {
   const project = await prisma.project.findUnique({ where: { id: req.user.project_id } });
   res.json({ settings: pickAnalyticsCardSettings(project) });
+}
+
+/**
+ * Checked once per portal open (see RecognitionCelebration.jsx) — returns
+ * null unless the requester has a Hall of Recognition win in the most
+ * recently closed week (Week 11 onward) AND hasn't already seen the
+ * celebration for it 3 times. While "View Portal As" is active
+ * (req.isImpersonating), the Admin still sees exactly what the real person
+ * would see — `countTowardCap: false` skips the cap check and never writes,
+ * so previewing never spends one of the real person's 3 shows.
+ */
+export async function recognitionCelebration(req, res) {
+  const celebration = await getRecognitionCelebration(req.user.project_id, req.user.id, {
+    countTowardCap: !req.isImpersonating,
+  });
+  res.json({ celebration });
 }
