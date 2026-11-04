@@ -18,6 +18,7 @@ import {
   peerTrend,
   dashboardSignals,
   analyticsCardSettings,
+  recognitionCelebration,
 } from "../controllers/analytics.controller.js";
 
 const router = Router();
@@ -40,5 +41,6 @@ router.get("/hall-of-recognition", authenticate, hallOfRecognition);
 router.get("/peer-trend/:userId", authenticate, peerTrend);
 router.get("/dashboard-signals", authenticate, requireRole(ROLES.ADMIN), dashboardSignals);
 router.get("/card-settings", authenticate, analyticsCardSettings);
+router.get("/recognition-celebration", authenticate, recognitionCelebration);
 
 export default router;

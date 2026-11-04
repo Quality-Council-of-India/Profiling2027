@@ -17,6 +17,7 @@ import {
   getHallOfRecognition,
   getPeerScoreTrendComparison,
   getDashboardSignals,
+  getRecognitionCelebration,
 } from "../services/analytics.js";
 
 /** Parses "?weeks=1,2,3" into a validated array of week IDs, or returns null (and responds) on failure. */
@@ -360,4 +361,18 @@ export async function hallOfRecognition(req, res) {
 export async function analyticsCardSettings(req, res) {
   const project = await prisma.project.findUnique({ where: { id: req.user.project_id } });
   res.json({ settings: pickAnalyticsCardSettings(project) });
+}
+
+/**
+ * Checked once per app visit (see RecognitionCelebration.jsx) — returns
+ * null unless the requester has a Hall of Recognition win in the most
+ * recently closed week AND hasn't already seen the celebration for it 3
+ * times. Always null while "View Portal As" is active (req.isImpersonating)
+ * — an Admin's preview must never fire confetti for itself or spend one of
+ * the real person's 3 shows.
+ */
+export async function recognitionCelebration(req, res) {
+  if (req.isImpersonating) return res.json({ celebration: null });
+  const celebration = await getRecognitionCelebration(req.user.project_id, req.user.id);
+  res.json({ celebration });
 }

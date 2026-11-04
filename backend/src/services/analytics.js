@@ -1330,6 +1330,7 @@ export async function getHallOfRecognition(projectId) {
         if (!overallStar || avgPercentile > overallStar.avgPercentile) {
           const info = userInfo.get(uid);
           overallStar = {
+            id: uid,
             name: info.name,
             role: info.role,
             field: info.field,
@@ -1351,6 +1352,59 @@ export async function getHallOfRecognition(projectId) {
   });
 
   return { weeks: weeksOut };
+}
+
+// How many separate logins get the confetti celebration for a given win
+// before it goes quiet — see getRecognitionCelebration.
+export const MAX_CELEBRATION_SHOWS = 3;
+
+/**
+ * Login-triggered confetti celebration: does `user` have a Hall of
+ * Recognition win in the MOST RECENTLY closed week, and if so, have they
+ * already seen the celebration for it 3 times? Only the latest closed week
+ * is ever considered — once a newer week closes, an older win simply never
+ * comes up again here, which is what gives the celebration its "valid
+ * until the next week's results" lifetime without any explicit expiry.
+ *
+ * Call site (analytics.controller.js) is expected to skip this entirely
+ * for an impersonated ("View Portal As") session — that's an Admin
+ * previewing the account, not the real person logging in, so it must
+ * never consume one of their 3 shows or fire confetti for the Admin.
+ */
+export async function getRecognitionCelebration(projectId, userId) {
+  const latestClosedWeek = await prisma.week.findFirst({
+    where: { project_id: projectId, status: "closed" },
+    orderBy: { week_number: "desc" },
+  });
+  if (!latestClosedWeek) return null;
+
+  const { weeks } = await getHallOfRecognition(projectId);
+  const latest = weeks[weeks.length - 1];
+  if (!latest || latest.week.id !== latestClosedWeek.id) return null;
+
+  const accolades = [];
+  if (latest.topProfiler?.id === userId) accolades.push("Top Profiler");
+  if (latest.topGroupAnchor?.id === userId) accolades.push("Top Group Anchor");
+  if (latest.topCasuAnchor?.id === userId) accolades.push("Top CASU Anchor");
+  if (latest.overallStar?.id === userId) accolades.push("Overall Star Performer");
+  if (accolades.length === 0) return null;
+
+  const existing = await prisma.recognitionCelebration.findUnique({
+    where: { user_id_week_id: { user_id: userId, week_id: latestClosedWeek.id } },
+  });
+  if (existing && existing.times_shown >= MAX_CELEBRATION_SHOWS) return null;
+
+  const updated = await prisma.recognitionCelebration.upsert({
+    where: { user_id_week_id: { user_id: userId, week_id: latestClosedWeek.id } },
+    create: { user_id: userId, week_id: latestClosedWeek.id, times_shown: 1 },
+    update: { times_shown: { increment: 1 } },
+  });
+
+  return {
+    week: { id: latestClosedWeek.id, label: latestClosedWeek.label, week_number: latestClosedWeek.week_number },
+    accolades,
+    timesShown: updated.times_shown,
+  };
 }
 
 // A decline is only worth surfacing if it's an actual pattern, not one

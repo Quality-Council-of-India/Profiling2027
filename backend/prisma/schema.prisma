@@ -170,6 +170,7 @@ model User {
   tickets                     Ticket[]
   notifications               Notification[]
   emailBroadcastsSent         EmailBroadcast[]
+  recognitionCelebrations     RecognitionCelebration[]
 
   @@index([project_id])
   @@map("users")
@@ -234,10 +235,11 @@ model Week {
   // correction" (status alone can't, since both look like "open").
   closed_at   DateTime?
 
-  project              Project               @relation(fields: [project_id], references: [id], onDelete: Cascade)
-  evaluations          Evaluation[]
-  scores               ComputedScore[]
-  peerMappingSnapshots PeerMappingSnapshot[]
+  project                 Project                  @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  evaluations             Evaluation[]
+  scores                  ComputedScore[]
+  peerMappingSnapshots    PeerMappingSnapshot[]
+  recognitionCelebrations RecognitionCelebration[]
 
   @@unique([project_id, week_number])
   @@map("weeks")
@@ -364,6 +366,27 @@ model Notification {
 
   @@index([user_id, is_read])
   @@map("notifications")
+}
+
+// Caps how many times a user gets the confetti celebration for a given
+// closed week's Hall of Recognition win (Top Profiler/Group Anchor/CASU
+// Anchor, or Overall Star Performer) — one row per (user, week), counting
+// up to MAX_CELEBRATION_SHOWS (see analytics.js) and then staying silent.
+// Only the most recently closed week is ever checked (see
+// getRecognitionCelebration), so an older win never resurfaces once a new
+// week closes — nothing here needs to expire it explicitly.
+model RecognitionCelebration {
+  id          Int      @id @default(autoincrement())
+  user_id     Int
+  week_id     Int
+  times_shown Int      @default(0)
+  created_at  DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  week Week @relation(fields: [week_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, week_id])
+  @@map("recognition_celebrations")
 }
 
 // Admin "send an email on any topic" — a free-form broadcast to all users,
