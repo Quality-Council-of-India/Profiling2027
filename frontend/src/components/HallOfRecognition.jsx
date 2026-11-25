@@ -6,12 +6,14 @@ import { SearchIcon, AnchorIcon, ShieldIcon, StarIcon } from "./icons.jsx";
 import { ACCENT } from "../utils/constants.js";
 
 /**
- * Per closed week: the Total-Peer-Score top scorer for each of
- * Profiler/Group Anchor/CASU Anchor (irrespective of field), plus — from
- * the 2nd closed week onward — a single cross-role Overall Star Performer
- * based on a TRAILING 3-CLOSED-WEEK average ROLE-NORMALIZED PERCENTILE
- * (not raw score, and not all-time) — see getHallOfRecognition. Most
- * recent week first.
+ * Per closed week: EVERY Total-Peer-Score top scorer tied for the lead in
+ * each of Profiler/Group Anchor/CASU Anchor (irrespective of field), plus —
+ * from the 2nd closed week onward — every person tied for the top
+ * cross-role Overall Star Performer, based on a TRAILING 3-CLOSED-WEEK
+ * average ROLE-NORMALIZED PERCENTILE (not raw score, and not all-time) —
+ * see getHallOfRecognition. A tie is common on these metrics and is shown
+ * as-is (every tied person listed together) rather than arbitrarily
+ * picking one. Most recent week first.
  */
 export default function HallOfRecognition() {
   const query = useQuery({ queryKey: ["hallOfRecognition"], queryFn: analyticsApi.hallOfRecognition });
@@ -54,10 +56,10 @@ export default function HallOfRecognition() {
           {weeks.map((w, i) => (
             <tr key={w.week.id} className={`transition-standard hover:bg-azure/10 ${i % 2 === 0 ? "bg-slate-50" : "bg-white"}`}>
               <td className="px-4 py-2.5 font-medium text-slate-800 whitespace-nowrap">{w.week.label}</td>
-              <RecognitionCell winner={w.topProfiler} />
-              <RecognitionCell winner={w.topGroupAnchor} />
-              <RecognitionCell winner={w.topCasuAnchor} />
-              <RecognitionCell winner={w.overallStar} isOverall />
+              <RecognitionCell winners={w.topProfilers} />
+              <RecognitionCell winners={w.topGroupAnchors} />
+              <RecognitionCell winners={w.topCasuAnchors} />
+              <RecognitionCell winners={w.overallStars} isOverall />
             </tr>
           ))}
         </tbody>
@@ -66,29 +68,43 @@ export default function HallOfRecognition() {
   );
 }
 
-function RecognitionCell({ winner, isOverall = false }) {
-  if (!winner) {
+/** `winners` is every person tied for #1 — usually one, sometimes more (see LeaderTracker in analytics.js). */
+function RecognitionCell({ winners, isOverall = false }) {
+  if (!winners || winners.length === 0) {
     return <td className="px-3 py-2.5 text-slate-400 text-xs">—</td>;
   }
+  return (
+    <td className="px-3 py-2.5">
+      <div className="space-y-2">
+        {winners.length > 1 && (
+          <p className="text-[10px] text-slate-400 italic">Tied — {winners.length} people at the same value</p>
+        )}
+        {winners.map((winner) => (
+          <WinnerRow key={winner.id} winner={winner} isOverall={isOverall} />
+        ))}
+      </div>
+    </td>
+  );
+}
+
+function WinnerRow({ winner, isOverall }) {
   const score = isOverall ? winner.avgPercentile : winner.totalPeer;
   const scoreTitle = isOverall
     ? `Trailing 3-week avg role-normalized percentile — raw avg Total Peer Score over that window: ${winner.avgTotalPeer.toFixed(1)}`
     : undefined;
   return (
-    <td className="px-3 py-2.5">
-      <div className="flex items-center gap-2">
-        <WinnerPhoto photoUrl={winner.photo_url} name={winner.name} />
-        <div>
-          <div className="flex items-baseline gap-1.5">
-            <span className="font-medium text-slate-800">{winner.name}</span>
-            <span className="text-xs font-mono tabular-nums" style={{ color: ACCENT }} title={scoreTitle}>
-              {isOverall ? `${score.toFixed(1)} %ile` : score.toFixed(1)}
-            </span>
-          </div>
-          {winner.field && <span className="text-[11px] text-slate-400">{winner.field}</span>}
+    <div className="flex items-center gap-2">
+      <WinnerPhoto photoUrl={winner.photo_url} name={winner.name} />
+      <div>
+        <div className="flex items-baseline gap-1.5">
+          <span className="font-medium text-slate-800">{winner.name}</span>
+          <span className="text-xs font-mono tabular-nums" style={{ color: ACCENT }} title={scoreTitle}>
+            {isOverall ? `${score.toFixed(1)} %ile` : score.toFixed(1)}
+          </span>
         </div>
+        {winner.field && <span className="text-[11px] text-slate-400">{winner.field}</span>}
       </div>
-    </td>
+    </div>
   );
 }
 

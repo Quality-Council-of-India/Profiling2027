@@ -1207,17 +1207,44 @@ export async function getFieldMemberStandings(projectId, weekIds, field, scope) 
 const HALL_OF_RECOGNITION_ROLES = [ROLES.PROFILER, ROLES.GROUP_ANCHOR, ROLES.CASU_ANCHOR];
 
 /**
- * Hall of Recognition — per closed week (in order), the top Total Peer
- * Score scorer for each of Profiler/Group Anchor/CASU Anchor, irrespective
- * of field, plus — from the 2nd closed week onward — a single cross-role
- * "Overall Star Performer": whoever has the highest average role-
- * normalized percentile over a TRAILING 3-CLOSED-WEEK WINDOW (this week
- * and the 2 before it, or fewer at the start of the cycle). Each week, a
- * person's raw Total Peer Score is first converted into a percentile
- * against only their own role's scores that week (rolePercentileMap) —
- * this is what lets the Overall Star Performer be fairly compared across
- * roles that are structurally scored by different, more-or-less generous
- * evaluator pools (see peerMapping.js).
+ * Tracks every candidate currently tied for the best value of a "who's
+ * #1" metric, instead of silently keeping only the first one seen. An
+ * exact tie is common with small integer-ish metrics like these (avg tags
+ * per response, % positive suggestions) — picking just one used to depend
+ * on nothing more meaningful than the order rows came back from the
+ * database, which looks like it means something (like a merit ranking)
+ * but doesn't. Also used by Hall of Recognition below, where a tie for
+ * Top Profiler/Group Anchor/CASU Anchor or Overall Star Performer is
+ * common for the same reason.
+ */
+class LeaderTracker {
+  constructor() {
+    this.best = null;
+    this.list = [];
+  }
+  consider(candidate, value) {
+    if (this.best === null || value > this.best) {
+      this.best = value;
+      this.list = [candidate];
+    } else if (value === this.best) {
+      this.list.push(candidate);
+    }
+  }
+}
+
+/**
+ * Hall of Recognition — per closed week (in order), EVERY Total Peer Score
+ * scorer tied for the top of each of Profiler/Group Anchor/CASU Anchor
+ * (irrespective of field, see LeaderTracker above — a tie is a real result,
+ * not an arbitrary pick), plus — from the 2nd closed week onward — every
+ * person tied for the top cross-role "Overall Star Performer": the highest
+ * average role-normalized percentile over a TRAILING 3-CLOSED-WEEK WINDOW
+ * (this week and the 2 before it, or fewer at the start of the cycle).
+ * Each week, a person's raw Total Peer Score is first converted into a
+ * percentile against only their own role's scores that week
+ * (rolePercentileMap) — this is what lets the Overall Star Performer be
+ * fairly compared across roles that are structurally scored by different,
+ * more-or-less generous evaluator pools (see peerMapping.js).
  *
  * This used to average across EVERY closed week since the start of the
  * cycle, which made the title effectively permanent once someone built a
@@ -1255,6 +1282,7 @@ export async function getHallOfRecognition(projectId) {
       user: { project_id: projectId, role: { not: ROLES.ADMIN } },
     },
     include: { user: { select: { id: true, name: true, role: true, field: true, photo_url: true } } },
+    orderBy: { user_id: "asc" }, // stable row order — LeaderTracker already handles ties correctly regardless, but a deterministic query is one less variable when debugging
   });
 
   const scoresByWeek = new Map();
@@ -1282,19 +1310,21 @@ export async function getHallOfRecognition(projectId) {
     const topByRole = {};
     for (const role of HALL_OF_RECOGNITION_ROLES) {
       const inRole = weekScores.filter((s) => s.user.role === role);
-      topByRole[role] =
-        inRole.length === 0
-          ? null
-          : inRole.reduce((best, s) => {
-              const top = {
-                id: s.user.id,
-                name: s.user.name,
-                field: s.field || s.user.field, // frozen at compute time; see getFieldHeatmap
-                photo_url: s.user.photo_url,
-                totalPeer: Number(s.total_peer),
-              };
-              return !best || top.totalPeer > best.totalPeer ? top : best;
-            }, null);
+      const tracker = new LeaderTracker();
+      for (const s of inRole) {
+        const totalPeer = Number(s.total_peer);
+        tracker.consider(
+          {
+            id: s.user.id,
+            name: s.user.name,
+            field: s.field || s.user.field, // frozen at compute time; see getFieldHeatmap
+            photo_url: s.user.photo_url,
+            totalPeer,
+          },
+          totalPeer
+        );
+      }
+      topByRole[role] = tracker.list;
     }
 
     for (const s of weekScores) {
@@ -1306,7 +1336,7 @@ export async function getHallOfRecognition(projectId) {
       history.get(uid).set(index, { totalPeer: Number(s.total_peer), percentile: percentileByUserId.get(uid) ?? 50 });
     }
 
-    let overallStar = null;
+    let overallStars = [];
     if (index >= 1) {
       // Can't look back further than the cycle itself has gone on so far —
       // same shrink-to-fit idea as Math.min(MIN_WEEKS_FOR_CROSS_ROLE_RANKING,
@@ -1314,6 +1344,7 @@ export async function getHallOfRecognition(projectId) {
       const windowSize = Math.min(OVERALL_STAR_WINDOW_WEEKS, index + 1);
       const windowStart = index - windowSize + 1;
       const floor = Math.min(MIN_WEEKS_FOR_CROSS_ROLE_RANKING, windowSize);
+      const starTracker = new LeaderTracker();
 
       for (const [uid, weekMap] of history) {
         const inWindow = [];
@@ -1327,9 +1358,9 @@ export async function getHallOfRecognition(projectId) {
         if (inWindow.length < floor) continue;
 
         const avgPercentile = round2(inWindow.reduce((a, r) => a + r.percentile, 0) / inWindow.length);
-        if (!overallStar || avgPercentile > overallStar.avgPercentile) {
-          const info = userInfo.get(uid);
-          overallStar = {
+        const info = userInfo.get(uid);
+        starTracker.consider(
+          {
             id: uid,
             name: info.name,
             role: info.role,
@@ -1337,17 +1368,19 @@ export async function getHallOfRecognition(projectId) {
             photo_url: info.photo_url,
             avgPercentile,
             avgTotalPeer: round2(inWindow.reduce((a, r) => a + r.totalPeer, 0) / inWindow.length),
-          };
-        }
+          },
+          avgPercentile
+        );
       }
+      overallStars = starTracker.list;
     }
 
     weeksOut.push({
       week: { id: week.id, label: week.label, week_number: week.week_number },
-      topProfiler: topByRole[ROLES.PROFILER],
-      topGroupAnchor: topByRole[ROLES.GROUP_ANCHOR],
-      topCasuAnchor: topByRole[ROLES.CASU_ANCHOR],
-      overallStar,
+      topProfilers: topByRole[ROLES.PROFILER],
+      topGroupAnchors: topByRole[ROLES.GROUP_ANCHOR],
+      topCasuAnchors: topByRole[ROLES.CASU_ANCHOR],
+      overallStars,
     });
   });
 
@@ -1397,10 +1430,10 @@ export async function getRecognitionCelebration(projectId, userId, { countToward
   if (!latest || latest.week.id !== latestClosedWeek.id) return null;
 
   const accolades = [];
-  if (latest.topProfiler?.id === userId) accolades.push("Top Profiler");
-  if (latest.topGroupAnchor?.id === userId) accolades.push("Top Group Anchor");
-  if (latest.topCasuAnchor?.id === userId) accolades.push("Top CASU Anchor");
-  if (latest.overallStar?.id === userId) accolades.push("Overall Star Performer");
+  if (latest.topProfilers.some((p) => p.id === userId)) accolades.push("Top Profiler");
+  if (latest.topGroupAnchors.some((p) => p.id === userId)) accolades.push("Top Group Anchor");
+  if (latest.topCasuAnchors.some((p) => p.id === userId)) accolades.push("Top CASU Anchor");
+  if (latest.overallStars.some((p) => p.id === userId)) accolades.push("Overall Star Performer");
   if (accolades.length === 0) return null;
 
   const weekSummary = { id: latestClosedWeek.id, label: latestClosedWeek.label, week_number: latestClosedWeek.week_number };
@@ -1430,30 +1463,6 @@ export async function getRecognitionCelebration(projectId, userId, { countToward
 // A decline is only worth surfacing if it's an actual pattern, not one
 // noisy week — at least 2 consecutive week-over-week drops (3 data points).
 const DECLINE_MIN_STREAK = 2;
-
-/**
- * Tracks every candidate currently tied for the best value of a "who's
- * #1" metric, instead of silently keeping only the first one seen. An
- * exact tie is common with small integer-ish metrics like these (avg tags
- * per response, % positive suggestions) — picking just one used to depend
- * on nothing more meaningful than the order rows came back from the
- * database, which looks like it means something (like a merit ranking)
- * but doesn't.
- */
-class LeaderTracker {
-  constructor() {
-    this.best = null;
-    this.list = [];
-  }
-  consider(candidate, value) {
-    if (this.best === null || value > this.best) {
-      this.best = value;
-      this.list = [candidate];
-    } else if (value === this.best) {
-      this.list.push(candidate);
-    }
-  }
-}
 
 /**
  * Admin-only Dashboard signals — proactive, plain-English flags that would
