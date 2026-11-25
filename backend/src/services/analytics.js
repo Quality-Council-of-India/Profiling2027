@@ -1344,7 +1344,22 @@ export async function getHallOfRecognition(projectId) {
       const windowSize = Math.min(OVERALL_STAR_WINDOW_WEEKS, index + 1);
       const windowStart = index - windowSize + 1;
       const floor = Math.min(MIN_WEEKS_FOR_CROSS_ROLE_RANKING, windowSize);
-      const starTracker = new LeaderTracker();
+
+      // Unlike the per-week Top Profiler/Group Anchor/CASU Anchor cards
+      // (a raw-score tie there is a genuine, rare coincidence worth
+      // showing honestly as a tie), a tied avgPercentile here usually
+      // ISN'T a coincidence — whoever's #1 in their own role scores
+      // exactly 100 that week no matter how dominant they were, so any
+      // two people who are each their own role's consistent #1 for the
+      // whole window will always average to a tied 100, regardless of
+      // how different their actual numbers are. Overall Star Performer is
+      // meant to be a single, decisive title, so ties are broken by the
+      // raw avgTotalPeer behind that percentile (already computed, just
+      // not the headline number on the card) before falling back to a
+      // true tie — which only happens if both numbers match exactly.
+      let bestPercentile = -Infinity;
+      let bestTotalPeer = -Infinity;
+      let candidates = [];
 
       for (const [uid, weekMap] of history) {
         const inWindow = [];
@@ -1358,21 +1373,19 @@ export async function getHallOfRecognition(projectId) {
         if (inWindow.length < floor) continue;
 
         const avgPercentile = round2(inWindow.reduce((a, r) => a + r.percentile, 0) / inWindow.length);
+        const avgTotalPeer = round2(inWindow.reduce((a, r) => a + r.totalPeer, 0) / inWindow.length);
         const info = userInfo.get(uid);
-        starTracker.consider(
-          {
-            id: uid,
-            name: info.name,
-            role: info.role,
-            field: info.field,
-            photo_url: info.photo_url,
-            avgPercentile,
-            avgTotalPeer: round2(inWindow.reduce((a, r) => a + r.totalPeer, 0) / inWindow.length),
-          },
-          avgPercentile
-        );
+        const candidate = { id: uid, name: info.name, role: info.role, field: info.field, photo_url: info.photo_url, avgPercentile, avgTotalPeer };
+
+        if (avgPercentile > bestPercentile || (avgPercentile === bestPercentile && avgTotalPeer > bestTotalPeer)) {
+          bestPercentile = avgPercentile;
+          bestTotalPeer = avgTotalPeer;
+          candidates = [candidate];
+        } else if (avgPercentile === bestPercentile && avgTotalPeer === bestTotalPeer) {
+          candidates.push(candidate);
+        }
       }
-      overallStars = starTracker.list;
+      overallStars = candidates;
     }
 
     weeksOut.push({
