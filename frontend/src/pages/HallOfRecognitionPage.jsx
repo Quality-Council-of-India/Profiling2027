@@ -43,8 +43,9 @@ export default function HallOfRecognitionPage() {
         {showGuide && (
           <div className="mt-2 text-xs text-slate-600 bg-blue-50 border border-blue-100 rounded-lg p-3 space-y-1.5">
             <p>
-              Top Profiler / Top Group Anchor / Top CASU Anchor are unchanged — the single highest raw Total Peer
-              Score within that role, for that one week.
+              Top Profiler / Top Group Anchor / Top CASU Anchor are unchanged — the highest raw Total Peer Score
+              within that role, for that one week. An exact tie on this raw number is a real, if rare, coincidence —
+              when it happens, every tied person is shown together instead of arbitrarily picking one.
             </p>
             <p>
               Overall Star Performer is different: each week, a person's raw score is first converted into a
@@ -70,10 +71,18 @@ export default function HallOfRecognitionPage() {
             </p>
             <p>
               This doesn't cap any role's ceiling — being #1 in your own role for all 3 weeks in the window still
-              averages to a perfect 100, for any role. A role with only 9 people does see bigger percentile swings
-              from one off-week than a role with 49 people does (losing 1st place costs far more percentile points
-              in a small group) — but with only a 3-week memory now, one off-week stops mattering again within a
-              few weeks, instead of needing to be out-averaged forever.
+              averages to a perfect 100, for any role. That also means two people in <em>different</em> roles who
+              are each their own role's consistent #1 can land on the exact same 100 — not because they performed
+              identically, just because percentile can't tell "#1 by a mile" apart from "#1 by a hair" once you're
+              already #1. Unlike the per-week cards above, Overall Star Performer is meant to be a single, decisive
+              title, so a percentile tie here is broken by whichever of them had the higher average raw Total Peer
+              Score over that same window — only falling back to a shown tie if even that matches exactly.
+            </p>
+            <p>
+              A role with only 9 people does see bigger percentile swings from one off-week than a role with 49
+              people does (losing 1st place costs far more percentile points in a small group) — but with only a
+              3-week memory now, one off-week stops mattering again within a few weeks, instead of needing to be
+              out-averaged forever.
             </p>
           </div>
         )}
